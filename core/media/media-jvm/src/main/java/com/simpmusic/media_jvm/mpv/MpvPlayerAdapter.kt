@@ -799,7 +799,14 @@ class MpvPlayerAdapter(
         when (internalRepeatMode) {
             PlayerConstants.REPEAT_MODE_ONE -> true
             PlayerConstants.REPEAT_MODE_ALL -> true
-            else -> localCurrentMediaItemIndex < playlist.size - 1
+            else ->
+                if (internalShuffleModeEnabled && shuffleOrder.isNotEmpty()) {
+                    val currentShufflePos =
+                        shuffleIndices.getOrNull(localCurrentMediaItemIndex) ?: -1
+                    currentShufflePos >= 0 && currentShufflePos < shuffleOrder.lastIndex
+                } else {
+                    localCurrentMediaItemIndex < playlist.size - 1
+                }
         }
 
     override fun hasPreviousMediaItem(): Boolean =
@@ -1718,7 +1725,7 @@ class MpvPlayerAdapter(
                 }
 
                 else -> {
-                    if (localCurrentMediaItemIndex < playlist.size - 1) {
+                    if (hasNextMediaItem()) {
                         seekToNext()
                     }
                 }
