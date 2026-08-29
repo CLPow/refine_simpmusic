@@ -597,8 +597,20 @@ class Ytmusic {
             parameter("service", "YouTube")
         }
 
+    /**
+     * Update source for this build.
+     *
+     * Repointed from `maxrave-dev/SimpMusic` to the private fork this binary is actually built
+     * from. An official release is not an upgrade for this build — it carries none of the local
+     * patches and would silently undo them — so offering it would be wrong.
+     *
+     * While the fork is private and carries no releases, GitHub answers this unauthenticated
+     * request with 404. That is the intended resting state: the caller logs a warning and shows
+     * nothing, so the app simply never advertises an update. Publish releases on the fork (or make
+     * it public) and this starts reporting them with no further change.
+     */
     suspend fun checkForGithubReleaseUpdate() =
-        httpClient.get("https://api.github.com/repos/maxrave-dev/SimpMusic/releases/latest") {
+        httpClient.get("https://api.github.com/repos/$UPDATE_REPO/releases/latest") {
             contentType(ContentType.Application.Json)
         }
 
@@ -1234,6 +1246,13 @@ class Ytmusic {
     }
 
     companion object {
+        /**
+         * The repository this build takes updates from. Deliberately not the upstream project:
+         * this binary carries local patches that an official release would silently revert, so an
+         * upstream release is not an upgrade for it.
+         */
+        private const val UPDATE_REPO = "CLPow/refine_simpmusic"
+
         private const val TIDAL_AUTH_URL = "https://auth.tidal.com/v1/oauth2/token"
         private const val TIDAL_SEARCH_URL = "https://tidal.com/v2/client-search/"
 

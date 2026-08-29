@@ -2584,13 +2584,25 @@ fun SettingScreen(
                     subtitle = stringResource(Res.string.auto_check_for_update_description),
                     switch = (autoCheckUpdate to { viewModel.setAutoCheckUpdate(it) }),
                 )
+                // F-Droid is an Android distribution channel and its listing is the official
+                // com.maxrave.simpmusic package, so on desktop it is both meaningless and a route
+                // back to upstream builds. Offer only the fork on desktop.
+                val updateChannelChoices =
+                    if (getPlatform() == Platform.Android) {
+                        listOf(
+                            (updateChannel == DataStoreManager.FDROID) to "F-Droid",
+                            (updateChannel == DataStoreManager.GITHUB) to "Refine SimpMusic Release",
+                        )
+                    } else {
+                        listOf((updateChannel == DataStoreManager.GITHUB) to "Refine SimpMusic Release")
+                    }
                 SettingItem(
                     title = stringResource(Res.string.update_channel),
                     subtitle =
-                        if (updateChannel == DataStoreManager.FDROID) {
+                        if (updateChannel == DataStoreManager.FDROID && getPlatform() == Platform.Android) {
                             "F-Droid"
                         } else {
-                            "SimpMusic GitHub Release"
+                            "Refine SimpMusic Release"
                         },
                     onClick = {
                         viewModel.setAlertData(
@@ -2598,18 +2610,14 @@ fun SettingScreen(
                                 title = runBlocking { getString(Res.string.update_channel) },
                                 selectOne =
                                     SettingAlertState.SelectData(
-                                        listSelect =
-                                            listOf(
-                                                (updateChannel == DataStoreManager.FDROID) to "F-Droid",
-                                                (updateChannel == DataStoreManager.GITHUB) to "SimpMusic GitHub Release",
-                                            ),
+                                        listSelect = updateChannelChoices,
                                     ),
                                 confirm =
                                     runBlocking { getString(Res.string.change) } to { state ->
                                         viewModel.setUpdateChannel(
                                             when (state.selectOne?.getSelected()) {
                                                 "F-Droid" -> DataStoreManager.FDROID
-                                                "SimpMusic GitHub Release" -> DataStoreManager.GITHUB
+                                                "Refine SimpMusic Release" -> DataStoreManager.GITHUB
                                                 else -> DataStoreManager.GITHUB
                                             },
                                         )
