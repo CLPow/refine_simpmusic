@@ -378,6 +378,8 @@ import simpmusic.composeapp.generated.resources.spotify_canvas_cache
 import simpmusic.composeapp.generated.resources.spotify_lyrícs_info
 import simpmusic.composeapp.generated.resources.storage
 import simpmusic.composeapp.generated.resources.such_as_music_video_lyrics_video_podcasts_and_more
+import simpmusic.composeapp.generated.resources.import_followed_from_youtube
+import simpmusic.composeapp.generated.resources.import_followed_from_youtube_description
 import simpmusic.composeapp.generated.resources.sync_follow_to_youtube
 import simpmusic.composeapp.generated.resources.sync_follow_to_youtube_description
 import simpmusic.composeapp.generated.resources.theme
@@ -555,6 +557,7 @@ fun SettingScreen(
     val discordLoggedIn by viewModel.discordLoggedIn.collectAsStateWithLifecycle()
     val loggedIn by viewModel.loggedIn.collectAsStateWithLifecycle()
     val syncFollowToYouTube by viewModel.syncFollowToYouTube.collectAsStateWithLifecycle()
+    val isImportingFollowedArtists by viewModel.isImportingFollowedArtists.collectAsStateWithLifecycle()
     val equalizerEnabled by viewModel.equalizerEnabled.collectAsStateWithLifecycle()
     val lastfmLoggedIn by viewModel.lastfmLoggedIn.collectAsStateWithLifecycle()
     val lastfmUsername by viewModel.lastfmUsername.collectAsStateWithLifecycle()
@@ -1086,6 +1089,17 @@ fun SettingScreen(
                     // mid-session clears it too, not just a cold start in the signed-out state.
                     isEnable = loggedIn == DataStoreManager.TRUE,
                     onDisable = { viewModel.setSyncFollowToYouTube(false) },
+                )
+                // The pull direction, sitting under the push switch it mirrors. An action rather
+                // than a toggle: importing is a one-off sweep of the account, not a mode.
+                SettingItem(
+                    title = stringResource(Res.string.import_followed_from_youtube),
+                    subtitle = stringResource(Res.string.import_followed_from_youtube_description),
+                    smallSubtitle = true,
+                    onClick = { viewModel.importFollowedArtistsFromYouTube() },
+                    // Reading the account needs a session, and the row also goes dead while a
+                    // sweep is in flight so a second tap cannot start a parallel one.
+                    isEnable = loggedIn == DataStoreManager.TRUE && !isImportingFollowedArtists,
                 )
                 SettingItem(
                     title = stringResource(Res.string.send_back_listening_data_to_google),

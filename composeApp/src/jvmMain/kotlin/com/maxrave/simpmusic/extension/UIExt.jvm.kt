@@ -16,7 +16,7 @@ import kotlin.math.roundToInt
  * [getScreenSizeInfo]; the mini-player window does not.
  */
 object DesktopWindowChrome {
-    const val TITLE_BAR_HEIGHT_DP = 40
+    const val TITLE_BAR_HEIGHT_DP = 32
 
     @Volatile
     var customTitleBarVisible: Boolean = false

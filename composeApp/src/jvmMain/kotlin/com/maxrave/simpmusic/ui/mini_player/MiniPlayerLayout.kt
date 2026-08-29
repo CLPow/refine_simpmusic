@@ -65,6 +65,7 @@ import com.maxrave.simpmusic.extension.parseRichSyncWords
 import com.maxrave.simpmusic.ui.component.PlayPauseButton
 import com.maxrave.simpmusic.ui.component.RichSyncLyricsLineItem
 import com.maxrave.simpmusic.ui.component.RippleIconButton
+import com.maxrave.simpmusic.ui.component.volumeScroll
 import com.maxrave.simpmusic.ui.icon.Favorite
 import com.maxrave.simpmusic.ui.icon.FavoriteBorder
 import com.maxrave.simpmusic.ui.icon.SimpIcons
@@ -371,7 +372,13 @@ fun MediumMiniLayout(
                                     val newVolume = if (controllerState.volume > 0f) 0f else previousVolume.coerceIn(0.1f, 1f)
                                     onUIEvent(UIEvent.UpdateVolume(newVolume))
                                 },
-                                modifier = Modifier.size(28.dp),
+                                modifier =
+                                    Modifier
+                                        .size(28.dp)
+                                        .volumeScroll(
+                                            currentVolume = { controllerState.volume },
+                                            onVolumeChange = { onUIEvent(UIEvent.UpdateVolume(it)) },
+                                        ),
                             ) {
                                 Icon(
                                     imageVector =
@@ -673,7 +680,13 @@ fun SquareMiniLayout(
                         val newVolume = if (controllerState.volume > 0f) 0f else previousVolume.coerceIn(0.1f, 1f)
                         onUIEvent(UIEvent.UpdateVolume(newVolume))
                     },
-                    modifier = Modifier.size(32.dp),
+                    modifier =
+                        Modifier
+                            .size(32.dp)
+                            .volumeScroll(
+                                currentVolume = { controllerState.volume },
+                                onVolumeChange = { onUIEvent(UIEvent.UpdateVolume(it)) },
+                            ),
                 ) {
                     Icon(
                         imageVector =
@@ -871,7 +884,13 @@ fun ExpandedMiniLayout(
                                 val newVolume = if (controllerState.volume > 0f) 0f else previousVolume.coerceIn(0.1f, 1f)
                                 onUIEvent(UIEvent.UpdateVolume(newVolume))
                             },
-                            modifier = Modifier.size(28.dp),
+                            modifier =
+                                Modifier
+                                    .size(28.dp)
+                                    .volumeScroll(
+                                        currentVolume = { controllerState.volume },
+                                        onVolumeChange = { onUIEvent(UIEvent.UpdateVolume(it)) },
+                                    ),
                         ) {
                             Icon(
                                 imageVector =

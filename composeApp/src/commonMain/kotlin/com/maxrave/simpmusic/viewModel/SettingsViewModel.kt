@@ -59,6 +59,10 @@ import simpmusic.composeapp.generated.resources.clear_player_cache
 import simpmusic.composeapp.generated.resources.clear_thumbnail_cache
 import simpmusic.composeapp.generated.resources.downloading_liked_songs
 import simpmusic.composeapp.generated.resources.error
+import simpmusic.composeapp.generated.resources.import_followed_from_youtube_done
+import simpmusic.composeapp.generated.resources.import_followed_from_youtube_failed
+import simpmusic.composeapp.generated.resources.import_followed_from_youtube_none
+import simpmusic.composeapp.generated.resources.import_followed_from_youtube_running
 import simpmusic.composeapp.generated.resources.log_out_confirm_message
 import simpmusic.composeapp.generated.resources.restore_failed
 import simpmusic.composeapp.generated.resources.restore_in_progress
@@ -1826,6 +1830,42 @@ class SettingsViewModel(
                 // take effect; a switch in Settings is not the place to report on a background
                 // sweep the user is not watching.
                 artistRepository.syncFollowedArtistsToYouTube().collect { }
+            }
+        }
+    }
+
+    private val _isImportingFollowedArtists: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val isImportingFollowedArtists: StateFlow<Boolean> = _isImportingFollowedArtists
+
+    /**
+     * Pulls the account's subscriptions into the local Followed list.
+     *
+     * The mirror of [setSyncFollowToYouTube], and the direction that was missing: that switch only
+     * ever pushed local follows up to YouTube, so artists subscribed to on the account stayed
+     * invisible under Library > Followed.
+     *
+     * This one *is* worth a toast, unlike the background sweep behind the switch: the user pressed
+     * a button and is waiting to find out whether anything arrived.
+     */
+    fun importFollowedArtistsFromYouTube() {
+        if (_isImportingFollowedArtists.value) return
+        viewModelScope.launch {
+            _isImportingFollowedArtists.value = true
+            makeToast(getString(Res.string.import_followed_from_youtube_running))
+            try {
+                artistRepository.syncFollowedArtistsFromYouTube().collect { (added, total) ->
+                    makeToast(
+                        when {
+                            total == 0 -> getString(Res.string.import_followed_from_youtube_failed)
+                            added == 0 -> formatString(Res.string.import_followed_from_youtube_none, total)
+                            else -> formatString(Res.string.import_followed_from_youtube_done, added, total)
+                        },
+                    )
+                }
+            } finally {
+                // In a finally: a cancelled scope (user leaves Settings mid-import) must not leave
+                // the row stuck disabled for the rest of the session.
+                _isImportingFollowedArtists.value = false
             }
         }
     }

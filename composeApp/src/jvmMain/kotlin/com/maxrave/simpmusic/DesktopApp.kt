@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.rememberWindowState
 import coil3.ImageLoader
 import coil3.compose.LocalPlatformContext
@@ -34,6 +35,7 @@ import com.maxrave.domain.mediaservice.handler.ToastType
 import com.maxrave.simpmusic.di.viewModelModule
 import com.maxrave.simpmusic.extension.DesktopWindowChrome
 import com.maxrave.simpmusic.ui.component.CustomTitleBar
+import com.maxrave.simpmusic.ui.component.applyWorkAreaMaximizedBounds
 import com.maxrave.simpmusic.ui.mini_player.MiniPlayerManager
 import com.maxrave.simpmusic.ui.mini_player.MiniPlayerWindow
 import com.maxrave.simpmusic.ui.theme.isDarkTheme
@@ -380,13 +382,30 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                     window.toFront()
                 }
             }
+            // Keep the maximize target pinned to the current screen work area.
+            // The title bar applies this before maximizing itself, but a
+            // maximize can also come from the OS — Win+Up, Aero Snap, or a
+            // window restored already maximized — and those never reach our
+            // click handler. Re-deriving it whenever the window moves or
+            // resizes keeps the bounds right across monitors with different
+            // taskbar placement.
+            if (!isVM) {
+                LaunchedEffect(windowState.position, windowState.size) {
+                    applyWorkAreaMaximizedBounds(window)
+                }
+            }
+            // Windows rounds only floating windows, and at an 8px radius rather
+            // than the 12 used here before. A maximized window is square: the
+            // window fills the work area edge to edge, so a rounded clip leaves
+            // four uncovered notches showing the desktop through the corners.
+            val isWindowMaximized = windowState.placement == WindowPlacement.Maximized
             Column(
                 modifier =
                     Modifier
                         .fillMaxSize()
                         .then(
-                            if (!isVM) {
-                                Modifier.clip(RoundedCornerShape(12.dp))
+                            if (!isVM && !isWindowMaximized) {
+                                Modifier.clip(RoundedCornerShape(8.dp))
                             } else {
                                 Modifier
                             },

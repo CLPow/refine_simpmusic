@@ -127,6 +127,7 @@ import com.maxrave.simpmusic.ui.component.PlayerControlLayout
 import com.maxrave.simpmusic.ui.component.QueueBottomSheet
 import com.maxrave.simpmusic.ui.component.liquidGlass
 import com.maxrave.simpmusic.ui.component.rememberHolderPainter
+import com.maxrave.simpmusic.ui.component.volumeScroll
 import com.maxrave.simpmusic.ui.icon.Close
 import com.maxrave.simpmusic.ui.icon.PictureInPictureAlt
 import com.maxrave.simpmusic.ui.icon.QueueMusic
@@ -958,7 +959,20 @@ fun MiniPlayer(
                     val isVolumeHovered by volumeInteraction.collectIsHoveredAsState()
                     val popupInteraction = remember { MutableInteractionSource() }
                     val isPopupHovered by popupInteraction.collectIsHoveredAsState()
-                    Box(modifier = Modifier.hoverable(volumeInteraction)) {
+                    Box(
+                        modifier =
+                            Modifier
+                                .hoverable(volumeInteraction)
+                                .volumeScroll(
+                                    currentVolume = {
+                                        if (isVolumeSliding) volumeValue else controllerState.volume
+                                    },
+                                    onVolumeChange = { newVolume ->
+                                        volumeValue = newVolume
+                                        sharedViewModel.onUIEvent(UIEvent.UpdateVolume(newVolume))
+                                    },
+                                ),
+                    ) {
                         IconButton(
                             onClick = {
                                 // Toggle mute/unmute
@@ -1005,6 +1019,15 @@ fun MiniPlayer(
                                     modifier =
                                         Modifier
                                             .hoverable(popupInteraction)
+                                            .volumeScroll(
+                                                currentVolume = {
+                                                    if (isVolumeSliding) volumeValue else controllerState.volume
+                                                },
+                                                onVolumeChange = { newVolume ->
+                                                    volumeValue = newVolume
+                                                    sharedViewModel.onUIEvent(UIEvent.UpdateVolume(newVolume))
+                                                },
+                                            )
                                             .width(44.dp)
                                             .height(VOLUME_POPUP_HEIGHT)
                                             .clip(RoundedCornerShape(14.dp))

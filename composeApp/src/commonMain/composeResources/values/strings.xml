@@ -323,6 +323,12 @@
     <string name="equalizer_autoeq_empty">No headphone matches that name</string>
     <string name="equalizer_autoeq_failed">Couldn't load that profile — it needs a connection the first time</string>
     <string name="sync_follow_to_youtube_description">Following an artist in SimpMusic also subscribes to their channel on your YouTube account</string>
+    <string name="import_followed_from_youtube">Import Followed Artists from YouTube</string>
+    <string name="import_followed_from_youtube_description">Mark every artist you are subscribed to on YouTube as Followed here</string>
+    <string name="import_followed_from_youtube_running">Importing followed artists…</string>
+    <string name="import_followed_from_youtube_done">Followed %1$s new artists of %2$s on your account</string>
+    <string name="import_followed_from_youtube_none">Nothing new — all %1$s artists on your account were already followed</string>
+    <string name="import_followed_from_youtube_failed">Could not read your YouTube subscriptions</string>
     <string name="sync_follow_failed">Couldn't update your YouTube subscription</string>
     <string name="subscribed_on_youtube">Subscribed on YouTube</string>
     <string name="unsubscribed_on_youtube">Unsubscribed on YouTube</string>
