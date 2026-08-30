@@ -379,7 +379,22 @@ internal fun parseMixedContent(
                                                             ?: "",
                                                     name = title,
                                                 ),
-                                            artists = listOf(),
+                                            // The album's own artists, taken from the linked runs
+                                            // of its subtitle ("Album • David Choi"). Left empty
+                                            // before, which left consumers with only `album.name`
+                                            // to fall back on — and that is set to the shelf's
+                                            // title here, so every album in a shelf described
+                                            // itself as "Albums for you".
+                                            artists =
+                                                musicTwoRowItemRenderer.subtitle
+                                                    ?.runs
+                                                    ?.filter { run -> run.navigationEndpoint?.browseEndpoint?.browseId != null }
+                                                    ?.map { run ->
+                                                        Artist(
+                                                            id = run.navigationEndpoint?.browseEndpoint?.browseId ?: "",
+                                                            name = run.text,
+                                                        )
+                                                    } ?: listOf(),
                                             description = null,
                                             isExplicit = false,
                                             playlistId = null,

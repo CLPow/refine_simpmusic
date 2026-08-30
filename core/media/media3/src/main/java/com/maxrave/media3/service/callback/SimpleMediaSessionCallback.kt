@@ -616,7 +616,14 @@ internal class SimpleMediaSessionCallback(
                                                 browsableMediaItem(
                                                     id = "$HOME/${homeItem.title}/$PLAYLIST/${it?.browseId}",
                                                     title = it?.title.orEmpty(),
-                                                    subtitle = it?.album?.name,
+                                                    // The artist, not album.name — the parser sets
+                                                    // that to the shelf's own title, so it read
+                                                    // "Albums for you" under every album.
+                                                    subtitle =
+                                                        it
+                                                            ?.artists
+                                                            ?.joinToString(", ") { a -> a.name }
+                                                            ?.takeIf { n -> n.isNotBlank() },
                                                     iconUri =
                                                         it
                                                             ?.thumbnails
