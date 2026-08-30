@@ -61,6 +61,9 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "AndroidAuto"
 
+/** Temporary: per-artist artwork diagnosis. Remove once the missing images are understood. */
+private const val ARTWORK_DEBUG_TAG = "AAArtworkDebug"
+
 @UnstableApi
 internal class SimpleMediaSessionCallback(
     private val context: Context,
@@ -381,7 +384,6 @@ internal class SimpleMediaSessionCallback(
                                             yt.thumbnails
                                                 .lastOrNull()
                                                 ?.url
-                                                ?.asSquareArtwork()
                                                 ?.toUri(),
                                             MediaMetadata.MEDIA_TYPE_PLAYLIST,
                                         )
@@ -427,6 +429,7 @@ internal class SimpleMediaSessionCallback(
                                 .getRecentSong(1, 0)
                                 .firstOrNull()
                                 ?.thumbnails
+                                ?.asSquareArtwork()
                                 ?.toUri()
                         val artistArtwork =
                             artistRepository
@@ -434,7 +437,6 @@ internal class SimpleMediaSessionCallback(
                                 .first()
                                 .firstOrNull()
                                 ?.thumbnails
-                                ?.asSquareArtwork()
                                 ?.toUri()
                         listOf(
                             browsableMediaItem(
@@ -509,11 +511,19 @@ internal class SimpleMediaSessionCallback(
                             .getFollowedArtists()
                             .first()
                             .map { artist ->
+                                val uri = artist.thumbnails?.asSquareArtwork()?.toUri()
+                                // Temporary diagnostic: the phone's database cannot be read from
+                                // outside the app, so this is the only way to see what is actually
+                                // handed to the head unit per artist.
+                                Logger.w(
+                                    ARTWORK_DEBUG_TAG,
+                                    "artist='${artist.name}' stored=${artist.thumbnails ?: "NULL"} sent=${uri ?: "NULL"}",
+                                )
                                 browsableMediaItem(
                                     id = "$ARTIST/${artist.channelId}",
                                     title = artist.name,
                                     subtitle = null,
-                                    iconUri = artist.thumbnails?.asSquareArtwork()?.toUri(),
+                                    iconUri = uri,
                                     mediaType = MediaMetadata.MEDIA_TYPE_ARTIST,
                                 )
                             }
@@ -1090,28 +1100,26 @@ internal class SimpleMediaSessionCallback(
     /**
      * Rewrites a Google image URL to a square centre crop.
      *
-     * Artist photos come back at whatever aspect ratio the channel banner happens to be — some
-     * portrait, some 16:9 — and a grid of tiles built from those looks ragged, each cropped
-     * differently by the host. The size suffix on these URLs is a server-side transform, so
-     * asking for a square is free: no download, no scaling here.
+     * Artist photos come back at whatever aspect ratio the channel art happens to be — some
+     * portrait, some 16:9 — so a grid built from them looks ragged. The size suffix is a
+     * server-side transform, so asking for a square costs nothing: no download, no scaling here.
      *
-     * `-c` is the crop flag; `-p` (pad) would letterbox instead, which is the ragged look again
-     * with bars. A URL in an unrecognised shape is returned untouched rather than mangled.
+     * The trailing `-dc<token>` must go. It is bound to the original rendition, and changing the
+     * size while it is present makes the server answer 400 — measured, not assumed. That is why a
+     * handful of artists lost their images when this transform was first added while the rest kept
+     * theirs. Dropping the token, the resized URL serves normally.
+     *
+     * `-c` is crop; `-p` (pad) would letterbox, which is the ragged look again with bars. The
+     * optional group swallows whichever fit flag is already there rather than stacking a second
+     * one, since `-c-p` is contradictory and also rejected.
      */
     private fun String.asSquareArtwork(size: Int = ARTWORK_SQUARE_PX): String {
         if (!contains("googleusercontent.com") && !contains("ggpht.com")) return this
+        val base = replace(RENDITION_TOKEN_SUFFIX, "")
         return when {
-            // =w120-h120-p-l90-rj -> =w544-h544-c-l90-rj
-            //
-            // The fit flag is replaced, not appended. These URLs carry `-p` (pad) and appending
-            // `-c` (crop) leaves `-c-p`, two contradictory instructions that the image server
-            // rejects outright — which shows up as no artwork at all rather than a badly cropped
-            // one. The optional group swallows whichever flag is already there.
-            WIDTH_HEIGHT_SUFFIX.containsMatchIn(this) ->
-                replace(WIDTH_HEIGHT_SUFFIX, "=w$size-h$size-c")
-            // =s176-c-... is square already; only the edge needs raising
-            SIZE_SUFFIX.containsMatchIn(this) -> replace(SIZE_SUFFIX, "=s$size")
-            else -> this
+            WIDTH_HEIGHT_SUFFIX.containsMatchIn(base) -> base.replace(WIDTH_HEIGHT_SUFFIX, "=w$size-h$size-c")
+            SIZE_SUFFIX.containsMatchIn(base) -> base.replace(SIZE_SUFFIX, "=s$size")
+            else -> base
         }
     }
 
@@ -1174,14 +1182,20 @@ internal class SimpleMediaSessionCallback(
         private const val RECENT_LIMIT = 50
 
         /** Square artwork edge requested from Google's image server for browse tiles. */
-        private const val ARTWORK_SQUARE_PX = 544
-
         /** Artists whose missing image is fetched per browse; bounded to avoid a request burst. */
         private const val ARTWORK_BACKFILL_PER_BROWSE = 5
 
-        /** Google image size suffixes: `=w1200-h675-...` and `=s176-...`. */
+        /** Square artwork edge requested from Google's image server for browse tiles. */
+        private const val ARTWORK_SQUARE_PX = 544
+
+        /** Google image size suffixes: `=w1200-h675-p-...` and `=s176-...`. */
         private val WIDTH_HEIGHT_SUFFIX = Regex("""=w\d+-h\d+(-[pc])?""")
         private val SIZE_SUFFIX = Regex("""=s\d+""")
+
+        /** Trailing `-dc<token>`, valid only for the rendition it came with. */
+        private val RENDITION_TOKEN_SUFFIX = Regex("""-dc[A-Za-z0-9]+$""")
+
+        /** Google image size suffixes: `=w1200-h675-...` and `=s176-...`. */
         const val ARTIST = "__artist"
         const val ONLINE_PLAYLIST = "online_playlist"
         const val PLAYLIST = "playlist"
