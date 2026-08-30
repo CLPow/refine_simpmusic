@@ -747,7 +747,11 @@ fun App(viewModel: SharedViewModel = koinInject()) {
                                 onClick = {
                                     shouldShowUpdateDialog = false
                                     viewModel.showedUpdateDialog = false
-                                    openUrl("https://simpmusic.org/download")
+                                    // This fork's own releases. The version check was repointed
+                                    // here already; sending people to the official download page
+                                    // would hand them a build with none of these changes and
+                                    // silently replace their install.
+                                    openUrl("https://github.com/CLPow/refine_simpmusic/releases/latest")
                                 },
                             ) {
                                 Text(
