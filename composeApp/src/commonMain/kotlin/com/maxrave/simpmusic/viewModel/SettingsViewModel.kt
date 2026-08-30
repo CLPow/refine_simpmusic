@@ -1577,20 +1577,14 @@ class SettingsViewModel(
                     dataStoreManager.setCookie(cookie, accountInfoList.first().pageId)
                     getAllGoogleAccount()
                     getLoggedIn()
-                    // Pull the account's subscriptions straight away. Library > Followed is empty
-                    // on a fresh sign-in otherwise, and nothing on that screen suggests the import
-                    // exists — it sits in Settings, which is not where anyone looks for it.
-                    // Silent and best-effort: the user asked to sign in, not to run an import, so a
-                    // toast (or a failure) here would be noise on top of the login they wanted.
-                    viewModelScope.launch {
-                        runCatching {
-                            artistRepository.syncFollowedArtistsFromYouTube().collect { (added, total) ->
-                                log("Imported $added of $total followed artists after login", LogLevel.INFO)
-                            }
-                        }.onFailure {
-                            log("Followed-artist import after login failed: ${it.message}", LogLevel.WARN)
-                        }
-                    }
+                    // Deliberately NOT importing followed artists here.
+                    //
+                    // Doing it on sign-in fired up to MAX_SUBSCRIPTION_PAGES paged browse calls the
+                    // instant a session came up, racing the home feed's own first load on the same
+                    // fresh credential. That is exactly the shape that earns a throttled session,
+                    // and it lines up with a home feed that came back generic and a Mix page that
+                    // crawled. Convenience is not worth spending the account's goodwill at its most
+                    // fragile moment — the import stays a deliberate press in Settings.
                     true
                 } ?: run {
                 Logger.w("getAllGoogleAccount", "addAccount: Account info is null")
