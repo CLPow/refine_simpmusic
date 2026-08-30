@@ -76,6 +76,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -1051,7 +1052,7 @@ fun QuickPicks(
                             bottomSheetShow = true
                         },
                         data = it,
-                        widthDp = widthDp,
+                        widthDp = widthDp.asShelfColumnWidth(),
                     )
                 }
             }
@@ -1214,9 +1215,28 @@ fun ChartData(
                         )
                     },
                     data = data,
-                    widthDp = gridWidthDp,
+                    widthDp = gridWidthDp.asShelfColumnWidth(),
                 )
             }
         }
     }
+}
+
+/**
+ * Comfortable width for one column of a horizontally paged shelf.
+ *
+ * These shelves size each entry to the *whole* shelf width, which is right on a phone: one
+ * full-width row per column, swipe for the next page. On a desktop window that makes a single
+ * entry nearly two thousand dp wide — its content sits at the left, the rest of the row is empty,
+ * and the following column is off-screen with no way to scroll a lazy grid to it.
+ *
+ * Fitting as many columns as will hold a readable row keeps the phone behaviour intact (a narrow
+ * window still yields one column) while a wide window fills with content instead of gap.
+ */
+private val SHELF_TARGET_COLUMN_WIDTH = 360.dp
+
+private fun Dp.asShelfColumnWidth(): Dp {
+    if (this <= 0.dp) return this
+    val columns = (this / SHELF_TARGET_COLUMN_WIDTH).toInt().coerceAtLeast(1)
+    return this / columns
 }
