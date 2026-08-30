@@ -3,6 +3,7 @@ package com.maxrave.media3.carapp
 import androidx.car.app.CarContext
 import androidx.car.app.Screen
 import androidx.car.app.model.Action
+import androidx.car.app.model.CarIcon
 import androidx.car.app.model.Header
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
@@ -10,7 +11,9 @@ import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import androidx.media3.common.util.UnstableApi
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
+import com.maxrave.media3.utils.CoilBitmapLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,12 +28,15 @@ import org.koin.core.component.inject
  * single item to the session, so the host's built-in queue cannot show the
  * real queue.
  */
+@UnstableApi
 internal class QueueCarScreen(
     carContext: CarContext,
 ) : Screen(carContext),
     KoinComponent {
     private val handler: MediaPlayerHandler by inject()
     private val screenScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val bitmapLoader = CoilBitmapLoader(carContext, screenScope)
+    private val artwork = mutableMapOf<String, CarIcon>()
 
     init {
         lifecycle.addObserver(
@@ -41,7 +47,25 @@ internal class QueueCarScreen(
             },
         )
         screenScope.launch {
-            handler.queueData.collect { invalidate() }
+            handler.queueData.collect { queue ->
+                invalidate()
+                // The queue was the one car surface with no artwork at all — bare text rows,
+                // while browse and search both showed covers.
+                loadArtworkUrlsInto(
+                    scope = screenScope,
+                    bitmapLoader = bitmapLoader,
+                    sources =
+                        queue
+                            ?.data
+                            ?.listTracks
+                            .orEmpty()
+                            .map { track -> track.videoId to track.thumbnails?.lastOrNull()?.url },
+                    limit = carContext.listContentLimit(),
+                    artwork = artwork,
+                    tag = TAG,
+                    onLoaded = { invalidate() },
+                )
+            }
         }
         screenScope.launch {
             handler.nowPlaying.collect { invalidate() }
@@ -77,6 +101,7 @@ internal class QueueCarScreen(
                         } else if (artists.isNotBlank()) {
                             addText(artists)
                         }
+                        artwork[track.videoId]?.let { setImage(it) }
                     }.setOnClickListener {
                         handler.playMediaItemInMediaSource(index)
                     }.build(),
@@ -103,5 +128,9 @@ internal class QueueCarScreen(
                     .build(),
             ).setSingleList(itemListBuilder.build())
             .build()
+    }
+
+    private companion object {
+        private const val TAG = "QueueCarScreen"
     }
 }

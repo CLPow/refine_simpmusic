@@ -165,7 +165,7 @@ internal class LibraryTabCarScreen(
                 }
             tabChildren[tabId] = items
             invalidate()
-            loadArtworkInto(screenScope, bitmapLoader, items, carContext.listContentLimit(), artwork, TAG) {
+            loadArtworkInto(screenScope, bitmapLoader, items, carContext.gridContentLimit(), artwork, TAG) {
                 requestInvalidate()
             }
         }
@@ -210,7 +210,7 @@ internal class LibraryTabCarScreen(
             if (activeTabId == SimpleMediaSessionCallback.HOME) {
                 buildHomeSections()
             } else {
-                buildActiveTabList()
+                buildActiveTabContent()
             }
         return templateBuilder
             .setTabContents(TabContents.Builder(content).build())
@@ -250,69 +250,72 @@ internal class LibraryTabCarScreen(
                     // Spotify-sized tiles; anything smaller renders as a dense mosaic
                     .setItemSize(GridSection.ITEM_SIZE_EXTRA_LARGE)
                     .setTitle(shelf.mediaMetadata.title?.toString().orEmpty().ifBlank { " " })
-            items.forEach { item -> section.addItem(buildGridItem(item)) }
+            val nowPlayingId = handler.nowPlaying.value?.mediaId
+            items.forEach { item -> section.addItem(buildGridItem(item, nowPlayingId)) }
             builder.addSection(section.build())
         }
         return builder.build()
     }
 
-    private fun buildGridItem(item: MediaItem): GridItem {
+    private fun buildGridItem(
+        item: MediaItem,
+        nowPlayingId: String?,
+    ): GridItem {
         val metadata = item.mediaMetadata
         val browsable = metadata.isBrowsable == true
         val title = metadata.title?.toString().orEmpty().ifBlank { item.mediaId }
-        // GridItem requires an image at build time — placeholder until artwork lands
-        val image =
-            artwork[item.mediaId]
-                ?: CarIcon
-                    .Builder(IconCompat.createWithResource(carContext, R.drawable.baseline_album_24))
-                    .build()
-        return GridItem
-            .Builder()
-            .setTitle(title)
-            .apply {
-                (metadata.subtitle ?: metadata.artist)
-                    ?.toString()
-                    ?.takeIf { it.isNotBlank() }
-                    ?.let { setText(it) }
-            }.setImage(image, GridItem.IMAGE_TYPE_LARGE)
-            .setOnClickListener {
-                if (browsable) {
-                    screenManager.push(MediaListCarScreen(carContext, browserProvider, item.mediaId, title))
-                } else {
-                    playViaBrowser(carContext, browserProvider(), item, TAG)
-                    // This screen is the stack root, so the playback screen goes on top
-                    screenManager.push(NowPlayingCarScreen(carContext))
-                }
-            }.build()
+        // Browse media ids are paths ("song/{videoId}"); nowPlaying uses the bare videoId
+        val isPlaying = !browsable && item.mediaId.substringAfterLast('/') == nowPlayingId
+        return carContext.mediaGridItem(item, artwork[item.mediaId], isPlaying) {
+            if (browsable) {
+                screenManager.push(MediaListCarScreen(carContext, browserProvider, item.mediaId, title))
+            } else {
+                playViaBrowser(carContext, browserProvider(), item, TAG)
+                // This screen is the stack root, so the playback screen goes on top
+                screenManager.push(NowPlayingCarScreen(carContext))
+            }
+        }
     }
 
-    private fun buildActiveTabList(): ListTemplate {
-        val listBuilder =
-            ListTemplate
+    /**
+     * Every top-level tab renders as artwork tiles — playlists by their cover, songs by their
+     * album art, artists by their photo.
+     *
+     * Text rows survive in one place only, one level down: the contents of a playlist or album,
+     * where the point is picking a specific track out of an ordered list. That split lives in
+     * [MediaListCarScreen]. At this level there is nothing to read your way through, so the
+     * surface stays visual, the way the YouTube Music car app is.
+     */
+    private fun buildActiveTabContent(): Template {
+        val children = tabChildren[activeTabId]
+        return if (children == null) {
+            SectionedItemTemplate
                 .Builder()
                 .addAction(searchFab())
                 .addAction(nowPlayingFab())
-        val children = tabChildren[activeTabId] ?: return listBuilder.setLoading(true).build()
-        val nowPlayingId = handler.nowPlaying.value?.mediaId
-        val itemListBuilder = ItemList.Builder().setNoItemsMessage("Nothing to show")
-        children.take(carContext.listContentLimit()).forEach { item ->
-            val browsable = item.mediaMetadata.isBrowsable == true
-            // Browse media ids are paths ("song/{videoId}"); nowPlaying uses the bare videoId
-            val isPlaying = !browsable && item.mediaId.substringAfterLast('/') == nowPlayingId
-            itemListBuilder.addItem(
-                carContext.mediaRow(item, artwork[item.mediaId], isPlaying) {
-                    if (browsable) {
-                        val title = item.mediaMetadata.title?.toString().orEmpty().ifBlank { item.mediaId }
-                        screenManager.push(MediaListCarScreen(carContext, browserProvider, item.mediaId, title))
-                    } else {
-                        playViaBrowser(carContext, browserProvider(), item, TAG)
-                        // This screen is the stack root, so the playback screen goes on top
-                        screenManager.push(NowPlayingCarScreen(carContext))
-                    }
-                },
-            )
+                .setLoading(true)
+                .build()
+        } else {
+            buildActiveTabGrid(children)
         }
-        return listBuilder.setSingleList(itemListBuilder.build()).build()
+    }
+
+    private fun buildActiveTabGrid(children: List<MediaItem>): Template {
+        val nowPlayingId = handler.nowPlaying.value?.mediaId
+        val section =
+            GridSection
+                .Builder()
+                .setItemSize(GridSection.ITEM_SIZE_EXTRA_LARGE)
+                .setNoItemsMessage("Nothing to show")
+        children.take(carContext.gridContentLimit()).forEach { item ->
+            section.addItem(buildGridItem(item, nowPlayingId))
+        }
+        return SectionedItemTemplate
+            .Builder()
+            .addAction(searchFab())
+            .addAction(nowPlayingFab())
+            .addSection(section.build())
+            .build()
     }
 
     // List templates allow up to 2 floating actions: search on top of the

@@ -12,9 +12,11 @@ import androidx.car.app.CarContext
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.CarIcon
 import androidx.car.app.model.CarIconSpan
+import androidx.car.app.model.GridItem
 import androidx.car.app.model.Row
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.IconCompat
+import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaBrowser
@@ -28,6 +30,7 @@ import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 
 private const val DEFAULT_LIST_LIMIT = 100
+private const val DEFAULT_GRID_LIMIT = 24
 private const val ARTWORK_CORNER_RADIUS_FRACTION = 0.1f
 
 /** Hosts offer no rounded-corner image API (only square/circle), so the corners are baked in. */
@@ -48,6 +51,63 @@ internal fun CarContext.listContentLimit(): Int =
         getCarService(ConstraintManager::class.java)
             .getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_LIST)
     }.getOrDefault(DEFAULT_LIST_LIMIT)
+
+/** Host tile budget for grid templates, with a sane fallback. */
+internal fun CarContext.gridContentLimit(): Int =
+    runCatching {
+        getCarService(ConstraintManager::class.java)
+            .getContentLimit(ConstraintManager.CONTENT_LIMIT_TYPE_GRID)
+    }.getOrDefault(DEFAULT_GRID_LIMIT)
+
+/**
+ * Whether a browse level reads better as artwork tiles than as text rows.
+ *
+ * Collections — playlists, albums, artists — are picked out by their cover, which is what makes
+ * the YouTube Music car surface scannable at a glance; a list of titles forces the driver to read.
+ * Songs are the opposite: they are chosen by name, sit in a defined order, and a grid of near
+ * identical album covers is slower to work through than one line each.
+ *
+ * The majority decides, so a shelf holding a few loose tracks among its albums still renders as a
+ * grid rather than collapsing to text.
+ */
+internal fun List<MediaItem>.rendersAsGrid(): Boolean =
+    isNotEmpty() && count { it.mediaMetadata.isBrowsable == true } * 2 >= size
+
+/**
+ * Stand-in tile image. GridItem demands an image at build time, so a tile whose artwork has not
+ * arrived yet still needs something to draw — without this the whole grid would have to wait for
+ * the slowest download before any of it appeared.
+ */
+internal fun CarContext.placeholderArtwork(): CarIcon =
+    CarIcon
+        .Builder(IconCompat.createWithResource(this, R.drawable.baseline_album_24))
+        .build()
+
+/**
+ * Shared browse tile: large artwork, title, and one line of secondary text — the grid counterpart
+ * of [mediaRow], carrying the same now-playing marker so the two surfaces agree.
+ */
+internal fun CarContext.mediaGridItem(
+    item: MediaItem,
+    artwork: CarIcon?,
+    isPlaying: Boolean,
+    onClick: () -> Unit,
+): GridItem {
+    val metadata = item.mediaMetadata
+    val title = metadata.title?.toString()?.takeIf { it.isNotBlank() } ?: item.mediaId
+    val subtitle = (metadata.subtitle ?: metadata.artist)?.toString().orEmpty()
+    return GridItem
+        .Builder()
+        .setTitle(title)
+        .apply {
+            when {
+                isPlaying -> setText(nowPlayingText(subtitle))
+                subtitle.isNotBlank() -> setText(subtitle)
+            }
+        }.setImage(artwork ?: placeholderArtwork(), GridItem.IMAGE_TYPE_LARGE)
+        .setOnClickListener { onClick() }
+        .build()
+}
 
 /**
  * Secondary-text line with a static equalizer glyph in front of [suffix],
@@ -132,20 +192,44 @@ internal fun loadArtworkInto(
     artwork: MutableMap<String, CarIcon>,
     tag: String,
     onLoaded: () -> Unit,
+) = loadArtworkUrlsInto(
+    scope = scope,
+    bitmapLoader = bitmapLoader,
+    sources = items.map { it.mediaId to it.mediaMetadata.artworkUri?.toString() },
+    limit = limit,
+    artwork = artwork,
+    tag = tag,
+    onLoaded = onLoaded,
+)
+
+/**
+ * Artwork loader keyed on plain id/url pairs, for screens whose items are not [MediaItem]s — the
+ * queue holds domain tracks. Entries with no url are skipped rather than cached as misses, so an
+ * item whose artwork arrives later still loads on the next pass.
+ */
+@UnstableApi
+internal fun loadArtworkUrlsInto(
+    scope: CoroutineScope,
+    bitmapLoader: CoilBitmapLoader,
+    sources: List<Pair<String, String?>>,
+    limit: Int,
+    artwork: MutableMap<String, CarIcon>,
+    tag: String,
+    onLoaded: () -> Unit,
 ) {
-    items.take(limit).forEach { item ->
-        val uri = item.mediaMetadata.artworkUri ?: return@forEach
-        if (artwork.containsKey(item.mediaId)) return@forEach
+    sources.take(limit).forEach { (id, url) ->
+        val uri = url?.takeIf { it.isNotBlank() }?.toUri() ?: return@forEach
+        if (artwork.containsKey(id)) return@forEach
         scope.launch {
             try {
                 val bitmap = bitmapLoader.loadBitmap(uri).await()
-                artwork[item.mediaId] =
+                artwork[id] =
                     CarIcon.Builder(IconCompat.createWithBitmap(bitmap.withRoundedCorners())).build()
                 onLoaded()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Logger.e(tag, "artwork(${item.mediaId}) failed: ${e.message}")
+                Logger.e(tag, "artwork($id) failed: ${e.message}")
             }
         }
     }

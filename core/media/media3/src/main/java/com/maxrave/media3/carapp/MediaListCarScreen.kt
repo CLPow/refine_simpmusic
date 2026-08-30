@@ -5,8 +5,10 @@ import androidx.car.app.Screen
 import androidx.car.app.model.Action
 import androidx.car.app.model.CarIcon
 import androidx.car.app.model.Header
+import androidx.car.app.model.GridSection
 import androidx.car.app.model.ItemList
 import androidx.car.app.model.ListTemplate
+import androidx.car.app.model.SectionedItemTemplate
 import androidx.car.app.model.Template
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -80,7 +82,9 @@ internal class MediaListCarScreen(
                 }
             children = items
             invalidate()
-            loadArtworkInto(screenScope, bitmapLoader, items, carContext.listContentLimit(), artwork, TAG) {
+            val artworkBudget =
+                if (items.rendersAsGrid()) carContext.gridContentLimit() else carContext.listContentLimit()
+            loadArtworkInto(screenScope, bitmapLoader, items, artworkBudget, artwork, TAG) {
                 invalidate()
             }
         }
@@ -91,6 +95,12 @@ internal class MediaListCarScreen(
 
     override fun onGetTemplate(): Template {
         val loaded = children
+        // A level of collections (an artist's albums, a folder of playlists) reads as artwork
+        // tiles; a level of songs stays as rows. Same rule as the library tabs, so drilling in
+        // does not change the visual language underfoot.
+        if (loaded != null && loaded.rendersAsGrid()) {
+            return buildGrid(loaded)
+        }
         val templateBuilder =
             ListTemplate
                 .Builder()
@@ -124,19 +134,62 @@ internal class MediaListCarScreen(
             val isPlaying = !browsable && item.mediaId.substringAfterLast('/') == nowPlayingId
             itemListBuilder.addItem(
                 carContext.mediaRow(item, artwork[item.mediaId], isPlaying) {
-                    if (browsable) {
-                        val title = item.mediaMetadata.title?.toString().orEmpty().ifBlank { item.mediaId }
-                        screenManager.push(MediaListCarScreen(carContext, browserProvider, item.mediaId, title))
-                    } else {
-                        playViaBrowser(carContext, browserProvider(), item, TAG)
-                        // Land back on the playback screen, matching the classic surface
-                        screenManager.popToRoot()
-                        screenManager.push(NowPlayingCarScreen(carContext))
-                    }
+                    onItemClicked(item, browsable)
                 },
             )
         }
         return templateBuilder.setSingleList(itemListBuilder.build()).build()
+    }
+
+    private fun buildGrid(loaded: List<MediaItem>): Template {
+        val nowPlayingId = handler.nowPlaying.value?.mediaId
+        val section =
+            GridSection
+                .Builder()
+                .setItemSize(GridSection.ITEM_SIZE_EXTRA_LARGE)
+                .setNoItemsMessage("Nothing to show")
+        loaded.take(carContext.gridContentLimit()).forEach { item ->
+            val browsable = item.mediaMetadata.isBrowsable == true
+            val isPlaying = !browsable && item.mediaId.substringAfterLast('/') == nowPlayingId
+            section.addItem(
+                carContext.mediaGridItem(item, artwork[item.mediaId], isPlaying) {
+                    onItemClicked(item, browsable)
+                },
+            )
+        }
+        return SectionedItemTemplate
+            .Builder()
+            .setHeader(
+                Header
+                    .Builder()
+                    .setStartHeaderAction(Action.BACK)
+                    .setTitle(screenTitle)
+                    .build(),
+            ).addAction(
+                Action
+                    .Builder(Action.MEDIA_PLAYBACK)
+                    .setOnClickListener {
+                        screenManager.popToRoot()
+                        screenManager.push(NowPlayingCarScreen(carContext))
+                    }.build(),
+            ).addSection(section.build())
+            .build()
+    }
+
+    /** Shared by both surfaces so a tap behaves the same whether it was a tile or a row. */
+    private fun onItemClicked(
+        item: MediaItem,
+        browsable: Boolean,
+    ) {
+        if (browsable) {
+            val title = item.mediaMetadata.title?.toString().orEmpty().ifBlank { item.mediaId }
+            screenManager.push(MediaListCarScreen(carContext, browserProvider, item.mediaId, title))
+        } else {
+            playViaBrowser(carContext, browserProvider(), item, TAG)
+            // Land back on the playback screen, matching the classic surface
+            screenManager.popToRoot()
+            screenManager.push(NowPlayingCarScreen(carContext))
+        }
     }
 
     private companion object {

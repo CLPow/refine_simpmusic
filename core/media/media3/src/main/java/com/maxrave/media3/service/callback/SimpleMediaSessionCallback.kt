@@ -33,6 +33,7 @@ import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.mediaservice.handler.PlayerEvent
 import com.maxrave.domain.mediaservice.handler.PlaylistType
 import com.maxrave.domain.mediaservice.handler.QueueData
+import com.maxrave.domain.repository.ArtistRepository
 import com.maxrave.domain.repository.HomeRepository
 import com.maxrave.domain.repository.LocalPlaylistRepository
 import com.maxrave.domain.repository.PlaylistRepository
@@ -70,6 +71,7 @@ internal class SimpleMediaSessionCallback(
     private val localPlaylistRepository: LocalPlaylistRepository,
     private val playlistRepository: PlaylistRepository,
     private val homeRepository: HomeRepository,
+    private val artistRepository: ArtistRepository,
     private val streamRepository: StreamRepository,
 ) : MediaLibrarySession.Callback {
     var toggleLike: () -> Unit = {
@@ -79,6 +81,9 @@ internal class SimpleMediaSessionCallback(
         mediaPlayerHandler.toggleRadio()
     }
     private val searchTempList = mutableListOf<Track>()
+    /** Songs of the artist last browsed, so playback can build a queue without a second fetch. */
+    private val artistSongCache = mutableMapOf<String, List<Track>>()
+
     private val listHomeItem = mutableListOf<HomeItem>()
 
     override fun onConnect(
@@ -372,19 +377,76 @@ internal class SimpleMediaSessionCallback(
                                     }
                             }
                         }
-                        listHomeItem.map {
+                        // Two locally-sourced shelves lead, because they are what the driver
+                        // reaches for most: what they were just listening to, and the artists they
+                        // follow. Everything after is YouTube's own home feed.
+                        listOf(
                             browsableMediaItem(
-                                "$HOME/${it.title}",
-                                it.title,
-                                it.subtitle,
+                                "$HOME/$RECENT",
+                                context.getString(R.string.recently_played),
+                                null,
                                 null,
                                 MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
-                            )
-                        }
+                            ),
+                            browsableMediaItem(
+                                "$HOME/$ARTIST",
+                                context.getString(R.string.your_artists),
+                                null,
+                                null,
+                                MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS,
+                            ),
+                        ) +
+                            listHomeItem.map {
+                                browsableMediaItem(
+                                    "$HOME/${it.title}",
+                                    it.title,
+                                    it.subtitle,
+                                    null,
+                                    MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
+                                )
+                            }
+                    }
+
+                    "$HOME/$RECENT" -> {
+                        songRepository
+                            .getRecentSong(RECENT_LIMIT, 0)
+                            .map { it.toMediaItem(RECENT) }
+                    }
+
+                    "$HOME/$ARTIST" -> {
+                        artistRepository
+                            .getFollowedArtists()
+                            .first()
+                            .map { artist ->
+                                browsableMediaItem(
+                                    id = "$ARTIST/${artist.channelId}",
+                                    title = artist.name,
+                                    subtitle = null,
+                                    iconUri = artist.thumbnails?.toUri(),
+                                    mediaType = MediaMetadata.MEDIA_TYPE_ARTIST,
+                                )
+                            }
                     }
 
                     else -> {
                         when {
+                            // An artist tile opens their songs. Cached on the way through so
+                            // playback does not have to re-fetch the artist page to build a queue.
+                            parentId.startsWith("$ARTIST/") -> {
+                                val channelId = parentId.substringAfter("$ARTIST/")
+                                val tracks =
+                                    artistRepository
+                                        .getArtistData(channelId)
+                                        .lastOrNull()
+                                        ?.data
+                                        ?.songs
+                                        ?.results
+                                        ?.map { it.toTrack() }
+                                        .orEmpty()
+                                artistSongCache[channelId] = tracks
+                                tracks.map { it.toMediaItemWithoutPath("$ARTIST/$channelId") }
+                            }
+
                             parentId.startsWith("$HOME/") -> {
                                 if (parentId.split("/").size == 2) {
                                     val homeItem =
@@ -524,6 +586,57 @@ internal class SimpleMediaSessionCallback(
                         Config.SONG_CLICK,
                         0,
                     )
+                    defaultResult
+                }
+
+                RECENT -> {
+                    val songId = path.getOrNull(1) ?: return@future defaultResult
+                    val recent = songRepository.getRecentSong(RECENT_LIMIT, 0)
+                    val clicked = recent.firstOrNull { it.videoId == songId } ?: return@future defaultResult
+                    val index = recent.indexOf(clicked)
+                    mediaPlayerHandler.setQueueData(
+                        QueueData.Data(
+                            listTracks = recent.toArrayListTrack(),
+                            firstPlayedTrack = clicked.toTrack(),
+                            playlistId = RECENT,
+                            playlistName = context.getString(R.string.recently_played),
+                            playlistType = PlaylistType.PLAYLIST,
+                            continuation = null,
+                        ),
+                    )
+                    mediaPlayerHandler.loadMediaItem(clicked.toTrack(), Config.PLAYLIST_CLICK, index)
+                    defaultResult
+                }
+
+                ARTIST -> {
+                    val channelId = path.getOrNull(1) ?: return@future defaultResult
+                    val songId = path.getOrNull(2) ?: return@future defaultResult
+                    // Populated while browsing the artist; re-fetched only if the session was
+                    // restarted between browsing and pressing play.
+                    val tracks =
+                        artistSongCache[channelId]
+                            ?: artistRepository
+                                .getArtistData(channelId)
+                                .lastOrNull()
+                                ?.data
+                                ?.songs
+                                ?.results
+                                ?.map { it.toTrack() }
+                                .orEmpty()
+                                .also { artistSongCache[channelId] = it }
+                    val clicked = tracks.firstOrNull { it.videoId == songId } ?: return@future defaultResult
+                    tracks.forEach { songRepository.insertSong(it.toSongEntity()).first() }
+                    mediaPlayerHandler.setQueueData(
+                        QueueData.Data(
+                            listTracks = ArrayList(tracks),
+                            firstPlayedTrack = clicked,
+                            playlistId = channelId,
+                            playlistName = clicked.artists?.firstOrNull()?.name.orEmpty(),
+                            playlistType = PlaylistType.PLAYLIST,
+                            continuation = null,
+                        ),
+                    )
+                    mediaPlayerHandler.loadMediaItem(clicked, Config.PLAYLIST_CLICK, tracks.indexOf(clicked))
                     defaultResult
                 }
 
@@ -811,6 +924,17 @@ internal class SimpleMediaSessionCallback(
         const val ROOT = "root"
         const val SONG = "song"
         const val HOME = "home"
+
+        /**
+         * Synthetic Home shelves, prefixed so they cannot collide with a YouTube shelf that
+         * happens to be titled "recent" or "artist" — the generic handler below matches shelves
+         * by their display title.
+         */
+        const val RECENT = "__recent"
+
+        /** Rows the Recently played shelf offers; the car host trims further to its own budget. */
+        private const val RECENT_LIMIT = 50
+        const val ARTIST = "__artist"
         const val ONLINE_PLAYLIST = "online_playlist"
         const val PLAYLIST = "playlist"
         const val FAVORITE = "favorite"
