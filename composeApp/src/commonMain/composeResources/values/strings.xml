@@ -273,7 +273,7 @@
     <string name="author">Author</string>
     <string name="fork_maintainer">Fork maintained by</string>
     <string name="fork_maintainer_name">CLPow</string>
-    <string name="fork_notice">Refine SimpMusic — a modified build of SimpMusic</string>
+    <string name="fork_notice">Refine Music — a modified build of SimpMusic</string>
     <string name="other_app">Other app</string>
     <string name="database">App database</string>
     <string name="free_space">Free space</string>
@@ -352,7 +352,7 @@
     <string name="enable_spotify_lyrics">Enable Spotify Lyrics</string>
     <string name="spotify_lyrícs_info">More lyrics without translation</string>
     <string name="enable_canvas">Enable Canvas</string>
-    <string name="canvas_info">Show Spotify Canvas in SimpMusic</string>
+    <string name="canvas_info">Show Spotify Canvas in Refine Music</string>
     <string name="spotify_lyrics_provider">Lyrics provided by Spotify</string>
     <string name="offline_mode">Offline mode</string>
     <string name="added_to_youtube_liked">Added to YouTube Liked</string>
@@ -486,7 +486,7 @@
     <string name="other_version">Other version</string>
     <string name="later">Later</string>
     <string name="give_a_star">Give a star</string>
-    <string name="enjoying_simpmusic">Enjoying SimpMusic</string>
+    <string name="enjoying_simpmusic">Enjoying Refine Music</string>
     <string name="if_you_enjoy_using_simpmusic_star_simpmusic_on_github_or_leave_a_review_on">If you enjoy using SimpMusic, star SimpMusic on GitHub or leave a review on</string>
     <string name="if_you_love_my_work_consider">"If you love my work, consider "</string>
     <string name="buying_me_a_coffee">buying me a coffee.</string>
