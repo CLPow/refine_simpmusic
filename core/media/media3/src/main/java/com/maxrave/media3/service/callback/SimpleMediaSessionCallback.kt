@@ -198,7 +198,17 @@ internal class SimpleMediaSessionCallback(
                             .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
                             .build(),
                     ).build(),
-                params,
+                // Declared once at the root: collections default to artwork tiles, tracks to
+                // rows. Individual items override this where they differ.
+                MediaLibraryService.LibraryParams
+                    .Builder()
+                    .setExtras(
+                        Bundle().apply {
+                            putBoolean(CONTENT_STYLE_SUPPORTED, true)
+                            putInt(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_GRID_ITEM)
+                            putInt(CONTENT_STYLE_PLAYABLE_HINT, CONTENT_STYLE_LIST_ITEM)
+                        },
+                    ).build(),
             ),
         )
 
@@ -325,14 +335,14 @@ internal class SimpleMediaSessionCallback(
                         songRepository
                             .getLikedSongs()
                             .first()
-                            .map { it.toMediaItem(parentId) }
+                            .map { it.toMediaItem(parentId, asTile = true) }
                     }
 
                     DOWNLOADED -> {
                         songRepository
                             .getDownloadedSongs()
                             .first()
-                            ?.map { it.toMediaItem(parentId) }
+                            ?.map { it.toMediaItem(parentId, asTile = true) }
                             ?: emptyList()
                     }
 
@@ -410,7 +420,7 @@ internal class SimpleMediaSessionCallback(
                     "$HOME/$RECENT" -> {
                         songRepository
                             .getRecentSong(RECENT_LIMIT, 0)
-                            .map { it.toMediaItem(RECENT) }
+                            .map { it.toMediaItem(RECENT, asTile = true) }
                     }
 
                     "$HOME/$ARTIST" -> {
@@ -910,25 +920,47 @@ internal class SimpleMediaSessionCallback(
                 .setIsPlayable(false)
                 .setIsBrowsable(true)
                 .setMediaType(mediaType)
+                .setExtras(contentStyle(browsable = CONTENT_STYLE_GRID_ITEM))
                 .build(),
         ).build()
 
-    private fun SongEntity.toMediaItem(path: String) =
-        MediaItem
-            .Builder()
-            .setMediaId("$path/${this.videoId}")
-            .setMediaMetadata(
-                MediaMetadata
-                    .Builder()
-                    .setTitle(this.title)
-                    .setSubtitle(this.artistName?.joinToString(", "))
-                    .setArtist(this.artistName?.joinToString(" "))
-                    .setArtworkUri(this.thumbnails?.toUri())
-                    .setIsPlayable(true)
-                    .setIsBrowsable(false)
-                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
-                    .build(),
-            ).build()
+    /**
+     * [asTile] renders the track as an artwork tile rather than a row. Used for the top-level
+     * tabs, where there is nothing to read your way through and a cover is recognised faster;
+     * the contents of a playlist or album stay rows, because there the point is picking a
+     * specific track out of an order.
+     */
+    private fun SongEntity.toMediaItem(
+        path: String,
+        asTile: Boolean = false,
+    ) = MediaItem
+        .Builder()
+        .setMediaId("$path/${this.videoId}")
+        .setMediaMetadata(
+            MediaMetadata
+                .Builder()
+                .setTitle(this.title)
+                .setSubtitle(this.artistName?.joinToString(", "))
+                .setArtist(this.artistName?.joinToString(" "))
+                .setArtworkUri(this.thumbnails?.toUri())
+                .setIsPlayable(true)
+                .setIsBrowsable(false)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
+                .setExtras(
+                    contentStyle(
+                        playable = if (asTile) CONTENT_STYLE_GRID_ITEM else CONTENT_STYLE_LIST_ITEM,
+                    ),
+                ).build(),
+        ).build()
+
+    /** Per-item override of the root's default browse styling. */
+    private fun contentStyle(
+        browsable: Int? = null,
+        playable: Int? = null,
+    ) = Bundle().apply {
+        browsable?.let { putInt(CONTENT_STYLE_BROWSABLE_HINT, it) }
+        playable?.let { putInt(CONTENT_STYLE_PLAYABLE_HINT, it) }
+    }
 
     private fun Track.toMediaItemWithoutPath(path: String? = SONG) =
         MediaItem
@@ -955,6 +987,19 @@ internal class SimpleMediaSessionCallback(
         const val ROOT = "root"
         const val SONG = "song"
         const val HOME = "home"
+
+        /**
+         * Android Auto's classic browse surface picks list-or-grid from these extras. Without
+         * them the host has nothing to go on and renders every level as a plain text list, which
+         * is what SimpMusic showed however much artwork the items carried.
+         *
+         * Names and values are fixed by the platform contract, not by us.
+         */
+        const val CONTENT_STYLE_SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED"
+        const val CONTENT_STYLE_BROWSABLE_HINT = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
+        const val CONTENT_STYLE_PLAYABLE_HINT = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
+        const val CONTENT_STYLE_LIST_ITEM = 1
+        const val CONTENT_STYLE_GRID_ITEM = 2
 
         /**
          * Synthetic Home shelves, prefixed so they cannot collide with a YouTube shelf that
