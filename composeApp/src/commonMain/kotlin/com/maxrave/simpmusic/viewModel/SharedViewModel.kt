@@ -1025,41 +1025,25 @@ class SharedViewModel(
     fun checkForUpdate() {
         viewModelScope.launch {
             _isCheckingUpdate.value = true
-            val updateChannel = dataStoreManager.updateChannel.first()
             dataStoreManager.putString(
                 "CheckForUpdateAt",
                 System.currentTimeMillis().toString(),
             )
-            if (updateChannel == DataStoreManager.GITHUB) {
-                updateRepository.checkForGithubReleaseUpdate().collectLatest { response ->
-                    val data = response.data
-                    when (response) {
-                        is Resource.Success if (data != null) -> {
-                            _updateResponse.value = data
-                            showedUpdateDialog = true
-                        }
-
-                        else -> {
-                            log("Check for update error: ${response.message}", LogLevel.WARN)
-                        }
+            // Only one channel exists: this fork's own releases. Upstream's F-Droid listing was
+            // removed with the rest of the update path back to it.
+            updateRepository.checkForGithubReleaseUpdate().collectLatest { response ->
+                val data = response.data
+                when (response) {
+                    is Resource.Success if (data != null) -> {
+                        _updateResponse.value = data
+                        showedUpdateDialog = true
                     }
-                    _isCheckingUpdate.value = false
-                }
-            } else if (updateChannel == DataStoreManager.FDROID) {
-                updateRepository.checkForFdroidUpdate().collectLatest { response ->
-                    val data = response.data
-                    when (response) {
-                        is Resource.Success if (data != null) -> {
-                            _updateResponse.value = data
-                            showedUpdateDialog = true
-                        }
 
-                        else -> {
-                            log("Check for update error: ${response.message}", LogLevel.WARN)
-                        }
+                    else -> {
+                        log("Check for update error: ${response.message}", LogLevel.WARN)
                     }
-                    _isCheckingUpdate.value = false
                 }
+                _isCheckingUpdate.value = false
             }
         }
     }
