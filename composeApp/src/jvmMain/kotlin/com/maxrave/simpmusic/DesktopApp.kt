@@ -363,11 +363,20 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
         LaunchedEffect(isVM) {
             DesktopWindowChrome.customTitleBarVisible = !isVM
         }
+        // What is playing, in the caption and therefore in the taskbar preview and alt-tab —
+        // the convention every other desktop player follows, and the only way to tell two
+        // windows apart without raising them. Falls back to the app name when nothing is loaded.
+        val windowTitle =
+            when {
+                hasTrack && nowPlayingArtist.isNotBlank() -> "$nowPlayingTitle — $nowPlayingArtist"
+                hasTrack -> nowPlayingTitle
+                else -> appName
+            }
         Window(
             onCloseRequest = {
                 isVisible = false
             },
-            title = stringResource(Res.string.app_name),
+            title = windowTitle,
             icon = painterResource(Res.drawable.circle_app_icon),
             undecorated = !isVM,
             transparent = !isVM,
@@ -420,7 +429,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         .collectAsState(DataStoreManager.THEME_MODE_DARK)
                     val isDark = isDarkTheme(themeMode)
                     CustomTitleBar(
-                        title = stringResource(Res.string.app_name),
+                        title = windowTitle,
                         windowState = windowState,
                         window = window,
                         onCloseRequest = {

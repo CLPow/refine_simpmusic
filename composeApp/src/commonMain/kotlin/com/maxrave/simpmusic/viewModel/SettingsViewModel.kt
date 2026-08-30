@@ -1577,6 +1577,20 @@ class SettingsViewModel(
                     dataStoreManager.setCookie(cookie, accountInfoList.first().pageId)
                     getAllGoogleAccount()
                     getLoggedIn()
+                    // Pull the account's subscriptions straight away. Library > Followed is empty
+                    // on a fresh sign-in otherwise, and nothing on that screen suggests the import
+                    // exists — it sits in Settings, which is not where anyone looks for it.
+                    // Silent and best-effort: the user asked to sign in, not to run an import, so a
+                    // toast (or a failure) here would be noise on top of the login they wanted.
+                    viewModelScope.launch {
+                        runCatching {
+                            artistRepository.syncFollowedArtistsFromYouTube().collect { (added, total) ->
+                                log("Imported $added of $total followed artists after login", LogLevel.INFO)
+                            }
+                        }.onFailure {
+                            log("Followed-artist import after login failed: ${it.message}", LogLevel.WARN)
+                        }
+                    }
                     true
                 } ?: run {
                 Logger.w("getAllGoogleAccount", "addAccount: Account info is null")
