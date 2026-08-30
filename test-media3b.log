@@ -1,0 +1,179 @@
+Type-safe project accessors is an incubating feature.
+
+> Configure project :aiService
+WARNING: The option setting 'android.usesSdkInManifest.disallowed=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.sdk.defaultTargetSdkToCompileSdkIfUnset=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.r8.optimizedResourceShrinking=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.defaults.buildfeatures.resvalues=true' is deprecated.
+The current default is 'false'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+WARNING: The option setting 'android.nonFinalResIds=false' is deprecated.
+The current default is 'true'.
+It will be removed in version 10.0 of the Android Gradle plugin.
+w: Native task 'iosSimulatorArm64Test' is disabled
+Task 'iosSimulatorArm64Test' for target 'ios_simulator_arm64' cannot run on the current host (windows-x86_64).
+Reason: simulator tests require macOS
+Solution: To suppress this warning, add 'kotlin.native.ignoreDisabledTargets=true' to gradle.properties.
+
+
+> Configure project :androidApp
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+
+> Configure project :cast
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+
+> Configure project :cast-empty
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+
+> Configure project :common
+WARNING: The 'androidHostTest' source directory exists, but android host tests are not enabled. To enable android host tests, add `withHostTest {}` to your android target configuration in the Gradle build file.
+WARNING: The 'androidDeviceTest' source directory exists, but android device tests are not enabled. To enable android device tests, add `withDeviceTest {}` to your android target configuration in the Gradle build file.
+
+> Configure project :crashlytics
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+
+> Configure project :crashlytics-empty
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+
+> Configure project :listenTogether
+WARNING: The 'commonTest' source directory exists, but android host tests are not enabled. To enable android host tests, add `withHostTest {}` to your android target configuration in the Gradle build file.
+
+> Configure project :media3
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+
+> Configure project :media3-ui
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+WARNING: The property android.dependency.excludeLibraryComponentsFromConstraints improves project import performance for very large projects. It should be enabled to improve performance.
+To suppress this warning, add android.generateSyncIssueWhenLibraryConstraintsAreEnabled=false to gradle.properties
+
+> Task :cast-empty:preBuild UP-TO-DATE
+> Task :cast-empty:preDebugBuild UP-TO-DATE
+> Task :cast-empty:generateDebugResValues
+> Task :cast-empty:generateDebugResources
+> Task :cast-empty:packageDebugResources
+> Task :cast-empty:processDebugNavigationResources
+> Task :common:kmpPartiallyResolvedDependenciesChecker
+> Task :common:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :cast-empty:parseDebugLocalResources
+> Task :common:compileAndroidMain UP-TO-DATE
+> Task :common:androidPreBuild UP-TO-DATE
+> Task :common:preAndroidMainBuild UP-TO-DATE
+> Task :common:bundleAndroidMainClassesToCompileJar UP-TO-DATE
+> Task :common:bundleAndroidMainClassesToRuntimeJar UP-TO-DATE
+> Task :common:processAndroidMainJavaRes UP-TO-DATE
+> Task :cast-empty:generateDebugRFile
+> Task :cast-empty:javaPreCompileDebug
+> Task :domain:kmpPartiallyResolvedDependenciesChecker
+> Task :domain:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :domain:kspAndroidMain SKIPPED
+> Task :domain:compileAndroidMain UP-TO-DATE
+> Task :domain:androidPreBuild UP-TO-DATE
+> Task :domain:preAndroidMainBuild UP-TO-DATE
+> Task :domain:bundleAndroidMainClassesToRuntimeJar UP-TO-DATE
+> Task :domain:processAndroidMainJavaRes UP-TO-DATE
+> Task :domain:bundleAndroidMainClassesToCompileJar UP-TO-DATE
+> Task :media3:preBuild UP-TO-DATE
+> Task :media3:preDebugBuild UP-TO-DATE
+> Task :media3:generateDebugResValues
+> Task :media3:generateDebugResources
+> Task :media3:packageDebugResources
+> Task :media3:processDebugNavigationResources
+> Task :media3:preDebugUnitTestBuild UP-TO-DATE
+> Task :media3:javaPreCompileDebug
+> Task :media3:javaPreCompileDebugUnitTest
+> Task :media3:parseDebugLocalResources
+> Task :media3:generateDebugRFile
+> Task :media3:generateDebugUnitTestStubRFile
+> Task :cast-empty:compileDebugKotlin
+> Task :cast-empty:compileDebugJavaWithJavac NO-SOURCE
+> Task :cast-empty:bundleLibRuntimeToJarDebug
+> Task :cast-empty:processDebugJavaRes
+> Task :cast-empty:bundleLibCompileToJarDebug
+
+> Task :media3:compileDebugKotlin
+w: The argument '-Xmulti-dollar-interpolation' is redundant for the current language version 2.4.
+w: The argument '-Xwhen-guards' is redundant for the current language version 2.4.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/audio/CrossfadeFilterAudioProcessor.kt:156:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/audio/CrossfadeFilterAudioProcessor.kt:157:15 'fun onFlush(): Unit' is deprecated. Deprecated in Java.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/audio/EqualizerAudioProcessor.kt:117:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/carapp/SimpMusicCarAppService.kt:142:61 'class MediaSessionCompat : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/carapp/SimpMusicCarAppService.kt:142:80 'class Token : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/di/Media3ServiceModule.kt:453:18 'fun setEnableAudioTrackPlaybackParams(p0: Boolean): DefaultAudioSink.Builder' is deprecated. Deprecated in Java.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/exoplayer/CrossfadeExoPlayerAdapter.kt:74:8 Annotation 'androidx.media3.common.util.UnstableApi' is not annotated with '@RequiresOptIn'. '@OptIn' has no effect.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/exoplayer/CrossfadeExoPlayerAdapter.kt:2084:59 Redundant call of conversion method.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/exoplayer/ExoPlayerAdapter.kt:32:8 Annotation 'androidx.media3.common.util.UnstableApi' is not annotated with '@RequiresOptIn'. '@OptIn' has no effect.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/service/callback/SimpleMediaSessionCallback.kt:105:14 'constructor(p0: MediaSession): MediaSession.ConnectionResult.AcceptedResultBuilder' is deprecated. Deprecated in Java.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/service/callback/SimpleMediaSessionCallback.kt:116:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/USER/src/SimpMusic/core/media/media3/src/main/java/com/maxrave/media3/service/callback/SimpleMediaSessionCallback.kt:134:22 'fun onPlayerCommandRequest(p0: MediaSession, p1: MediaSession.ControllerInfo, p2: Int): Int' is deprecated. Deprecated in Java.
+
+> Task :media3:compileDebugJavaWithJavac NO-SOURCE
+> Task :media3:processDebugJavaRes
+> Task :media3:bundleLibCompileToJarDebug
+> Task :media3:bundleLibRuntimeToJarDebug
+
+> Task :media3:compileDebugUnitTestKotlin
+w: The argument '-Xmulti-dollar-interpolation' is redundant for the current language version 2.4.
+w: The argument '-Xwhen-guards' is redundant for the current language version 2.4.
+
+> Task :media3:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :media3:processDebugUnitTestJavaRes
+> Task :media3:testDebugUnitTest
+> Task :media3:test
+
+[Incubating] Problems report is available at: file:///C:/Users/USER/src/SimpMusic/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 9s
+37 actionable tasks: 29 executed, 8 up-to-date

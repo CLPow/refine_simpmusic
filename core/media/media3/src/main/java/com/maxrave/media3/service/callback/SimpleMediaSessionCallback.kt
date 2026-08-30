@@ -553,6 +553,37 @@ internal class SimpleMediaSessionCallback(
         }
 
     @UnstableApi
+    /**
+     * The queue as [mediaPlayerHandler] has just staged it on the player.
+     *
+     * Every branch below used to hand back an empty list. media3 applies this result to the player
+     * *after* the future resolves, so an empty list wiped the queue `loadMediaItem` had just built:
+     * the `play()` that Android Auto sends straight after then ran against an empty timeline and
+     * nothing was heard. Skipping to the next track repopulated the queue through the handler's own
+     * path, which is why sound only ever arrived one track late.
+     *
+     * Handing back what is already on the player makes media3 re-apply the same queue — a no-op
+     * instead of a wipe. Error paths keep returning the empty result, since nothing was staged.
+     *
+     * Safe to touch the player here: the service scope is [Dispatchers.Main], the app thread.
+     */
+    private fun stagedQueue(
+        mediaSession: MediaSession,
+        fallback: MediaSession.MediaItemsWithStartPosition,
+    ): MediaSession.MediaItemsWithStartPosition {
+        val player = mediaSession.player
+        val items = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
+        return if (items.isEmpty()) {
+            fallback
+        } else {
+            MediaSession.MediaItemsWithStartPosition(
+                items,
+                player.currentMediaItemIndex,
+                player.currentPosition,
+            )
+        }
+    }
+
     override fun onSetMediaItems(
         mediaSession: MediaSession,
         controller: MediaSession.ControllerInfo,
@@ -586,7 +617,7 @@ internal class SimpleMediaSessionCallback(
                         Config.SONG_CLICK,
                         0,
                     )
-                    defaultResult
+                    stagedQueue(mediaSession, defaultResult)
                 }
 
                 RECENT -> {
@@ -605,7 +636,7 @@ internal class SimpleMediaSessionCallback(
                         ),
                     )
                     mediaPlayerHandler.loadMediaItem(clicked.toTrack(), Config.PLAYLIST_CLICK, index)
-                    defaultResult
+                    stagedQueue(mediaSession, defaultResult)
                 }
 
                 ARTIST -> {
@@ -637,7 +668,7 @@ internal class SimpleMediaSessionCallback(
                         ),
                     )
                     mediaPlayerHandler.loadMediaItem(clicked, Config.PLAYLIST_CLICK, tracks.indexOf(clicked))
-                    defaultResult
+                    stagedQueue(mediaSession, defaultResult)
                 }
 
                 FAVORITE -> {
@@ -668,7 +699,7 @@ internal class SimpleMediaSessionCallback(
                             Config.PLAYLIST_CLICK,
                             index,
                         )
-                        defaultResult
+                        stagedQueue(mediaSession, defaultResult)
                     }
                 }
 
@@ -700,7 +731,7 @@ internal class SimpleMediaSessionCallback(
                             Config.PLAYLIST_CLICK,
                             index,
                         )
-                        defaultResult
+                        stagedQueue(mediaSession, defaultResult)
                     }
                 }
 
@@ -750,7 +781,7 @@ internal class SimpleMediaSessionCallback(
                             Config.PLAYLIST_CLICK,
                             index,
                         )
-                        defaultResult
+                        stagedQueue(mediaSession, defaultResult)
                     }
                 }
 
@@ -785,7 +816,7 @@ internal class SimpleMediaSessionCallback(
                                 Config.SONG_CLICK,
                                 0,
                             )
-                            defaultResult
+                            stagedQueue(mediaSession, defaultResult)
                         }
                     } else if (type == PLAYLIST) {
                         val songId = path.getOrNull(4) ?: return@future defaultResult
@@ -835,7 +866,7 @@ internal class SimpleMediaSessionCallback(
                                 Config.PLAYLIST_CLICK,
                                 index,
                             )
-                            defaultResult
+                            stagedQueue(mediaSession, defaultResult)
                         } else {
                             defaultResult
                         }
