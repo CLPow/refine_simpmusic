@@ -51,6 +51,7 @@ import com.maxrave.domain.utils.toTrack
 import com.maxrave.logger.Logger
 import com.maxrave.media3.R
 import com.maxrave.media3.extension.toMediaItem
+import com.maxrave.media3.service.CarConnectionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -61,8 +62,6 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "AndroidAuto"
 
-/** Temporary: per-artist artwork diagnosis. Remove once the missing images are understood. */
-private const val ARTWORK_DEBUG_TAG = "AAArtworkDebug"
 
 @UnstableApi
 internal class SimpleMediaSessionCallback(
@@ -97,6 +96,7 @@ internal class SimpleMediaSessionCallback(
         controller: MediaSession.ControllerInfo,
     ): MediaSession.ConnectionResult {
         Logger.w(TAG, "onConnect: ${controller.packageName}")
+        CarConnectionState.onControllerConnected(controller.packageName)
         val sessionCommands =
             MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                 .buildUpon()
@@ -117,6 +117,14 @@ internal class SimpleMediaSessionCallback(
                     .remove(COMMAND_GET_TIMELINE)
                     .build(),
             ).build()
+    }
+
+    override fun onDisconnected(
+        session: MediaSession,
+        controller: MediaSession.ControllerInfo,
+    ) {
+        CarConnectionState.onControllerDisconnected(controller.packageName)
+        super.onDisconnected(session, controller)
     }
 
     override fun onPlayerCommandRequest(
@@ -512,13 +520,6 @@ internal class SimpleMediaSessionCallback(
                             .first()
                             .map { artist ->
                                 val uri = artist.thumbnails?.asSquareArtwork()?.toUri()
-                                // Temporary diagnostic: the phone's database cannot be read from
-                                // outside the app, so this is the only way to see what is actually
-                                // handed to the head unit per artist.
-                                Logger.w(
-                                    ARTWORK_DEBUG_TAG,
-                                    "artist='${artist.name}' stored=${artist.thumbnails ?: "NULL"} sent=${uri ?: "NULL"}",
-                                )
                                 browsableMediaItem(
                                     id = "$ARTIST/${artist.channelId}",
                                     title = artist.name,
@@ -576,25 +577,55 @@ internal class SimpleMediaSessionCallback(
                                         }
                                     homeItem
                                         ?.contents
-                                        ?.filter { it?.playlistId != null || it?.videoId != null }
-                                        ?.mapNotNull {
-                                            if (it?.playlistId != null) {
+                                        // Emptiness matters, not just nullity. The home parser
+                                        // gives an album `playlistId = null` and `videoId = ""` —
+                                        // an empty string, which is not null, so an album used to
+                                        // pass this filter and then fall into the song branch
+                                        // below. Every album in a shelf came out with the media id
+                                        // "home/<shelf>/song/", identical for all of them, and the
+                                        // head unit keys its browse items by id: ten albums
+                                        // collapsed onto one entry and every tile drew the same
+                                        // cover while the titles, read from elsewhere, still
+                                        // differed. Albums are routed by their own browseId now.
+                                        ?.filter {
+                                            !it?.playlistId.isNullOrEmpty() ||
+                                                !it?.videoId.isNullOrEmpty() ||
+                                                !it?.browseId.isNullOrEmpty()
+                                        }?.mapNotNull {
+                                            if (!it?.playlistId.isNullOrEmpty()) {
+                                                val art =
+                                                    it.thumbnails
+                                                        .lastOrNull()
+                                                        ?.url
+                                                        ?.asSquareArtwork()
                                                 browsableMediaItem(
                                                     id = "$HOME/${homeItem.title}/$PLAYLIST/${it.playlistId}",
                                                     title = it.title,
                                                     subtitle = it.description,
-                                                    iconUri =
-                                                        it.thumbnails
-                                                            .lastOrNull()
-                                                            ?.url
-                                                            ?.toUri(),
+                                                    iconUri = art?.toUri(),
                                                     mediaType = MediaMetadata.MEDIA_TYPE_PLAYLIST,
                                                 )
-                                            } else if (it?.videoId != null) {
+                                            } else if (!it?.videoId.isNullOrEmpty()) {
                                                 it
                                                     .toTrack()
                                                     .toSongEntity()
-                                                    .toMediaItem("$HOME/${homeItem.title}/$SONG")
+                                                    .toMediaItem("$HOME/${homeItem.title}/$SONG", asTile = true)
+                                            } else if (!it?.browseId.isNullOrEmpty()) {
+                                                // An album: browsable, and keyed by its own
+                                                // browseId so each tile is a distinct item.
+                                                browsableMediaItem(
+                                                    id = "$HOME/${homeItem.title}/$PLAYLIST/${it?.browseId}",
+                                                    title = it?.title.orEmpty(),
+                                                    subtitle = it?.album?.name,
+                                                    iconUri =
+                                                        it
+                                                            ?.thumbnails
+                                                            ?.lastOrNull()
+                                                            ?.url
+                                                            ?.asSquareArtwork()
+                                                            ?.toUri(),
+                                                    mediaType = MediaMetadata.MEDIA_TYPE_ALBUM,
+                                                )
                                             } else {
                                                 null
                                             }
@@ -939,7 +970,10 @@ internal class SimpleMediaSessionCallback(
                     if (type == SONG) {
                         val songId = path.getOrNull(3) ?: return@future defaultResult
                         val songs =
-                            content?.filter { it?.videoId != null }?.mapNotNull {
+                            // isNullOrEmpty, not != null: the home parser gives albums and
+                            // artists videoId = "", which is non-null and would otherwise be
+                            // treated as a playable track here.
+                            content?.filter { !it?.videoId.isNullOrEmpty() }?.mapNotNull {
                                 it?.toTrack()
                             }
                         if (songs.isNullOrEmpty()) {
@@ -1086,7 +1120,7 @@ internal class SimpleMediaSessionCallback(
                 .setTitle(this.title)
                 .setSubtitle(this.artistName?.joinToString(", "))
                 .setArtist(this.artistName?.joinToString(" "))
-                .setArtworkUri(this.thumbnails?.toUri())
+                .setArtworkUri(this.thumbnails?.asSquareArtwork()?.toUri())
                 .setIsPlayable(true)
                 .setIsBrowsable(false)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
@@ -1146,6 +1180,7 @@ internal class SimpleMediaSessionCallback(
                         this.thumbnails
                             ?.lastOrNull()
                             ?.url
+                            ?.asSquareArtwork()
                             ?.toUri(),
                     ).setIsPlayable(true)
                     .setIsBrowsable(false)

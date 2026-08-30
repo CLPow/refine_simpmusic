@@ -10,6 +10,7 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import com.maxrave.common.MERGING_DATA_TYPE
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.logger.Logger
+import com.maxrave.media3.service.CarConnectionState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -35,7 +36,11 @@ internal class MergingMediaSourceFactory(
         Logger.w("Merging Media Source", mediaItem.mediaMetadata.description.toString())
         val getVideo = runBlocking(Dispatchers.IO) { dataStoreManager.watchVideoInsteadOfPlayingAudio.first() } == DataStoreManager.Values.TRUE
         Logger.w("Merging Media Source", getVideo.toString())
-        if (mediaItem.mediaMetadata.description == MERGING_DATA_TYPE.VIDEO && getVideo) {
+        // Never pull the video stream while a car is attached. Android Auto denies video focus
+        // in motion, so the merged source buys nothing and the user is left looking at a black
+        // "Video focus is off" panel instead of the player.
+        val allowVideo = getVideo && !CarConnectionState.isCarConnected
+        if (mediaItem.mediaMetadata.description == MERGING_DATA_TYPE.VIDEO && allowVideo) {
             val videoItem =
                 mediaItem
                     .buildUpon()
