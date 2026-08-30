@@ -1,10 +1,12 @@
 package com.maxrave.simpmusic
 
+import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +37,7 @@ import com.maxrave.domain.mediaservice.handler.ToastType
 import com.maxrave.simpmusic.di.viewModelModule
 import com.maxrave.simpmusic.extension.DesktopWindowChrome
 import com.maxrave.simpmusic.ui.component.CustomTitleBar
+import com.maxrave.simpmusic.ui.component.simpMusicScrollbarStyle
 import com.maxrave.simpmusic.ui.component.applyWorkAreaMaximizedBounds
 import com.maxrave.simpmusic.ui.mini_player.MiniPlayerManager
 import com.maxrave.simpmusic.ui.mini_player.MiniPlayerWindow
@@ -463,7 +466,11 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         ).crossfade(true)
                         .build()
                 }
-                App()
+                // One scrollbar appearance for every scrollbar in the app, rather than each
+                // site restyling Compose's light-surface default on its own.
+                CompositionLocalProvider(LocalScrollbarStyle provides simpMusicScrollbarStyle) {
+                    App()
+                }
                 ToastHost()
             }
         }
