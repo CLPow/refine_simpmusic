@@ -271,6 +271,9 @@
     <string name="third_party_libraries">Third party libraries</string>
     <string name="description_and_licenses">Description and licenses</string>
     <string name="author">Author</string>
+    <string name="fork_maintainer">Fork maintained by</string>
+    <string name="fork_maintainer_name">CLPow</string>
+    <string name="fork_notice">Refine SimpMusic — a modified build of SimpMusic</string>
     <string name="other_app">Other app</string>
     <string name="database">App database</string>
     <string name="free_space">Free space</string>

@@ -133,6 +133,16 @@ class MpvPlayerAdapter(
     private var internalPlayWhenReady = true
 
     @Volatile
+    /**
+     * A seek requested while no handle existed yet, tagged with the track it was meant for.
+     *
+     * [seekTo] used to drop such a request on the floor — `currentPlayer?.let { }` with a null
+     * player is a no-op — while still having moved [cachedPosition] to the target. The bar showed
+     * the middle of the track and playback began at zero. The tag means a request cannot leak onto
+     * whatever track happens to load next.
+     */
+    private var pendingSeek: Pair<Int, Long>? = null
+
     private var internalVolume = 1.0f
 
     /** Sleep-timer fade gain, kept apart from [internalVolume] so the user's level survives it. */
@@ -396,12 +406,21 @@ class MpvPlayerAdapter(
                 Logger.d(TAG, "seekTo: committing incoming (A+1) before seeking")
                 commitIncomingAsCurrent()
             }
-            currentPlayer?.let { player ->
+            val player = currentPlayer
+            if (player == null) {
+                // Mid-load: the handle is released and rebuilt, so there is nothing to seek yet.
+                // Hand the position to the load instead of losing it.
+                pendingSeek = localCurrentMediaItemIndex to positionMs
+                Logger.d(TAG, "Seek deferred to load: $positionMs")
+            } else {
                 try {
                     player.seekTo(positionMs)
                     Logger.d(TAG, "Seeked to position: $positionMs")
                 } catch (e: Exception) {
-                    Logger.e(TAG, "Seek exception: ${e.message}", e)
+                    // Same reasoning as the null case: the bar has already moved, so the position
+                    // has to be applied somewhere or the two stay disagreeing.
+                    pendingSeek = localCurrentMediaItemIndex to positionMs
+                    Logger.e(TAG, "Seek exception, deferred to load: ${e.message}", e)
                 }
             }
         }
@@ -1288,10 +1307,16 @@ class MpvPlayerAdapter(
                         }
                     }
 
-                    if (startPositionMs > 0) {
+                    // A seek the user asked for while this track was still loading wins over the
+                    // position the load was started with — it is the newer intent. Read and cleared
+                    // unconditionally so a request for a track that never loads cannot linger.
+                    val deferred = pendingSeek?.takeIf { it.first == index }?.second
+                    pendingSeek = null
+                    val resumeAt = deferred ?: startPositionMs
+                    if (resumeAt > 0) {
                         delay(100)
-                        player.seekTo(startPositionMs)
-                        cachedPosition = startPositionMs
+                        player.seekTo(resumeAt)
+                        cachedPosition = resumeAt
                     }
 
                     // Always transition to READY first so UI receives

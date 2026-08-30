@@ -11,6 +11,7 @@ import com.maxrave.common.SELECTED_LANGUAGE
 import com.maxrave.common.SUPPORTED_LANGUAGE
 import com.maxrave.common.SponsorBlockType
 import com.maxrave.domain.data.model.network.ProxyConfiguration
+import com.maxrave.data.security.SecretCodec
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.manager.DataStoreManager.Values.AI_PROVIDER_GEMINI
 import com.maxrave.domain.manager.DataStoreManager.Values.FALSE
@@ -180,9 +181,12 @@ internal class DataStoreManagerImpl(
             preferences[LOGGED_IN] ?: FALSE
         }
 
+    // Protected at rest where the platform needs it — see SecretCodec. decode() passes plain text
+    // through unchanged, so an install that predates this keeps its session and is re-protected on
+    // the next write.
     override val cookie: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            preferences[COOKIE] ?: ""
+            SecretCodec.decode(preferences[COOKIE] ?: "")
         }
 
     override val pageId: Flow<String> =
@@ -196,7 +200,7 @@ internal class DataStoreManagerImpl(
     ) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[COOKIE] = cookie
+                settings[COOKIE] = SecretCodec.encode(cookie)
                 settings[PAGE_ID] = pageId ?: ""
             }
         }

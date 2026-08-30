@@ -318,6 +318,8 @@ import simpmusic.composeapp.generated.resources.lyrics_style_apple_music
 import simpmusic.composeapp.generated.resources.lyrics_style_classic
 import simpmusic.composeapp.generated.resources.main_lyrics_provider
 import simpmusic.composeapp.generated.resources.manage_your_youtube_accounts
+import simpmusic.composeapp.generated.resources.fork_maintainer
+import simpmusic.composeapp.generated.resources.fork_maintainer_name
 import simpmusic.composeapp.generated.resources.maxrave_dev
 import simpmusic.composeapp.generated.resources.monthly
 import simpmusic.composeapp.generated.resources.never
@@ -2632,6 +2634,16 @@ fun SettingScreen(
                     subtitle = checkForUpdateSubtitle,
                     onClick = {
                         sharedViewModel.checkForUpdate()
+                    },
+                )
+                // GPL-3.0 requires a modified version to say so and to keep the original
+                // author's notice, so the fork is credited alongside upstream rather than in
+                // place of it — the overwhelming majority of this code is still theirs.
+                SettingItem(
+                    title = stringResource(Res.string.fork_maintainer),
+                    subtitle = stringResource(Res.string.fork_maintainer_name),
+                    onClick = {
+                        uriHandler.openUri("https://github.com/CLPow/refine_simpmusic")
                     },
                 )
                 SettingItem(
