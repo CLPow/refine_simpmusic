@@ -63,6 +63,9 @@ class HomeViewModel(
     val newRelease: StateFlow<List<HomeItem>> = _newRelease
     var regionCodeChart: MutableStateFlow<String?> = MutableStateFlow(null)
 
+    /** Ceiling on a home refresh before the spinner is released regardless of the sources. */
+    private val HOME_LOAD_TIMEOUT_MS = 30_000L
+
     val loading = MutableStateFlow<Boolean>(true)
     val loadingChart = MutableStateFlow<Boolean>(true)
     private var regionCode: String = ""
@@ -191,6 +194,21 @@ class HomeViewModel(
         homeJob?.cancel()
         homeJob =
             viewModelScope.launch {
+                // combine() emits only once every source has emitted at least once, and
+                // loading is cleared inside the collect below — so a single flow that never
+                // emits (a request that hangs, or one that completes empty) pins loading = true
+                // for good. The pull-to-refresh spinner then spins for ever, and the stale home
+                // list stays on screen because collect never replaces it. On desktop that
+                // outlives "restarting" the app, since closing the window only hides it to the
+                // tray and the composition is never destroyed.
+                launch {
+                    delay(HOME_LOAD_TIMEOUT_MS)
+                    if (loading.value) {
+                        Logger.w("HomeViewModel", "Home load timed out after ${HOME_LOAD_TIMEOUT_MS}ms; clearing loading")
+                        loading.value = false
+                        _homeListState.value = ListState.IDLE
+                    }
+                }
                 combine(
                     homeRepository.getHomeData(
                         params,

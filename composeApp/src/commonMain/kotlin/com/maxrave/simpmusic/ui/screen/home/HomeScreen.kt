@@ -339,9 +339,14 @@ fun HomeScreen(
             }
         }
     }
-    LaunchedEffect(key1 = loading) {
+    // Keyed on both, not on `loading` alone. Keying on `loading` only re-runs when it *changes*,
+    // so a refresh whose load never flipped it left isRefreshing stuck true and the indicator
+    // pinned on screen — and the desktop window closes to the tray, so that survived reopening.
+    // getHomeItemList sets loading = true synchronously before returning, so there is no window
+    // where this clears a refresh that has not started yet.
+    LaunchedEffect(loading, isRefreshing) {
         if (!loading) {
-            isRefreshing = false
+            if (isRefreshing) isRefreshing = false
             sharedViewModel.reloadDestinationDone()
             coroutineScope.launch {
                 pullToRefreshState.animateToHidden()
