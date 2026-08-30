@@ -176,7 +176,7 @@ fun CreditScreen(
             // Issue tracker button
             TextButton(
                 onClick = {
-                    openUrl("https://github.com/CLPow/refine_simpmusic/issues")
+                    openUrl("https://github.com/maxrave-dev/SimpMusic/issues")
                 },
                 modifier =
                     Modifier

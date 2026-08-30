@@ -143,8 +143,8 @@ class JvmMediaPlayerHandlerImpl(
             Platform.MacOs
         } else {
             Platform.Linux(
-                "RefineMusic",
-                "com.clpow.refinemusic",
+                "SimpMusic",
+                "com.maxrave.simpmusic",
             )
         }
     }

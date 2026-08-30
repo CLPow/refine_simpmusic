@@ -397,6 +397,7 @@ import simpmusic.composeapp.generated.resources.translation_language
 import simpmusic.composeapp.generated.resources.translation_language_message
 import simpmusic.composeapp.generated.resources.translucent_bottom_navigation_bar
 import simpmusic.composeapp.generated.resources.unknown
+import simpmusic.composeapp.generated.resources.update_channel
 import simpmusic.composeapp.generated.resources.upload_your_listening_history_to_youtube_music_server_it_will_make_yt_music_recommendation_system_better_working_only_if_logged_in
 import simpmusic.composeapp.generated.resources.use_ai_translation
 import simpmusic.composeapp.generated.resources.use_ai_translation_description
@@ -544,6 +545,7 @@ fun SettingScreen(
     val autoBackupFrequency by viewModel.autoBackupFrequency.collectAsStateWithLifecycle()
     val autoBackupMaxFiles by viewModel.autoBackupMaxFiles.collectAsStateWithLifecycle()
     val autoBackupLastTime by viewModel.autoBackupLastTime.collectAsStateWithLifecycle()
+    val updateChannel by viewModel.updateChannel.collectAsStateWithLifecycle()
     val enableLiquidGlass by viewModel.enableLiquidGlass.collectAsStateWithLifecycle()
     val themeMode by sharedViewModel.getThemeMode().collectAsStateWithLifecycle(DataStoreManager.THEME_MODE_DARK)
     val themeColorSource by sharedViewModel.getThemeColorSource().collectAsStateWithLifecycle(DataStoreManager.THEME_COLOR_DEFAULT)
@@ -2582,6 +2584,49 @@ fun SettingScreen(
                     title = stringResource(Res.string.auto_check_for_update),
                     subtitle = stringResource(Res.string.auto_check_for_update_description),
                     switch = (autoCheckUpdate to { viewModel.setAutoCheckUpdate(it) }),
+                )
+                // F-Droid is an Android distribution channel and its listing is the official
+                // com.maxrave.simpmusic package, so on desktop it is both meaningless and a route
+                // back to upstream builds. Offer only the fork on desktop.
+                val updateChannelChoices =
+                    if (getPlatform() == Platform.Android) {
+                        listOf(
+                            (updateChannel == DataStoreManager.FDROID) to "F-Droid",
+                            (updateChannel == DataStoreManager.GITHUB) to "Refine SimpMusic Release",
+                        )
+                    } else {
+                        listOf((updateChannel == DataStoreManager.GITHUB) to "Refine SimpMusic Release")
+                    }
+                SettingItem(
+                    title = stringResource(Res.string.update_channel),
+                    subtitle =
+                        if (updateChannel == DataStoreManager.FDROID && getPlatform() == Platform.Android) {
+                            "F-Droid"
+                        } else {
+                            "Refine SimpMusic Release"
+                        },
+                    onClick = {
+                        viewModel.setAlertData(
+                            SettingAlertState(
+                                title = runBlocking { getString(Res.string.update_channel) },
+                                selectOne =
+                                    SettingAlertState.SelectData(
+                                        listSelect = updateChannelChoices,
+                                    ),
+                                confirm =
+                                    runBlocking { getString(Res.string.change) } to { state ->
+                                        viewModel.setUpdateChannel(
+                                            when (state.selectOne?.getSelected()) {
+                                                "F-Droid" -> DataStoreManager.FDROID
+                                                "Refine SimpMusic Release" -> DataStoreManager.GITHUB
+                                                else -> DataStoreManager.GITHUB
+                                            },
+                                        )
+                                    },
+                                dismiss = runBlocking { getString(Res.string.cancel) },
+                            ),
+                        )
+                    },
                 )
                 SettingItem(
                     title = stringResource(Res.string.check_for_update),

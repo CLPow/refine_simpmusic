@@ -43,28 +43,6 @@ not been submitted upstream. If you are looking for SimpMusic itself, go to
   local follows *to* YouTube; nothing read them back
 - Updates are checked against this repository, not upstream — an official release carries none of
   the above and would replace this build rather than update it
-- The F-Droid update channel is gone. That listing is upstream's `com.maxrave.simpmusic` package,
-  so the only thing it could ever offer was a build that replaces this one
-
-## Identity
-
-The fork ships as **Refine Music**, under its own name, icon and application id
-(`com.clpow.refinemusic`), so it installs and updates as its own app rather than shadowing
-upstream's.
-
-Because the application id changed, Android treats this as a different app: it installs alongside
-any earlier build rather than upgrading it, and Android's per-app sandbox means the old app's
-library, downloads and sign-in **cannot** be carried across. Uninstall the earlier build and sign
-in again.
-
-Desktop data does carry over. It lives under `~/.refinemusic`, and the first thing to ask for a
-path renames a leftover `~/.simpmusic` into place — see `core/common/.../io/AppDataDir.kt`. If that
-rename fails, the old directory keeps being used rather than the app starting empty.
-
-Links out of the app point here, except two deliberate exceptions: the credits still link
-upstream's repository, which is the attribution GPL-3.0 asks for, and the playlist import strings
-still point at `simpmusic.org/tools`, because that converter produces the import format this app
-reads and there is no replacement for it.
 
 ## Building
 

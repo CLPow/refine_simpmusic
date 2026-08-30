@@ -40,7 +40,7 @@
         </intent>
     </queries>
     <queries>
-        <package android:name="com.clpow.refinemusic" />
+        <package android:name="com.maxrave.simpmusic" />
     </queries>
     <queries>
         <intent>
