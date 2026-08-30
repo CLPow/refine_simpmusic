@@ -390,28 +390,54 @@ internal class SimpleMediaSessionCallback(
                         // Two locally-sourced shelves lead, because they are what the driver
                         // reaches for most: what they were just listening to, and the artists they
                         // follow. Everything after is YouTube's own home feed.
+                        // Each shelf borrows the artwork of its first entry, the way a folder
+                        // shows what is inside it. Without an image these render as broken tiles.
+                        val recentArtwork =
+                            songRepository
+                                .getRecentSong(1, 0)
+                                .firstOrNull()
+                                ?.thumbnails
+                                ?.toUri()
+                        val artistArtwork =
+                            artistRepository
+                                .getFollowedArtists()
+                                .first()
+                                .firstOrNull()
+                                ?.thumbnails
+                                ?.toUri()
                         listOf(
                             browsableMediaItem(
                                 "$HOME/$RECENT",
                                 context.getString(R.string.recently_played),
                                 null,
-                                null,
+                                recentArtwork,
                                 MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
                             ),
                             browsableMediaItem(
                                 "$HOME/$ARTIST",
                                 context.getString(R.string.your_artists),
                                 null,
-                                null,
+                                artistArtwork,
                                 MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS,
                             ),
                         ) +
-                            listHomeItem.map {
+                            listHomeItem.map { shelf ->
                                 browsableMediaItem(
-                                    "$HOME/${it.title}",
-                                    it.title,
-                                    it.subtitle,
-                                    null,
+                                    "$HOME/${shelf.title}",
+                                    shelf.title,
+                                    shelf.subtitle,
+                                    // contents are already parsed here, so the shelf can show
+                                    // what is in it rather than a blank tile.
+                                    shelf.thumbnail
+                                        ?.lastOrNull()
+                                        ?.url
+                                        ?.toUri()
+                                        ?: shelf.contents
+                                            .firstOrNull { c -> !c?.thumbnails.isNullOrEmpty() }
+                                            ?.thumbnails
+                                            ?.lastOrNull()
+                                            ?.url
+                                            ?.toUri(),
                                     MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
                                 )
                             }
@@ -920,8 +946,14 @@ internal class SimpleMediaSessionCallback(
                 .setIsPlayable(false)
                 .setIsBrowsable(true)
                 .setMediaType(mediaType)
-                .setExtras(contentStyle(browsable = CONTENT_STYLE_GRID_ITEM))
-                .build(),
+                // A tile is a picture with a caption; asking for one without artwork gets a
+                // broken-image placeholder, which is worse than the row it replaced. Nodes that
+                // have no icon stay rows.
+                .setExtras(
+                    contentStyle(
+                        browsable = if (iconUri != null) CONTENT_STYLE_GRID_ITEM else CONTENT_STYLE_LIST_ITEM,
+                    ),
+                ).build(),
         ).build()
 
     /**
