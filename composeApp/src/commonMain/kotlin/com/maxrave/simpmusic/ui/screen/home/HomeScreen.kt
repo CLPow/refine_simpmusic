@@ -19,6 +19,7 @@ import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -1022,6 +1023,13 @@ fun QuickPicks(
                     .fillMaxWidth()
                     .padding(vertical = 5.dp),
         )
+        // BoxWithConstraints, not the Column's onGloballyPositioned width: that measured the
+        // container rather than the space the grid actually gets, so the computed column width was
+        // slightly too large. Five columns then overflowed by a sliver — the last one clipped at
+        // the edge, while the overflow was too small for the grid to offer any meaningful scroll
+        // range, leaving a scrollbar whose thumb filled the track and moved nowhere.
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val shelfColumnWidth = maxWidth.asShelfColumnWidth()
         LazyHorizontalGrid(
             rows = GridCells.Fixed(4),
             modifier = Modifier.height(256.dp),
@@ -1053,10 +1061,11 @@ fun QuickPicks(
                             bottomSheetShow = true
                         },
                         data = it,
-                        widthDp = widthDp.asShelfColumnWidth(),
+                        widthDp = shelfColumnWidth,
                     )
                 }
             }
+        }
         }
         HorizontalLazyGridScrollbar(
             state = lazyListState,
