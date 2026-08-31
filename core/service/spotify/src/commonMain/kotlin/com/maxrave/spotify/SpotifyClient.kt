@@ -274,6 +274,34 @@ class SpotifyClient {
             header(HttpHeaders.AcceptLanguage, "en")
         }
 
+    /**
+     * A persisted-query call against the endpoint Spotify's own web player uses.
+     *
+     * The public Web API refuses this app's token outright, but this host accepts it — it is the
+     * same host, token and header set as the track search that has always worked here. Queries are
+     * addressed by operation name plus a SHA-256 hash of the query text rather than sent as text,
+     * so [sha256Hash] is pinned to a web-player release and has to be refreshed when Spotify ships
+     * a new one.
+     */
+    suspend fun pathfinderQuery(
+        operationName: String,
+        sha256Hash: String,
+        variables: String,
+        authToken: String,
+        clientToken: String,
+    ) = spotifyClient.get("https://api-partner.spotify.com/pathfinder/v1/query") {
+        userAgent(USER_AGENT)
+        contentType(ContentType.Application.Json)
+        header(HttpHeaders.Authorization, "Bearer $authToken")
+        header("Client-Token", clientToken)
+        header("App-platform", "WebPlayer")
+        header(HttpHeaders.Accept, "application/json")
+        header(HttpHeaders.AcceptEncoding, "gzip, deflate, br")
+        parameter("operationName", operationName)
+        parameter("variables", variables)
+        parameter("extensions", """{"persistedQuery":{"version":1,"sha256Hash":"$sha256Hash"}}""")
+    }
+
     fun getRandomUserAgent(): String {
         val macOSVersion = "${Random.nextInt(11, 15)}_${Random.nextInt(4, 9)}"
         val webKitVersion = "${Random.nextInt(530, 537)}.${Random.nextInt(30, 37)}"

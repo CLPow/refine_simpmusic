@@ -3,6 +3,7 @@ package com.maxrave.data.repository
 import com.maxrave.data.db.datasource.LocalDataSource
 import com.maxrave.domain.data.entities.LocalPlaylistEntity
 import com.maxrave.domain.data.entities.SongEntity
+import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.repository.SpotifyImportProgress
 import com.maxrave.domain.repository.SpotifyImportRepository
 import com.maxrave.domain.repository.SpotifyImportResult
@@ -11,15 +12,19 @@ import com.maxrave.kotlinytmusicscraper.YouTube
 import com.maxrave.kotlinytmusicscraper.models.SongItem
 import com.maxrave.logger.Logger
 import com.maxrave.spotify.Spotify
-import com.maxrave.spotify.model.response.spotify.SpotifyEmbedResponse
+import com.maxrave.spotify.model.response.spotify.SpotifyPlaylistSlice
+import com.maxrave.spotify.model.response.spotify.SpotifyTrackInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlin.math.abs
 import kotlin.random.Random
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 private const val TAG = "SpotifyImport"
 
@@ -46,6 +51,12 @@ private const val SONG_BATCH_SIZE = 500
  */
 private const val EMBED_TRACK_CAP = 100
 
+/** Page size for the internal API, matching what the web player asks for. */
+private const val PATHFINDER_PAGE = 100
+
+/** A courtesy gap between pages; a burst is the shape that earns a 429. */
+private const val PATHFINDER_PAGE_INTERVAL_MS = 200L
+
 /**
  * Consecutive failed YouTube searches before the import gives up.
  *
@@ -66,6 +77,7 @@ private val PLAYLIST_LINK =
 
 internal class SpotifyImportRepositoryImpl(
     private val localDataSource: LocalDataSource,
+    private val dataStoreManager: DataStoreManager,
     private val spotify: Spotify,
     private val youTube: YouTube,
 ) : SpotifyImportRepository {
@@ -83,19 +95,20 @@ internal class SpotifyImportRepositoryImpl(
                     return@flow
                 }
 
-            val entity =
-                spotify
-                    .getPlaylistFromEmbed(playlistId)
+            // Signed into Spotify: read through the endpoint the web player itself uses. It pages,
+            // and it can see playlists the user has not made public, so neither of the embed
+            // limits applies. Signed out: fall back to the public embed, which still handles any
+            // shared link and asks nothing of the user.
+            val slice =
+                runCatching { readPlaylist(playlistId) }
                     .getOrElse { throwable ->
-                        Logger.e(TAG, "embed read failed: ${throwable.message}")
+                        Logger.e(TAG, "playlist read failed: ${throwable.message}")
                         emit(SpotifyImportProgress.Error(throwable.message ?: "Couldn't read that playlist"))
                         return@flow
                     }
 
-            val name = entity.name ?: entity.title ?: "Spotify playlist"
-            // A track with no title is nothing to search for; a podcast episode in a mixed playlist
-            // is the usual source of one.
-            val tracks = entity.trackList.filter { !it.title.isNullOrBlank() }
+            val name = slice.name ?: "Spotify playlist"
+            val tracks = slice.tracks
             if (tracks.isEmpty()) {
                 emit(SpotifyImportProgress.Error("That playlist has no tracks to import."))
                 return@flow
@@ -189,7 +202,7 @@ internal class SpotifyImportRepositoryImpl(
                 localPlaylist =
                     LocalPlaylistEntity(
                         title = uniqueTitle(name),
-                        thumbnail = entity.coverArt?.sources?.lastOrNull()?.url,
+                        thumbnail = slice.coverArt,
                         tracks = videoIds,
                     ),
                 videoIds = videoIds,
@@ -201,11 +214,92 @@ internal class SpotifyImportRepositoryImpl(
                         playlistName = name,
                         tracksMatched = matched,
                         unmatched = unmatched,
-                        possiblyTruncated = entity.trackList.size >= EMBED_TRACK_CAP,
+                        // Only the embed path can truncate. It states no total, so a
+                        // full page is indistinguishable from a longer playlist.
+                        possiblyTruncated = slice.total == null && tracks.size >= EMBED_TRACK_CAP,
                     ),
                 ),
             )
         }.flowOn(Dispatchers.IO)
+
+    /**
+     * Reads the whole playlist, preferring the route that can see all of it.
+     *
+     * Paging stops on a short page as well as on the stated total, rather than trusting either
+     * alone: a short page is the only reliable end marker, and the total is not always present.
+     */
+    private suspend fun readPlaylist(playlistId: String): SpotifyPlaylistSlice {
+        val tokens = spotifyTokens() ?: return spotify.getPlaylistFromEmbed(playlistId).getOrThrow()
+
+        val uri = "spotify:playlist:" + playlistId
+        val collected = mutableListOf<SpotifyTrackInfo>()
+        var name: String? = null
+        var total: Int? = null
+        var offset = 0
+        while (true) {
+            val page =
+                spotify
+                    .getPlaylistTracksViaPathfinder(uri, offset, PATHFINDER_PAGE, tokens.first, tokens.second)
+                    .getOrElse { throwable ->
+                        // These query hashes are pinned to a web-player release and will eventually
+                        // stop matching. Falling back beats failing outright; the cost is the embed
+                        // page limits, and only for a playlist that has a public link.
+                        Logger.w(TAG, "pathfinder read failed, falling back: " + throwable.message)
+                        if (collected.isEmpty()) return spotify.getPlaylistFromEmbed(playlistId).getOrThrow()
+                        return SpotifyPlaylistSlice(name, null, total, collected)
+                    }
+            if (name == null) name = page.name
+            if (total == null) total = page.total
+            collected += page.tracks
+            offset += PATHFINDER_PAGE
+            if (page.tracks.size < PATHFINDER_PAGE) break
+            val known = total
+            if (known != null && collected.size >= known) break
+            delay(PATHFINDER_PAGE_INTERVAL_MS)
+        }
+        return SpotifyPlaylistSlice(name, null, total ?: collected.size, collected)
+    }
+
+    /** Access and client token pair for the internal Spotify API, or null when signed out. */
+    @OptIn(ExperimentalTime::class)
+    private suspend fun spotifyTokens(): Pair<String, String>? {
+        val spDc = dataStoreManager.spdc.first()
+        if (spDc.isEmpty()) return null
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        val storedAccess = dataStoreManager.spotifyPersonalToken.first()
+        val access =
+            if (storedAccess.isNotEmpty() && dataStoreManager.spotifyPersonalTokenExpires.first() > now) {
+                storedAccess
+            } else {
+                spotify
+                    .getPersonalTokenWithTotp(spDc)
+                    .onSuccess {
+                        dataStoreManager.setSpotifyPersonalToken(it.accessToken)
+                        dataStoreManager.setSpotifyPersonalTokenExpires(it.accessTokenExpirationTimestampMs)
+                    }.getOrNull()
+                    ?.accessToken
+            } ?: return null
+
+        val storedClient = dataStoreManager.spotifyClientToken.first()
+        val client =
+            if (storedClient.isNotEmpty() && dataStoreManager.spotifyClientTokenExpires.first() > now) {
+                storedClient
+            } else {
+                spotify
+                    .getClientToken()
+                    .onSuccess {
+                        dataStoreManager.setSpotifyClientToken(it.grantedToken.token)
+                        dataStoreManager.setSpotifyClientTokenExpires(
+                            (it.grantedToken.expiresAfterSeconds * 1000L) + now,
+                        )
+                    }.getOrNull()
+                    ?.grantedToken
+                    ?.token
+            } ?: return null
+
+        return access to client
+    }
 
     /**
      * Appends a counter when the library already holds a playlist by this name.
@@ -227,8 +321,8 @@ internal class SpotifyImportRepositoryImpl(
 }
 
 /** `title artist` — the query a person would type, which is what YouTube Music ranks best against. */
-private fun SpotifyEmbedResponse.Track.searchKey(): String =
-    listOf(title.orEmpty(), subtitle.orEmpty())
+private fun SpotifyTrackInfo.searchKey(): String =
+    listOf(title, artist)
         .filter { it.isNotBlank() }
         .joinToString(" ")
         .trim()
@@ -240,12 +334,12 @@ private fun SpotifyEmbedResponse.Track.searchKey(): String =
  * result carrying extra words — "(Official Audio)", a remaster tag — is not punished for them,
  * while one missing half the actual title is.
  */
-private fun List<SongItem>.bestMatchFor(track: SpotifyEmbedResponse.Track): SongItem? {
+private fun List<SongItem>.bestMatchFor(track: SpotifyTrackInfo): SongItem? {
     if (isEmpty()) return null
-    val wantTitle = tokens(track.title.orEmpty())
+    val wantTitle = tokens(track.title)
     if (wantTitle.isEmpty()) return null
-    val wantArtists = tokens(track.subtitle.orEmpty())
-    val wantSeconds = track.duration?.let { (it / 1000).toInt() }
+    val wantArtists = tokens(track.artist)
+    val wantSeconds = track.durationMs?.let { (it / 1000).toInt() }
 
     return this
         .map { candidate ->
