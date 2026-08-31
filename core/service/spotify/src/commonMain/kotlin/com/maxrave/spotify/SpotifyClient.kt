@@ -18,6 +18,7 @@ import io.ktor.client.plugins.logging.DEFAULT
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.headers
@@ -260,18 +261,17 @@ class SpotifyClient {
     /**
      * The user's own playlists, newest first, 50 at a time.
      *
-     * This is the public Web API rather than the internal pathfinder endpoints the lyrics and
-     * canvas calls use, because a Bearer token minted for the web player already carries the scopes
-     * it wants — no separate client token is needed.
+     * Carries the same header set as the lyrics and canvas calls, `Client-Token` included. Spotify
+     * answers a Bearer token presented without one by rejecting the request as abusive — with 429
+     * rather than 401, which reads as a rate limit and is nothing of the sort.
      */
     suspend fun getCurrentUserPlaylists(
         authToken: String,
+        clientToken: String,
         offset: Int,
         limit: Int = 50,
     ) = spotifyClient.get("https://api.spotify.com/v1/me/playlists") {
-        userAgent(USER_AGENT)
-        header("Authorization", "Bearer $authToken")
-        header("Accept", "application/json")
+        spotifyWebApiHeaders(authToken, clientToken)
         parameter("limit", limit)
         parameter("offset", offset)
     }
@@ -279,13 +279,12 @@ class SpotifyClient {
     /** One page of a playlist's tracks. */
     suspend fun getPlaylistTracks(
         authToken: String,
+        clientToken: String,
         playlistId: String,
         offset: Int,
         limit: Int = 100,
     ) = spotifyClient.get("https://api.spotify.com/v1/playlists/$playlistId/tracks") {
-        userAgent(USER_AGENT)
-        header("Authorization", "Bearer $authToken")
-        header("Accept", "application/json")
+        spotifyWebApiHeaders(authToken, clientToken)
         parameter("limit", limit)
         parameter("offset", offset)
         // Trimming the response matters here: a playlist page carries the full album and artist
@@ -302,14 +301,27 @@ class SpotifyClient {
      */
     suspend fun getSavedTracks(
         authToken: String,
+        clientToken: String,
         offset: Int,
         limit: Int = 50,
     ) = spotifyClient.get("https://api.spotify.com/v1/me/tracks") {
-        userAgent(USER_AGENT)
-        header("Authorization", "Bearer $authToken")
-        header("Accept", "application/json")
+        spotifyWebApiHeaders(authToken, clientToken)
         parameter("limit", limit)
         parameter("offset", offset)
+    }
+
+    private fun HttpRequestBuilder.spotifyWebApiHeaders(
+        authToken: String,
+        clientToken: String,
+    ) {
+        userAgent(USER_AGENT)
+        header(HttpHeaders.Authorization, "Bearer $authToken")
+        header("Client-Token", clientToken)
+        header("App-platform", "WebPlayer")
+        header(HttpHeaders.Accept, "application/json")
+        header(HttpHeaders.AcceptEncoding, "gzip, deflate, br")
+        header(HttpHeaders.Origin, "https://open.spotify.com")
+        header("Referer", "https://open.spotify.com/")
     }
 
     fun getRandomUserAgent(): String {

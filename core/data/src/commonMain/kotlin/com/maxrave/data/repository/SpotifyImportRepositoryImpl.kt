@@ -14,6 +14,7 @@ import com.maxrave.logger.Logger
 import com.maxrave.spotify.Spotify
 import com.maxrave.spotify.model.response.spotify.SpotifyTrack
 import com.maxrave.spotify.model.response.spotify.SpotifyTrackEnvelope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.delay
@@ -58,6 +59,19 @@ private const val MATCH_THRESHOLD = 0.55
 /** Tracks written per transaction, mirroring the file importer's batching. */
 private const val SONG_BATCH_SIZE = 500
 
+/** Backoff between retries of a failed Spotify call, multiplied by the attempt number. */
+private const val RETRY_BACKOFF_MS = 2_000L
+private const val RETRY_ATTEMPTS = 3
+
+/**
+ * Consecutive failed YouTube searches before the import gives up.
+ *
+ * A failed search degrades to "unmatched", which is right for a track that genuinely is not there
+ * and badly wrong if the searches are being refused wholesale — that would quietly produce a
+ * library of empty playlists and call it a success.
+ */
+private const val SEARCH_FAILURE_LIMIT = 10
+
 internal class SpotifyImportRepositoryImpl(
     private val localDataSource: LocalDataSource,
     private val dataStoreManager: DataStoreManager,
@@ -69,7 +83,7 @@ internal class SpotifyImportRepositoryImpl(
             emit(SpotifyImportProgress.Preparing)
 
             val token =
-                accessToken() ?: run {
+                spotifyTokens() ?: run {
                     emit(SpotifyImportProgress.Error("Sign in to Spotify first"))
                     return@flow
                 }
@@ -111,8 +125,11 @@ internal class SpotifyImportRepositoryImpl(
             var unmatched = 0
             var created = 0
             var skipped = 0
+            var consecutiveSearchFailures = 0
+            var abortedMessage: String? = null
 
             sources.forEachIndexed { index, source ->
+                if (abortedMessage != null) return@forEachIndexed
                 if (source.name.trim().lowercase() in existingTitles) {
                     skipped++
                     processed += source.tracks.size
@@ -147,13 +164,26 @@ internal class SpotifyImportRepositoryImpl(
                     }
 
                     delay(SEARCH_INTERVAL_MS + Random.nextLong(SEARCH_JITTER_MS))
-                    val best =
-                        youTube
-                            .searchSongsSignedOut(key)
-                            .getOrElse { throwable ->
-                                Logger.w(TAG, "search failed for \"$key\": ${throwable.message}")
-                                emptyList()
-                            }.bestMatchFor(track)
+                    val results =
+                        youTube.searchSongsSignedOut(key).getOrElse { throwable ->
+                            Logger.w(TAG, "search failed for \"$key\": ${throwable.message}")
+                            null
+                        }
+                    if (results == null) {
+                        // A refused search is not the same as a track that is not there. Enough of
+                        // them in a row means YouTube is turning us away, and continuing would
+                        // write playlists that look imported and contain nothing.
+                        consecutiveSearchFailures++
+                        if (consecutiveSearchFailures >= SEARCH_FAILURE_LIMIT) {
+                            abortedMessage =
+                                "YouTube stopped answering searches. Whatever finished has been kept — try again later."
+                            return@forEachIndexed
+                        }
+                        unmatched++
+                        continue
+                    }
+                    consecutiveSearchFailures = 0
+                    val best = results.bestMatchFor(track)
 
                     resolved[key] = best?.id
                     if (best == null) {
@@ -184,6 +214,11 @@ internal class SpotifyImportRepositoryImpl(
                 if (id != -1L) created++
             }
 
+            abortedMessage?.let {
+                emit(SpotifyImportProgress.Error(it))
+                return@flow
+            }
+
             emit(
                 SpotifyImportProgress.Success(
                     SpotifyImportResult(
@@ -196,6 +231,28 @@ internal class SpotifyImportRepositoryImpl(
             )
         }.flowOn(Dispatchers.IO)
 
+    /**
+     * Retries a Spotify call through a transient failure.
+     *
+     * Enumerating a large account runs for minutes, and throwing all of it away over one blip is
+     * worse than waiting a moment. Cancellation is re-thrown untouched so Stop stays immediate.
+     */
+    private suspend fun <T> retrying(block: suspend () -> T): T {
+        var last: Throwable? = null
+        repeat(RETRY_ATTEMPTS) { attempt ->
+            try {
+                return block()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (throwable: Throwable) {
+                last = throwable
+                Logger.w(TAG, "Spotify call failed (${attempt + 1}/$RETRY_ATTEMPTS): ${throwable.message}")
+                delay(RETRY_BACKOFF_MS * (attempt + 1))
+            }
+        }
+        throw last ?: IllegalStateException("Spotify request failed")
+    }
+
     /** A playlist's worth of Spotify tracks, already paged out. */
     private data class Source(
         val name: String,
@@ -203,25 +260,58 @@ internal class SpotifyImportRepositoryImpl(
         val tracks: List<SpotifyTrack>,
     )
 
+    /** The pair every Spotify Web API call needs: the user's token and the app's client token. */
+    private data class Tokens(
+        val access: String,
+        val client: String,
+    )
+
     /**
-     * Reuses the stored web-player token while it is still valid and only mints a new one when it
-     * is not, matching how lyrics and canvas already treat it.
+     * Reuses both stored tokens while they are valid and only mints what has expired, matching how
+     * lyrics and canvas already treat them.
+     *
+     * The client token is not optional. Spotify rejects a Bearer token presented without one, and
+     * does it with a 429 that reads as a rate limit — which is exactly how this first shipped
+     * broken.
      */
     @OptIn(ExperimentalTime::class)
-    private suspend fun accessToken(): String? {
-        val stored = dataStoreManager.spotifyPersonalToken.first()
-        val expires = dataStoreManager.spotifyPersonalTokenExpires.first()
-        if (stored.isNotEmpty() && expires > Clock.System.now().toEpochMilliseconds()) return stored
-
+    private suspend fun spotifyTokens(): Tokens? {
         val spDc = dataStoreManager.spdc.first()
         if (spDc.isEmpty()) return null
-        return spotify
-            .getPersonalTokenWithTotp(spDc)
-            .onSuccess {
-                dataStoreManager.setSpotifyPersonalToken(it.accessToken)
-                dataStoreManager.setSpotifyPersonalTokenExpires(it.accessTokenExpirationTimestampMs)
-            }.getOrNull()
-            ?.accessToken
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        val storedAccess = dataStoreManager.spotifyPersonalToken.first()
+        val access =
+            if (storedAccess.isNotEmpty() && dataStoreManager.spotifyPersonalTokenExpires.first() > now) {
+                storedAccess
+            } else {
+                spotify
+                    .getPersonalTokenWithTotp(spDc)
+                    .onSuccess {
+                        dataStoreManager.setSpotifyPersonalToken(it.accessToken)
+                        dataStoreManager.setSpotifyPersonalTokenExpires(it.accessTokenExpirationTimestampMs)
+                    }.getOrNull()
+                    ?.accessToken
+            } ?: return null
+
+        val storedClient = dataStoreManager.spotifyClientToken.first()
+        val client =
+            if (storedClient.isNotEmpty() && dataStoreManager.spotifyClientTokenExpires.first() > now) {
+                storedClient
+            } else {
+                spotify
+                    .getClientToken()
+                    .onSuccess {
+                        dataStoreManager.setSpotifyClientToken(it.grantedToken.token)
+                        dataStoreManager.setSpotifyClientTokenExpires(
+                            (it.grantedToken.expiresAfterSeconds * 1000L) + now,
+                        )
+                    }.getOrNull()
+                    ?.grantedToken
+                    ?.token
+            } ?: return null
+
+        return Tokens(access, client)
     }
 
     /**
@@ -231,25 +321,25 @@ internal class SpotifyImportRepositoryImpl(
      * "everything" has to ask for it separately or silently miss the one list most people care
      * about most.
      */
-    private suspend fun enumerate(token: String): List<Source> {
+    private suspend fun enumerate(token: Tokens): List<Source> {
         val sources = mutableListOf<Source>()
 
         val liked =
             pageAll(SAVED_TRACK_PAGE) { offset ->
-                spotify.getSavedTracks(token, offset).getOrThrow().let { it.items to it.total }
+                retrying { spotify.getSavedTracks(token.access, token.client, offset).getOrThrow() }.let { it.items to it.total }
             }
         if (liked.isNotEmpty()) sources.add(Source("Liked Songs", null, liked))
 
         var offset = 0
         while (true) {
-            val page = spotify.getCurrentUserPlaylists(token, offset).getOrThrow()
+            val page = retrying { spotify.getCurrentUserPlaylists(token.access, token.client, offset).getOrThrow() }
             val items = page.items.filterNotNull()
             for (playlist in items) {
                 val id = playlist.id ?: continue
                 val name = playlist.name?.takeIf { it.isNotBlank() } ?: continue
                 val tracks =
                     pageAll(PLAYLIST_TRACK_PAGE) { o ->
-                        spotify.getPlaylistTracks(token, id, o).getOrThrow().let { it.items to it.total }
+                        retrying { spotify.getPlaylistTracks(token.access, token.client, id, o).getOrThrow() }.let { it.items to it.total }
                     }
                 if (tracks.isNotEmpty()) {
                     sources.add(Source(name, playlist.images?.firstOrNull()?.url, tracks))

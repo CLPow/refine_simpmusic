@@ -102,24 +102,36 @@ class Spotify {
 
     suspend fun getCurrentUserPlaylists(
         authToken: String,
+        clientToken: String,
         offset: Int,
     ) = runCatching {
-        spotifyClient.getCurrentUserPlaylists(authToken, offset).requireSuccess().body<SpotifyPlaylistPage>()
+        spotifyClient
+            .getCurrentUserPlaylists(authToken, clientToken, offset)
+            .requireSuccess()
+            .body<SpotifyPlaylistPage>()
     }
 
     suspend fun getPlaylistTracks(
         authToken: String,
+        clientToken: String,
         playlistId: String,
         offset: Int,
     ) = runCatching {
-        spotifyClient.getPlaylistTracks(authToken, playlistId, offset).requireSuccess().body<SpotifyTrackPage>()
+        spotifyClient
+            .getPlaylistTracks(authToken, clientToken, playlistId, offset)
+            .requireSuccess()
+            .body<SpotifyTrackPage>()
     }
 
     suspend fun getSavedTracks(
         authToken: String,
+        clientToken: String,
         offset: Int,
     ) = runCatching {
-        spotifyClient.getSavedTracks(authToken, offset).requireSuccess().body<SpotifyTrackPage>()
+        spotifyClient
+            .getSavedTracks(authToken, clientToken, offset)
+            .requireSuccess()
+            .body<SpotifyTrackPage>()
     }
 
     /**
@@ -135,7 +147,9 @@ class Spotify {
                 throw IllegalStateException(
                     when (status.value) {
                         401, 403 -> "Spotify rejected the session. Sign out of Spotify in Settings and sign in again."
-                        429 -> "Spotify is rate limiting this account. Try again in a few minutes."
+                        429 ->
+                            headers["Retry-After"]?.let { "Spotify is rate limiting this account. Try again in $it seconds." }
+                                ?: "Spotify is rate limiting this account. Try again in a few minutes."
                         else -> "Spotify returned ${status.value}"
                     },
                 )
