@@ -708,6 +708,7 @@
     <string name="spotify_import_slow_notice">Each track is looked up on YouTube Music one at a time, so this takes about a second per track. You can stop at any point.</string>
     <string name="spotify_import_result">Added %1$d tracks to \"%2$s\"</string>
     <string name="spotify_import_result_unmatched">%1$d tracks were not found on YouTube Music</string>
+    <string name="spotify_import_public_hint">The playlist has to be public or collaborative. Spotify does not share private playlists by link, and Liked Songs has no link at all.</string>
     <string name="spotify_import_truncated">Spotify only gives out the first 100 tracks of a playlist through a link, so a longer playlist will be short.</string>
     <string name="spotify_import_failed">Spotify import failed</string>
     <string name="stop">Stop</string>

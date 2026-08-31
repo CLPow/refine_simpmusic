@@ -261,6 +261,7 @@ import simpmusic.composeapp.generated.resources.spotify_import_matching_tracks
 import simpmusic.composeapp.generated.resources.spotify_import_reading_library
 import simpmusic.composeapp.generated.resources.import_from_spotify_description
 import simpmusic.composeapp.generated.resources.import_from_spotify
+import simpmusic.composeapp.generated.resources.spotify_import_public_hint
 import simpmusic.composeapp.generated.resources.spotify_import_truncated
 import simpmusic.composeapp.generated.resources.spotify_import_start
 import simpmusic.composeapp.generated.resources.spotify_import_link_hint
@@ -3378,6 +3379,10 @@ private fun SpotifyLinkDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
+                // Said before the attempt rather than after it fails: a private playlist is the
+                // single most likely reason a pasted link will not work.
+                Text(text = stringResource(Res.string.spotify_import_public_hint), style = typo().bodySmall)
+                Spacer(Modifier.height(4.dp))
                 Text(text = stringResource(Res.string.spotify_import_truncated), style = typo().bodySmall)
             }
         },

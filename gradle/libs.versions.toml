@@ -5,8 +5,8 @@
 # made here. Upstream 2.0.0 -> 2.0.1 for the first fork release, 2.0.2 for the next, and so on.
 # When upstream moves (say to 2.1.0) the count restarts against the new base: 2.1.1, 2.1.2, ...
 # version-code must also rise on every release or Android refuses the install as a downgrade.
-version-name = "2.0.26"
-version-code = "83"
+version-name = "2.0.27"
+version-code = "84"
 
 android = "9.2.1"
 kotlin = "2.4.10"

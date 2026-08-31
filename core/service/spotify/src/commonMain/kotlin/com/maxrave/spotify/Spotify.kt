@@ -124,14 +124,23 @@ class Spotify {
                     ?: throw IllegalStateException(
                         "Spotify's page format changed and the playlist could not be read.",
                     )
-            embedJson
-                .decodeFromString<SpotifyEmbedResponse>(json)
-                .props
-                ?.pageProps
-                ?.state
-                ?.data
-                ?.entity
-                ?: throw IllegalStateException("That link did not contain a playlist.")
+            val pageProps =
+                embedJson
+                    .decodeFromString<SpotifyEmbedResponse>(json)
+                    .props
+                    ?.pageProps
+            pageProps?.state?.data?.entity
+                ?: throw IllegalStateException(
+                    // Spotify serves a 200 carrying an inner 404 for anything it will not show,
+                    // which in practice is nearly always a private playlist. It gives the same
+                    // answer for one that does not exist, so the message has to cover both.
+                    if (pageProps?.status != null) {
+                        "Spotify will not share that playlist. If it is private, open it in Spotify, " +
+                            "tap the three dots and choose Make public, then paste the link again."
+                    } else {
+                        "That link did not contain a playlist."
+                    },
+                )
         }
 
     private companion object {

@@ -20,6 +20,14 @@ data class SpotifyEmbedResponse(
     @Serializable
     data class PageProps(
         val state: State? = null,
+        /**
+         * Present instead of [state] when Spotify will not serve the playlist.
+         *
+         * The HTTP response is still 200; the refusal is carried in here as 404. Spotify answers
+         * identically for a private playlist and one that does not exist, so as not to leak which
+         * ids are real — which means this cannot distinguish the two either.
+         */
+        val status: Int? = null,
     )
 
     @Serializable
