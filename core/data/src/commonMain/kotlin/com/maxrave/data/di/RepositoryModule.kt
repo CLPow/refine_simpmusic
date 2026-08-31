@@ -84,7 +84,7 @@ val repositoryModule =
         }
 
         single<SpotifyImportRepository>(createdAtStart = true) {
-            SpotifyImportRepositoryImpl(get(), get(), get(), get())
+            SpotifyImportRepositoryImpl(get(), get(), get())
         }
 
         single<LocalPlaylistRepository>(createdAtStart = true) {

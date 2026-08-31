@@ -5,12 +5,12 @@ import com.maxrave.spotify.model.response.spotify.CanvasResponse
 import com.maxrave.spotify.model.response.spotify.ClientTokenResponse
 import com.maxrave.spotify.model.response.spotify.PersonalTokenResponse
 import com.maxrave.spotify.model.response.spotify.SpotifyLyricsResponse
-import com.maxrave.spotify.model.response.spotify.SpotifyPlaylistPage
-import com.maxrave.spotify.model.response.spotify.SpotifyTrackPage
+import com.maxrave.spotify.model.response.spotify.SpotifyEmbedResponse
 import com.maxrave.spotify.model.response.spotify.search.SpotifySearchResponse
 import io.ktor.client.call.body
-import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
+import kotlinx.serialization.json.Json
 import io.ktor.client.engine.ProxyBuilder
 import io.ktor.client.engine.http
 
@@ -100,59 +100,48 @@ class Spotify {
         spotifyClient.getSpotifyCanvas(trackId, token, clientToken).body<CanvasResponse>()
     }
 
-    suspend fun getCurrentUserPlaylists(
-        authToken: String,
-        clientToken: String,
-        offset: Int,
-    ) = runCatching {
-        spotifyClient
-            .getCurrentUserPlaylists(authToken, clientToken, offset)
-            .requireSuccess()
-            .body<SpotifyPlaylistPage>()
-    }
-
-    suspend fun getPlaylistTracks(
-        authToken: String,
-        clientToken: String,
-        playlistId: String,
-        offset: Int,
-    ) = runCatching {
-        spotifyClient
-            .getPlaylistTracks(authToken, clientToken, playlistId, offset)
-            .requireSuccess()
-            .body<SpotifyTrackPage>()
-    }
-
-    suspend fun getSavedTracks(
-        authToken: String,
-        clientToken: String,
-        offset: Int,
-    ) = runCatching {
-        spotifyClient
-            .getSavedTracks(authToken, clientToken, offset)
-            .requireSuccess()
-            .body<SpotifyTrackPage>()
-    }
-
     /**
-     * Turns a rejected request into a sentence instead of letting it reach the JSON parser.
+     * Reads a playlist from its public embed page.
      *
-     * Spotify answers an expired or under-scoped token with a JSON error object, which decodes into
-     * the expected page type about as well as anything else does — the user would otherwise see a
-     * serialization message and no hint that they simply need to sign in again.
+     * The page ships its state as a `__NEXT_DATA__` script tag, so the JSON is cut out of the HTML
+     * rather than requested directly — there is no JSON endpoint for this that does not require a
+     * credential Spotify will not give us.
      */
-    private fun HttpResponse.requireSuccess(): HttpResponse =
-        also {
-            if (!status.isSuccess()) {
+    suspend fun getPlaylistFromEmbed(playlistId: String) =
+        runCatching {
+            val response = spotifyClient.getPlaylistEmbed(playlistId)
+            if (!response.status.isSuccess()) {
                 throw IllegalStateException(
-                    when (status.value) {
-                        401, 403 -> "Spotify rejected the session. Sign out of Spotify in Settings and sign in again."
-                        429 ->
-                            headers["Retry-After"]?.let { "Spotify is rate limiting this account. Try again in $it seconds." }
-                                ?: "Spotify is rate limiting this account. Try again in a few minutes."
-                        else -> "Spotify returned ${status.value}"
+                    when (response.status.value) {
+                        404 -> "That playlist could not be found. It may be private — only playlists with a shareable link can be imported."
+                        else -> "Spotify returned ${response.status.value}"
                     },
                 )
             }
+            val html = response.bodyAsText()
+            val json =
+                NEXT_DATA.find(html)?.groupValues?.get(1)
+                    ?: throw IllegalStateException(
+                        "Spotify's page format changed and the playlist could not be read.",
+                    )
+            embedJson
+                .decodeFromString<SpotifyEmbedResponse>(json)
+                .props
+                ?.pageProps
+                ?.state
+                ?.data
+                ?.entity
+                ?: throw IllegalStateException("That link did not contain a playlist.")
         }
+
+    private companion object {
+        /** The state blob Spotify's embed page carries; `.` must span lines, hence DOT_MATCHES_ALL. */
+        private val NEXT_DATA =
+            Regex(
+                """<script id="__NEXT_DATA__" type="application/json"[^>]*>(.*?)</script>""",
+                RegexOption.DOT_MATCHES_ALL,
+            )
+
+        private val embedJson = Json { ignoreUnknownKeys = true }
+    }
 }

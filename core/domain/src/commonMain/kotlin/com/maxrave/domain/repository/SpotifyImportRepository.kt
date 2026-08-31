@@ -3,35 +3,34 @@ package com.maxrave.domain.repository
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Pulls the signed-in Spotify account's library across to local playlists.
+ * Recreates a Spotify playlist locally from its shareable link.
  *
  * Spotify and YouTube share no track identifiers, so every track has to be found by searching
  * YouTube Music for its title and artist. That search is the slow, lossy part of the job, and the
  * reason this reports progress rather than simply returning a result.
+ *
+ * A link rather than the signed-in account, because Spotify refuses this app's web-player token on
+ * its public Web API. The embed page behind a share link needs no credential at all.
  */
 interface SpotifyImportRepository {
     /**
-     * Imports Liked Songs and every playlist on the account.
+     * @param link a Spotify playlist URL or URI, in any of the forms the apps hand out
      *
-     * Cancelling the collecting scope stops the import; playlists already written stay written.
+     * Cancelling the collecting scope stops the import before anything is written.
      */
-    fun importEverything(): Flow<SpotifyImportProgress>
+    fun importFromLink(link: String): Flow<SpotifyImportProgress>
 }
 
 sealed interface SpotifyImportProgress {
-    /** Signing in to Spotify and enumerating the library, before any track work starts. */
+    /** Reading the playlist, before any track work starts. */
     data object Preparing : SpotifyImportProgress
 
     /**
-     * @param playlistName the playlist currently being matched
-     * @param playlistIndex 1-based, for "playlist 3 of 12"
-     * @param processed tracks looked at so far across the whole import
-     * @param total tracks in the whole import, known once enumeration finishes
+     * @param processed tracks looked at so far
+     * @param matched tracks found on YouTube Music so far
      */
     data class Matching(
         val playlistName: String,
-        val playlistIndex: Int,
-        val playlistCount: Int,
         val processed: Int,
         val total: Int,
         val matched: Int,
@@ -47,12 +46,15 @@ sealed interface SpotifyImportProgress {
 }
 
 /**
- * @param unmatched tracks with no acceptable YouTube result. Expected to be non-zero on any real
- * library — regional gaps, local files and obscure releases simply are not all on YouTube.
+ * @param unmatched tracks with no acceptable YouTube result. Expected to be non-zero on a real
+ * playlist -- regional gaps, local files and obscure releases simply are not all on YouTube.
+ * @param possiblyTruncated the embed page returns at most 100 tracks and states no total, so a
+ * playlist that comes back with exactly 100 may well be longer. Reported so the count is never
+ * silently short.
  */
 data class SpotifyImportResult(
-    val playlistsCreated: Int,
-    val playlistsSkipped: Int,
+    val playlistName: String,
     val tracksMatched: Int,
     val unmatched: Int,
+    val possiblyTruncated: Boolean,
 )

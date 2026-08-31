@@ -11,12 +11,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
- * Drives the Spotify library import.
+ * Drives a Spotify playlist import from a shared link.
  *
- * Unlike the file importer, this one is safe to stop part-way: each playlist is committed on its
- * own once its tracks resolve, so cancelling loses only the playlist in flight. It has to be
- * stoppable, too — matching a large account takes long enough that being trapped in a modal until
- * it finishes would be its own bug.
+ * Safe to stop part-way: nothing is written until every track has been looked up, so cancelling
+ * simply abandons the work. It has to be stoppable — a hundred tracks is a couple of minutes, and
+ * being trapped in a modal until it finishes would be its own bug.
  */
 class SpotifyImportViewModel(
     private val spotifyImportRepository: SpotifyImportRepository,
@@ -28,18 +27,18 @@ class SpotifyImportViewModel(
 
     private var importJob: Job? = null
 
-    fun start() {
-        // Already running: a second tap should not launch a competing sweep against the same account.
+    fun start(link: String) {
+        // Already running: a second tap should not launch a competing import.
         if (importJob?.isActive == true) return
         importJob =
             viewModelScope.launch {
-                spotifyImportRepository.importEverything().collect { progress ->
+                spotifyImportRepository.importFromLink(link).collect { progress ->
                     _importState.value = progress
                 }
             }
     }
 
-    /** Stops an import in progress. Playlists already written stay written. */
+    /** Stops an import in progress. Nothing is written until it completes, so nothing is left behind. */
     fun cancel() {
         importJob?.cancel()
         importJob = null

@@ -48,6 +48,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
@@ -253,16 +254,16 @@ import simpmusic.composeapp.generated.resources.http
 import simpmusic.composeapp.generated.resources.import_data
 import simpmusic.composeapp.generated.resources.stop
 import simpmusic.composeapp.generated.resources.spotify_import_failed
-import simpmusic.composeapp.generated.resources.spotify_import_result_skipped
 import simpmusic.composeapp.generated.resources.spotify_import_result_unmatched
 import simpmusic.composeapp.generated.resources.spotify_import_result
 import simpmusic.composeapp.generated.resources.spotify_import_slow_notice
 import simpmusic.composeapp.generated.resources.spotify_import_matching_tracks
-import simpmusic.composeapp.generated.resources.spotify_import_matching
 import simpmusic.composeapp.generated.resources.spotify_import_reading_library
-import simpmusic.composeapp.generated.resources.import_from_spotify_sign_in_first
 import simpmusic.composeapp.generated.resources.import_from_spotify_description
 import simpmusic.composeapp.generated.resources.import_from_spotify
+import simpmusic.composeapp.generated.resources.spotify_import_truncated
+import simpmusic.composeapp.generated.resources.spotify_import_start
+import simpmusic.composeapp.generated.resources.spotify_import_link_hint
 import simpmusic.composeapp.generated.resources.import_data_intro
 import simpmusic.composeapp.generated.resources.import_failed
 import simpmusic.composeapp.generated.resources.import_playlists_from_other_apps
@@ -489,6 +490,7 @@ fun SettingScreen(
     val importViewModel: ImportViewModel = koinViewModel()
     val spotifyImportViewModel: SpotifyImportViewModel = koinViewModel()
     val spotifyImportState by spotifyImportViewModel.importState.collectAsStateWithLifecycle()
+    var showSpotifyLinkDialog by rememberSaveable { mutableStateOf(false) }
     val importState by importViewModel.importState.collectAsStateWithLifecycle()
     val importLauncher =
         rememberFilePickerLauncher(
@@ -2562,19 +2564,14 @@ fun SettingScreen(
                         }
                     },
                 )
-                // The direct path, for people who would otherwise have to run their library
-                // through the web converter first. Gated on the same Spotify session that already
-                // powers lyrics and canvas — there is nothing extra to sign in to.
+                // The direct path, for people who would otherwise have to run their playlist
+                // through the web converter first. Needs no Spotify account of its own: the embed
+                // page behind a share link is public, which is the whole reason this route works
+                // where the signed-in one does not.
                 SettingItem(
                     title = stringResource(Res.string.import_from_spotify),
-                    subtitle =
-                        if (spotifyLoggedIn) {
-                            stringResource(Res.string.import_from_spotify_description)
-                        } else {
-                            stringResource(Res.string.import_from_spotify_sign_in_first)
-                        },
-                    isEnable = spotifyLoggedIn,
-                    onClick = { spotifyImportViewModel.start() },
+                    subtitle = stringResource(Res.string.import_from_spotify_description),
+                    onClick = { showSpotifyLinkDialog = true },
                 )
                 val beforeUrl = stringResource(Res.string.import_data_intro).substringBefore("https://www.simpmusic.org/tools")
                 val afterUrl = stringResource(Res.string.import_data_intro).substringAfter("https://www.simpmusic.org/tools")
@@ -2696,6 +2693,16 @@ fun SettingScreen(
             EndOfPage()
         }
     }
+    if (showSpotifyLinkDialog) {
+        SpotifyLinkDialog(
+            onDismiss = { showSpotifyLinkDialog = false },
+            onImport = { link ->
+                showSpotifyLinkDialog = false
+                spotifyImportViewModel.start(link)
+            },
+        )
+    }
+
     spotifyImportState?.let { progress ->
         SpotifyImportProgressDialog(
             progress = progress,
@@ -3340,11 +3347,61 @@ fun SettingScreen(
  * half-populated with no way to tell the user which half.
  */
 /**
+ * Asks for the playlist link.
+ *
+ * A text field rather than a picker because the link comes from another app entirely — Spotify's
+ * Share menu puts it on the clipboard, and pasting it is the whole interaction.
+ */
+@Composable
+private fun SpotifyLinkDialog(
+    onDismiss: () -> Unit,
+    onImport: (String) -> Unit,
+) {
+    var link by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = stringResource(Res.string.import_from_spotify), style = typo().titleSmall)
+        },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(Res.string.import_from_spotify_description),
+                    style = typo().bodySmall,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = link,
+                    onValueChange = { link = it },
+                    singleLine = true,
+                    label = { Text(stringResource(Res.string.spotify_import_link_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(text = stringResource(Res.string.spotify_import_truncated), style = typo().bodySmall)
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onImport(link) },
+                enabled = link.isNotBlank(),
+            ) {
+                Text(text = stringResource(Res.string.spotify_import_start))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(Res.string.cancel))
+            }
+        },
+    )
+}
+
+/**
  * Progress for the Spotify import.
  *
- * Unlike the file importer's dialog this one stays dismissible while running, offering Stop rather
- * than trapping the user: matching a whole library is measured in minutes, and each playlist is
- * committed as it completes, so stopping early is a coherent outcome rather than a torn write.
+ * Stays dismissible while running, offering Stop rather than trapping the user: a hundred tracks is
+ * a couple of minutes, and nothing is written until it finishes, so stopping costs only the work.
  */
 @Composable
 private fun SpotifyImportProgressDialog(
@@ -3386,16 +3443,7 @@ private fun SpotifyImportProgressDialog(
                     }
 
                     is SpotifyImportProgress.Matching -> {
-                        Text(
-                            text =
-                                stringResource(
-                                    Res.string.spotify_import_matching,
-                                    progress.playlistName,
-                                    progress.playlistIndex,
-                                    progress.playlistCount,
-                                ),
-                            style = typo().bodyMedium,
-                        )
+                        Text(text = progress.playlistName, style = typo().bodyMedium)
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text =
@@ -3425,13 +3473,14 @@ private fun SpotifyImportProgressDialog(
                             text =
                                 stringResource(
                                     Res.string.spotify_import_result,
-                                    progress.result.playlistsCreated,
                                     progress.result.tracksMatched,
+                                    progress.result.playlistName,
                                 ),
                             style = typo().bodyMedium,
                         )
-                        // Both of these are normal on a real library rather than failures, so they
-                        // are stated plainly instead of being dressed up as errors.
+                        // Both of these are normal rather than failures, so they are stated plainly
+                        // instead of being dressed up as errors — and the track cap is stated at
+                        // all costs, because a silently short playlist is the worst outcome here.
                         if (progress.result.unmatched > 0) {
                             Spacer(Modifier.height(8.dp))
                             Text(
@@ -3443,24 +3492,17 @@ private fun SpotifyImportProgressDialog(
                                 style = typo().bodySmall,
                             )
                         }
-                        if (progress.result.playlistsSkipped > 0) {
-                            Spacer(Modifier.height(4.dp))
+                        if (progress.result.possiblyTruncated) {
+                            Spacer(Modifier.height(8.dp))
                             Text(
-                                text =
-                                    stringResource(
-                                        Res.string.spotify_import_result_skipped,
-                                        progress.result.playlistsSkipped,
-                                    ),
+                                text = stringResource(Res.string.spotify_import_truncated),
                                 style = typo().bodySmall,
                             )
                         }
                     }
 
                     is SpotifyImportProgress.Error -> {
-                        Text(
-                            text = progress.message,
-                            style = typo().bodyMedium,
-                        )
+                        Text(text = progress.message, style = typo().bodyMedium)
                     }
                 }
             }

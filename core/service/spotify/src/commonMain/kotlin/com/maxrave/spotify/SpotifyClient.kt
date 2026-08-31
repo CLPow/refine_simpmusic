@@ -259,70 +259,20 @@ class SpotifyClient {
         }
 
     /**
-     * The user's own playlists, newest first, 50 at a time.
+     * The public embed page for a playlist, as raw HTML.
      *
-     * Carries the same header set as the lyrics and canvas calls, `Client-Token` included. Spotify
-     * answers a Bearer token presented without one by rejecting the request as abusive — with 429
-     * rather than 401, which reads as a rate limit and is nothing of the sort.
+     * Deliberately unauthenticated. Spotify refuses this app's web-player token on its public Web
+     * API — with a 429 and a 24-hour Retry-After, which reads as a rate limit and is really "you
+     * are not an approved client" — so the library endpoints are unreachable with the credential
+     * we hold. The embed needs no credential at all: it answers 200 to anyone and carries the
+     * playlist name, cover art, and up to 100 tracks with titles, artists and durations.
      */
-    suspend fun getCurrentUserPlaylists(
-        authToken: String,
-        clientToken: String,
-        offset: Int,
-        limit: Int = 50,
-    ) = spotifyClient.get("https://api.spotify.com/v1/me/playlists") {
-        spotifyWebApiHeaders(authToken, clientToken)
-        parameter("limit", limit)
-        parameter("offset", offset)
-    }
-
-    /** One page of a playlist's tracks. */
-    suspend fun getPlaylistTracks(
-        authToken: String,
-        clientToken: String,
-        playlistId: String,
-        offset: Int,
-        limit: Int = 100,
-    ) = spotifyClient.get("https://api.spotify.com/v1/playlists/$playlistId/tracks") {
-        spotifyWebApiHeaders(authToken, clientToken)
-        parameter("limit", limit)
-        parameter("offset", offset)
-        // Trimming the response matters here: a playlist page carries the full album and artist
-        // objects per track otherwise, which is megabytes across a large library.
-        parameter(
-            "fields",
-            "total,next,items(track(id,name,duration_ms,is_local,artists(id,name),album(id,name)))",
-        )
-    }
-
-    /**
-     * Liked Songs. It is not a playlist and never appears in `/v1/me/playlists`, so importing
-     * "everything" has to ask for it separately.
-     */
-    suspend fun getSavedTracks(
-        authToken: String,
-        clientToken: String,
-        offset: Int,
-        limit: Int = 50,
-    ) = spotifyClient.get("https://api.spotify.com/v1/me/tracks") {
-        spotifyWebApiHeaders(authToken, clientToken)
-        parameter("limit", limit)
-        parameter("offset", offset)
-    }
-
-    private fun HttpRequestBuilder.spotifyWebApiHeaders(
-        authToken: String,
-        clientToken: String,
-    ) {
-        userAgent(USER_AGENT)
-        header(HttpHeaders.Authorization, "Bearer $authToken")
-        header("Client-Token", clientToken)
-        header("App-platform", "WebPlayer")
-        header(HttpHeaders.Accept, "application/json")
-        header(HttpHeaders.AcceptEncoding, "gzip, deflate, br")
-        header(HttpHeaders.Origin, "https://open.spotify.com")
-        header("Referer", "https://open.spotify.com/")
-    }
+    suspend fun getPlaylistEmbed(playlistId: String) =
+        spotifyClient.get("https://open.spotify.com/embed/playlist/$playlistId") {
+            userAgent(USER_AGENT)
+            header(HttpHeaders.Accept, "text/html,application/xhtml+xml")
+            header(HttpHeaders.AcceptLanguage, "en")
+        }
 
     fun getRandomUserAgent(): String {
         val macOSVersion = "${Random.nextInt(11, 15)}_${Random.nextInt(4, 9)}"
