@@ -32,6 +32,8 @@ internal class StreamRepositoryImpl(
     private val localDataSource: LocalDataSource,
     private val youTube: YouTube,
 ) : StreamRepository {
+    override fun accountGuardCooldownMs(): Long = youTube.accountGuard.cooldownRemainingMs
+
     override suspend fun insertNewFormat(newFormat: NewFormatEntity) =
         withContext(Dispatchers.IO) {
             localDataSource.insertNewFormat(newFormat)

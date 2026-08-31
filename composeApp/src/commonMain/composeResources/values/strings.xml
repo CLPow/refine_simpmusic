@@ -699,6 +699,9 @@
     <string name="import_result">Created %1$d playlists and imported %2$d songs.</string>
     <string name="import_result_skipped">%1$d entries were skipped because their song was missing from the file.</string>
     <string name="import_failed">Import failed</string>
+    <string name="account_protection">Account protection</string>
+    <string name="account_protection_on">On. Requests that use your account are spaced out, and if YouTube pushes back the app waits instead of retrying.</string>
+    <string name="account_protection_cooling">YouTube is refusing requests right now. Waiting %1$d seconds before using your account again.</string>
     <string name="import_from_spotify">Import from Spotify</string>
     <string name="import_from_spotify_description">Paste a Spotify playlist link. Each track is looked up on YouTube Music and the playlist is recreated here.</string>
     <string name="spotify_import_link_hint">Spotify playlist link</string>

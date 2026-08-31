@@ -8,6 +8,15 @@ import com.maxrave.domain.utils.Resource
 import kotlinx.coroutines.flow.Flow
 
 interface StreamRepository {
+    /**
+     * Milliseconds the account guard is holding back requests that carry the user's account, or 0
+     * when it is idle.
+     *
+     * Lives here because this repository already holds the YouTube client the guard belongs to;
+     * the app module has no business reaching into the scraper directly.
+     */
+    fun accountGuardCooldownMs(): Long
+
     suspend fun insertNewFormat(newFormat: NewFormatEntity)
 
     fun getNewFormat(videoId: String): Flow<NewFormatEntity?>

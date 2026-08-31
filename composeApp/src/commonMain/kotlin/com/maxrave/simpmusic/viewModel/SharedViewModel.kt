@@ -122,6 +122,9 @@ class SharedViewModel(
     private val lyricsCanvasRepository: LyricsCanvasRepository,
     private val cacheRepository: CacheRepository,
 ) : BaseViewModel() {
+    /** See [StreamRepository.accountGuardCooldownMs]. 0 when account traffic is flowing normally. */
+    fun accountGuardCooldownMs(): Long = streamRepository.accountGuardCooldownMs()
+
     var isFirstLiked: Boolean = false
     var isFirstMiniplayer: Boolean = false
     var isFirstSuggestions: Boolean = false

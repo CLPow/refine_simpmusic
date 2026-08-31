@@ -33,6 +33,8 @@ import com.maxrave.logger.Logger
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.ProxyConfig
 import io.ktor.client.plugins.HttpRedirect
+import io.ktor.client.plugins.plugin
+import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
@@ -111,6 +113,12 @@ class Ytmusic {
             // Disable logging for download - significantly improves performance
             // Note: Don't install Logging plugin for download client
         }.also { downloadClient = it }
+
+    /**
+     * Paces and backs off traffic that carries the user's account. Public so the app can show the
+     * user when it is standing down rather than leaving the app looking broken.
+     */
+    val accountGuard = AccountGuard()
 
     var cookiePath: Path? = null
 
@@ -196,6 +204,18 @@ class Ytmusic {
 
             defaultRequest {
                 url("https://music.youtube.com/youtubei/v1/")
+            }
+        }.apply {
+            // Every request to YouTube is sent through here, which is the one place a guard can be
+            // applied without trusting each caller to remember. ytClient() attaches the Cookie
+            // header only when setLogin is true, so its presence is exactly the marker for "this
+            // request spends the user's account".
+            plugin(HttpSend).intercept { request ->
+                val carriesAccount = request.headers.contains(HttpHeaders.Cookie)
+                if (carriesAccount) accountGuard.awaitTurn()
+                val call = execute(request)
+                if (carriesAccount) accountGuard.onResponse(call.response.status.value)
+                call
             }
         }
 

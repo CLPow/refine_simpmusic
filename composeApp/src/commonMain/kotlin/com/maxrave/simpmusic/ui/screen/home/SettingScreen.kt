@@ -260,6 +260,9 @@ import simpmusic.composeapp.generated.resources.spotify_import_slow_notice
 import simpmusic.composeapp.generated.resources.spotify_import_matching_tracks
 import simpmusic.composeapp.generated.resources.spotify_import_reading_library
 import simpmusic.composeapp.generated.resources.import_from_spotify_description
+import simpmusic.composeapp.generated.resources.account_protection
+import simpmusic.composeapp.generated.resources.account_protection_on
+import simpmusic.composeapp.generated.resources.account_protection_cooling
 import simpmusic.composeapp.generated.resources.import_from_spotify
 import simpmusic.composeapp.generated.resources.spotify_import_public_hint
 import simpmusic.composeapp.generated.resources.spotify_import_truncated
@@ -1121,6 +1124,20 @@ fun SettingScreen(
                     // Reading the account needs a session, and the row also goes dead while a
                     // sweep is in flight so a second tap cannot start a parallel one.
                     isEnable = loggedIn == DataStoreManager.TRUE && !isImportingFollowedArtists,
+                )
+                // Read once per recomposition rather than observed: the guard is normally idle,
+                // and a cooldown is rare enough that it does not justify a polling loop running
+                // behind a settings screen.
+                val accountCooldownSeconds =
+                    (sharedViewModel.accountGuardCooldownMs() / 1000L).toInt()
+                SettingItem(
+                    title = stringResource(Res.string.account_protection),
+                    subtitle =
+                        if (accountCooldownSeconds > 0) {
+                            stringResource(Res.string.account_protection_cooling, accountCooldownSeconds)
+                        } else {
+                            stringResource(Res.string.account_protection_on)
+                        },
                 )
                 SettingItem(
                     title = stringResource(Res.string.send_back_listening_data_to_google),

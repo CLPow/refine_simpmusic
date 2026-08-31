@@ -319,6 +319,14 @@ class YouTube {
      * Restricted to the song filter so the results are catalogue tracks rather than user uploads
      * or music videos, which gives the matcher a cleaner set to score.
      */
+    /**
+     * Pacing and backoff applied to every request that carries the user's account.
+     *
+     * Surfaced so the app can tell the user it is deliberately standing down, rather than looking
+     * broken while it waits out a refusal.
+     */
+    val accountGuard get() = ytMusic.accountGuard
+
     suspend fun searchSongsSignedOut(query: String): Result<List<SongItem>> =
         runCatching {
             val response =
