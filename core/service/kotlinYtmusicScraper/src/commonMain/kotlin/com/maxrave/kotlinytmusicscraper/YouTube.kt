@@ -310,6 +310,38 @@ class YouTube {
         }
 
     /**
+     * Song search that deliberately carries no session.
+     *
+     * Used by the Spotify import, which issues one query per track being matched. Those are the
+     * app's queries, not the user's, and routing them through the signed-in client would write
+     * every imported track title into the account's YouTube search history.
+     *
+     * Restricted to the song filter so the results are catalogue tracks rather than user uploads
+     * or music videos, which gives the matcher a cleaner set to score.
+     */
+    suspend fun searchSongsSignedOut(query: String): Result<List<SongItem>> =
+        runCatching {
+            val response =
+                ytMusic
+                    .search(WEB_REMIX, query, SearchFilter.FILTER_SONG.value, setLogin = false)
+                    .body<SearchResponse>()
+            response.contents
+                ?.tabbedSearchResultsRenderer
+                ?.tabs
+                ?.firstOrNull()
+                ?.tabRenderer
+                ?.content
+                ?.sectionListRenderer
+                ?.contents
+                ?.lastOrNull()
+                ?.musicShelfRenderer
+                ?.contents
+                ?.mapNotNull { SearchPage.toYTItem(it.musicResponsiveListItemRenderer) }
+                ?.filterIsInstance<SongItem>()
+                .orEmpty()
+        }
+
+    /**
      * Every search request response a limited data. Use this function to get the next data
      * @param continuation continuation token from [SearchResult.continuation]
      * @return a [Result]<[SearchResult]> object

@@ -257,6 +257,61 @@ class SpotifyClient {
             )
         }
 
+    /**
+     * The user's own playlists, newest first, 50 at a time.
+     *
+     * This is the public Web API rather than the internal pathfinder endpoints the lyrics and
+     * canvas calls use, because a Bearer token minted for the web player already carries the scopes
+     * it wants — no separate client token is needed.
+     */
+    suspend fun getCurrentUserPlaylists(
+        authToken: String,
+        offset: Int,
+        limit: Int = 50,
+    ) = spotifyClient.get("https://api.spotify.com/v1/me/playlists") {
+        userAgent(USER_AGENT)
+        header("Authorization", "Bearer $authToken")
+        header("Accept", "application/json")
+        parameter("limit", limit)
+        parameter("offset", offset)
+    }
+
+    /** One page of a playlist's tracks. */
+    suspend fun getPlaylistTracks(
+        authToken: String,
+        playlistId: String,
+        offset: Int,
+        limit: Int = 100,
+    ) = spotifyClient.get("https://api.spotify.com/v1/playlists/$playlistId/tracks") {
+        userAgent(USER_AGENT)
+        header("Authorization", "Bearer $authToken")
+        header("Accept", "application/json")
+        parameter("limit", limit)
+        parameter("offset", offset)
+        // Trimming the response matters here: a playlist page carries the full album and artist
+        // objects per track otherwise, which is megabytes across a large library.
+        parameter(
+            "fields",
+            "total,next,items(track(id,name,duration_ms,is_local,artists(id,name),album(id,name)))",
+        )
+    }
+
+    /**
+     * Liked Songs. It is not a playlist and never appears in `/v1/me/playlists`, so importing
+     * "everything" has to ask for it separately.
+     */
+    suspend fun getSavedTracks(
+        authToken: String,
+        offset: Int,
+        limit: Int = 50,
+    ) = spotifyClient.get("https://api.spotify.com/v1/me/tracks") {
+        userAgent(USER_AGENT)
+        header("Authorization", "Bearer $authToken")
+        header("Accept", "application/json")
+        parameter("limit", limit)
+        parameter("offset", offset)
+    }
+
     fun getRandomUserAgent(): String {
         val macOSVersion = "${Random.nextInt(11, 15)}_${Random.nextInt(4, 9)}"
         val webKitVersion = "${Random.nextInt(530, 537)}.${Random.nextInt(30, 37)}"

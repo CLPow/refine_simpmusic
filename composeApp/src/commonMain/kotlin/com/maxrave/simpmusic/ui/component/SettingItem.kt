@@ -27,6 +27,15 @@ fun SettingItem(
     subtitle: String = "Subtitle",
     smallSubtitle: Boolean = false,
     isEnable: Boolean = true,
+    /**
+     * Whether [isEnable] is a settled answer yet.
+     *
+     * A gate read from DataStore — a login flag, say — is false for the first frames of every cold
+     * start simply because it has not loaded. Leave this at true for gates computed synchronously;
+     * pass the "do we know yet" condition for asynchronous ones, or [onDisable] fires against a
+     * value that was never really false.
+     */
+    isEnableResolved: Boolean = true,
     onClick: (() -> Unit)? = null,
     switch: Pair<Boolean, ((Boolean) -> Unit)>? = null,
     onDisable: (() -> Unit)? = null, // Callback when the item is disabled, switch off settings
@@ -35,8 +44,11 @@ fun SettingItem(
     // Key on isEnable (not Unit) so the auto-disable fires whenever the gate flips to false mid-session
     // (e.g. the user logs out while Settings is open), not only on first composition. Without this, any
     // child flag gated behind a login stays stuck ON until Settings is reopened (issues #2157, #2064).
-    LaunchedEffect(isEnable) {
-        if (!isEnable && onDisable != null) {
+    //
+    // isEnableResolved covers the other half of that: firing on first composition is exactly wrong
+    // when the gate has not loaded yet, because the row then clears a setting the user did switch on.
+    LaunchedEffect(isEnable, isEnableResolved) {
+        if (isEnableResolved && !isEnable && onDisable != null) {
             onDisable.invoke()
         }
     }

@@ -19,9 +19,12 @@ class NotificationViewModel(
         viewModelScope.launch {
             commonRepository.getAllNotifications().collect { notificationEntities ->
                 _listNotification.value =
-                    notificationEntities?.sortedByDescending {
-                        it.time
-                    }
+                    notificationEntities
+                        // Nothing produces blog entries any more, but rows written by an earlier
+                        // build are still in the database and would otherwise keep showing the
+                        // upstream developer's posts in this list forever.
+                        ?.filterNot { it.type == NotificationEntity.TYPE_BLOG }
+                        ?.sortedByDescending { it.time }
             }
         }
     }

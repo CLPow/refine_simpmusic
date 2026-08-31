@@ -258,13 +258,20 @@ class Ytmusic {
         track: SongItem,
     ) = extractor.saveAudioWithThumbnail(filePath, track)
 
+    /**
+     * @param setLogin attach the signed-in session. Defaults to true, which is what every
+     * user-facing search wants. The Spotify import passes false: it fires one search per imported
+     * track, and those are not searches the user performed — letting them into the account's search
+     * history would feed thousands of queries into YouTube's personalisation.
+     */
     suspend fun search(
         client: YouTubeClient,
         query: String? = null,
         params: String? = null,
         continuation: String? = null,
+        setLogin: Boolean = true,
     ) = httpClient.post("search") {
-        ytClient(client, true)
+        ytClient(client, setLogin)
         setBody(
             SearchBody(
                 context = client.toContext(locale, visitorData),

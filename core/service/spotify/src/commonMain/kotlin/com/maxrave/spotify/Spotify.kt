@@ -5,8 +5,12 @@ import com.maxrave.spotify.model.response.spotify.CanvasResponse
 import com.maxrave.spotify.model.response.spotify.ClientTokenResponse
 import com.maxrave.spotify.model.response.spotify.PersonalTokenResponse
 import com.maxrave.spotify.model.response.spotify.SpotifyLyricsResponse
+import com.maxrave.spotify.model.response.spotify.SpotifyPlaylistPage
+import com.maxrave.spotify.model.response.spotify.SpotifyTrackPage
 import com.maxrave.spotify.model.response.spotify.search.SpotifySearchResponse
 import io.ktor.client.call.body
+import io.ktor.client.statement.HttpResponse
+import io.ktor.http.isSuccess
 import io.ktor.client.engine.ProxyBuilder
 import io.ktor.client.engine.http
 
@@ -95,4 +99,46 @@ class Spotify {
     ) = runCatching {
         spotifyClient.getSpotifyCanvas(trackId, token, clientToken).body<CanvasResponse>()
     }
+
+    suspend fun getCurrentUserPlaylists(
+        authToken: String,
+        offset: Int,
+    ) = runCatching {
+        spotifyClient.getCurrentUserPlaylists(authToken, offset).requireSuccess().body<SpotifyPlaylistPage>()
+    }
+
+    suspend fun getPlaylistTracks(
+        authToken: String,
+        playlistId: String,
+        offset: Int,
+    ) = runCatching {
+        spotifyClient.getPlaylistTracks(authToken, playlistId, offset).requireSuccess().body<SpotifyTrackPage>()
+    }
+
+    suspend fun getSavedTracks(
+        authToken: String,
+        offset: Int,
+    ) = runCatching {
+        spotifyClient.getSavedTracks(authToken, offset).requireSuccess().body<SpotifyTrackPage>()
+    }
+
+    /**
+     * Turns a rejected request into a sentence instead of letting it reach the JSON parser.
+     *
+     * Spotify answers an expired or under-scoped token with a JSON error object, which decodes into
+     * the expected page type about as well as anything else does — the user would otherwise see a
+     * serialization message and no hint that they simply need to sign in again.
+     */
+    private fun HttpResponse.requireSuccess(): HttpResponse =
+        also {
+            if (!status.isSuccess()) {
+                throw IllegalStateException(
+                    when (status.value) {
+                        401, 403 -> "Spotify rejected the session. Sign out of Spotify in Settings and sign in again."
+                        429 -> "Spotify is rate limiting this account. Try again in a few minutes."
+                        else -> "Spotify returned ${status.value}"
+                    },
+                )
+            }
+        }
 }

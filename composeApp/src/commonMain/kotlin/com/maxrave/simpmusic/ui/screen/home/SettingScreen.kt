@@ -106,6 +106,7 @@ import com.maxrave.domain.data.model.lyrics.RomanizationLanguage
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.manager.DataStoreManager.Values.TRUE
 import com.maxrave.domain.repository.ImportProgress
+import com.maxrave.domain.repository.SpotifyImportProgress
 import com.maxrave.domain.utils.LocalResource
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.Platform
@@ -141,6 +142,7 @@ import com.maxrave.simpmusic.ui.theme.parseThemeColorHex
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.ImportViewModel
+import com.maxrave.simpmusic.viewModel.SpotifyImportViewModel
 import com.maxrave.simpmusic.viewModel.SettingAlertState
 import com.maxrave.simpmusic.viewModel.SettingBasicAlertState
 import com.maxrave.simpmusic.viewModel.SettingsViewModel
@@ -195,8 +197,6 @@ import simpmusic.composeapp.generated.resources.backup_downloaded_description
 import simpmusic.composeapp.generated.resources.backup_frequency
 import simpmusic.composeapp.generated.resources.balance_media_loudness
 import simpmusic.composeapp.generated.resources.better_lyrics
-import simpmusic.composeapp.generated.resources.blog_notification_description
-import simpmusic.composeapp.generated.resources.blog_notification_title
 import simpmusic.composeapp.generated.resources.cancel
 import simpmusic.composeapp.generated.resources.canvas_info
 import simpmusic.composeapp.generated.resources.categories_sponsor_block
@@ -231,8 +231,6 @@ import simpmusic.composeapp.generated.resources.daily
 import simpmusic.composeapp.generated.resources.database
 import simpmusic.composeapp.generated.resources.default_models
 import simpmusic.composeapp.generated.resources.description_and_licenses
-import simpmusic.composeapp.generated.resources.developer_blog
-import simpmusic.composeapp.generated.resources.developer_blog_tagline
 import simpmusic.composeapp.generated.resources.discord_integration
 import simpmusic.composeapp.generated.resources.donation
 import simpmusic.composeapp.generated.resources.download_quality
@@ -253,6 +251,18 @@ import simpmusic.composeapp.generated.resources.help_build_lyrics_database
 import simpmusic.composeapp.generated.resources.help_build_lyrics_database_description
 import simpmusic.composeapp.generated.resources.http
 import simpmusic.composeapp.generated.resources.import_data
+import simpmusic.composeapp.generated.resources.stop
+import simpmusic.composeapp.generated.resources.spotify_import_failed
+import simpmusic.composeapp.generated.resources.spotify_import_result_skipped
+import simpmusic.composeapp.generated.resources.spotify_import_result_unmatched
+import simpmusic.composeapp.generated.resources.spotify_import_result
+import simpmusic.composeapp.generated.resources.spotify_import_slow_notice
+import simpmusic.composeapp.generated.resources.spotify_import_matching_tracks
+import simpmusic.composeapp.generated.resources.spotify_import_matching
+import simpmusic.composeapp.generated.resources.spotify_import_reading_library
+import simpmusic.composeapp.generated.resources.import_from_spotify_sign_in_first
+import simpmusic.composeapp.generated.resources.import_from_spotify_description
+import simpmusic.composeapp.generated.resources.import_from_spotify
 import simpmusic.composeapp.generated.resources.import_data_intro
 import simpmusic.composeapp.generated.resources.import_failed
 import simpmusic.composeapp.generated.resources.import_playlists_from_other_apps
@@ -477,6 +487,8 @@ fun SettingScreen(
     // converted .json arrives with whatever MIME its source assigned it, and an application/json
     // filter would hide it on some hosts.
     val importViewModel: ImportViewModel = koinViewModel()
+    val spotifyImportViewModel: SpotifyImportViewModel = koinViewModel()
+    val spotifyImportState by spotifyImportViewModel.importState.collectAsStateWithLifecycle()
     val importState by importViewModel.importState.collectAsStateWithLifecycle()
     val importLauncher =
         rememberFilePickerLauncher(
@@ -498,7 +510,6 @@ fun SettingScreen(
     val videoDownloadQuality by viewModel.videoDownloadQuality.collectAsStateWithLifecycle()
     val keepYoutubePlaylistOffline by viewModel.keepYouTubePlaylistOffline.collectAsStateWithLifecycle()
     val localTrackingEnabled by viewModel.localTrackingEnabled.collectAsStateWithLifecycle(initialValue = false)
-    val blogNotificationEnabled by viewModel.blogNotificationEnabled.collectAsStateWithLifecycle()
     val combineLocalAndYouTubeLiked by viewModel.combineLocalAndYouTubeLiked.collectAsStateWithLifecycle()
     val playVideo by remember { viewModel.playVideoInsteadOfAudio.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
     val radioAudioOnly by remember { viewModel.radioAudioOnly.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
@@ -1088,7 +1099,13 @@ fun SettingScreen(
                     // while signed out. onDisable turns the stored flag back off when that
                     // happens: SettingItem keys its LaunchedEffect on isEnable, so signing out
                     // mid-session clears it too, not just a cold start in the signed-out state.
+                    //
+                    // `loggedIn` is null until DataStore answers, which is not the same as being
+                    // signed out. Without isEnableResolved the row composed disabled on every cold
+                    // start and immediately wrote the flag off, so the switch could not survive the
+                    // app being killed.
                     isEnable = loggedIn == DataStoreManager.TRUE,
+                    isEnableResolved = loggedIn != null,
                     onDisable = { viewModel.setSyncFollowToYouTube(false) },
                 )
                 // The pull direction, sitting under the push switch it mirrors. An action rather
@@ -2545,6 +2562,20 @@ fun SettingScreen(
                         }
                     },
                 )
+                // The direct path, for people who would otherwise have to run their library
+                // through the web converter first. Gated on the same Spotify session that already
+                // powers lyrics and canvas — there is nothing extra to sign in to.
+                SettingItem(
+                    title = stringResource(Res.string.import_from_spotify),
+                    subtitle =
+                        if (spotifyLoggedIn) {
+                            stringResource(Res.string.import_from_spotify_description)
+                        } else {
+                            stringResource(Res.string.import_from_spotify_sign_in_first)
+                        },
+                    isEnable = spotifyLoggedIn,
+                    onClick = { spotifyImportViewModel.start() },
+                )
                 val beforeUrl = stringResource(Res.string.import_data_intro).substringBefore("https://www.simpmusic.org/tools")
                 val afterUrl = stringResource(Res.string.import_data_intro).substringAfter("https://www.simpmusic.org/tools")
                 Text(
@@ -2653,20 +2684,6 @@ fun SettingScreen(
                     },
                 )
                 SettingItem(
-                    title = stringResource(Res.string.developer_blog),
-                    subtitle = stringResource(Res.string.developer_blog_tagline),
-                    onClick = {
-                        uriHandler.openUri("https://maxrave.dev")
-                    },
-                )
-                if (getPlatform() == Platform.Android) {
-                    SettingItem(
-                        title = stringResource(Res.string.blog_notification_title),
-                        subtitle = stringResource(Res.string.blog_notification_description),
-                        switch = (blogNotificationEnabled to { viewModel.setBlogNotificationEnabled(it) }),
-                    )
-                }
-                SettingItem(
                     title = stringResource(Res.string.third_party_libraries),
                     subtitle = stringResource(Res.string.description_and_licenses),
                     onClick = {
@@ -2679,6 +2696,14 @@ fun SettingScreen(
             EndOfPage()
         }
     }
+    spotifyImportState?.let { progress ->
+        SpotifyImportProgressDialog(
+            progress = progress,
+            onStop = spotifyImportViewModel::cancel,
+            onDismiss = spotifyImportViewModel::dismiss,
+        )
+    }
+
     importState?.let { progress ->
         ImportProgressDialog(
             progress = progress,
@@ -3314,6 +3339,146 @@ fun SettingScreen(
  * Only dismissible once the import has finished — cancelling mid-write would leave the database
  * half-populated with no way to tell the user which half.
  */
+/**
+ * Progress for the Spotify import.
+ *
+ * Unlike the file importer's dialog this one stays dismissible while running, offering Stop rather
+ * than trapping the user: matching a whole library is measured in minutes, and each playlist is
+ * committed as it completes, so stopping early is a coherent outcome rather than a torn write.
+ */
+@Composable
+private fun SpotifyImportProgressDialog(
+    progress: SpotifyImportProgress,
+    onStop: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val finished = progress is SpotifyImportProgress.Success || progress is SpotifyImportProgress.Error
+    AlertDialog(
+        onDismissRequest = { if (finished) onDismiss() },
+        properties =
+            DialogProperties(
+                dismissOnBackPress = finished,
+                dismissOnClickOutside = finished,
+            ),
+        title = {
+            Text(
+                text =
+                    stringResource(
+                        if (progress is SpotifyImportProgress.Error) {
+                            Res.string.spotify_import_failed
+                        } else {
+                            Res.string.import_from_spotify
+                        },
+                    ),
+                style = typo().titleSmall,
+            )
+        },
+        text = {
+            Column {
+                when (progress) {
+                    is SpotifyImportProgress.Preparing -> {
+                        Text(
+                            text = stringResource(Res.string.spotify_import_reading_library),
+                            style = typo().bodyMedium,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+
+                    is SpotifyImportProgress.Matching -> {
+                        Text(
+                            text =
+                                stringResource(
+                                    Res.string.spotify_import_matching,
+                                    progress.playlistName,
+                                    progress.playlistIndex,
+                                    progress.playlistCount,
+                                ),
+                            style = typo().bodyMedium,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text =
+                                stringResource(
+                                    Res.string.spotify_import_matching_tracks,
+                                    progress.matched,
+                                    progress.total,
+                                ),
+                            style = typo().bodySmall,
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        LinearProgressIndicator(
+                            progress = {
+                                if (progress.total > 0) progress.processed.toFloat() / progress.total else 0f
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = stringResource(Res.string.spotify_import_slow_notice),
+                            style = typo().bodySmall,
+                        )
+                    }
+
+                    is SpotifyImportProgress.Success -> {
+                        Text(
+                            text =
+                                stringResource(
+                                    Res.string.spotify_import_result,
+                                    progress.result.playlistsCreated,
+                                    progress.result.tracksMatched,
+                                ),
+                            style = typo().bodyMedium,
+                        )
+                        // Both of these are normal on a real library rather than failures, so they
+                        // are stated plainly instead of being dressed up as errors.
+                        if (progress.result.unmatched > 0) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text =
+                                    stringResource(
+                                        Res.string.spotify_import_result_unmatched,
+                                        progress.result.unmatched,
+                                    ),
+                                style = typo().bodySmall,
+                            )
+                        }
+                        if (progress.result.playlistsSkipped > 0) {
+                            Spacer(Modifier.height(4.dp))
+                            Text(
+                                text =
+                                    stringResource(
+                                        Res.string.spotify_import_result_skipped,
+                                        progress.result.playlistsSkipped,
+                                    ),
+                                style = typo().bodySmall,
+                            )
+                        }
+                    }
+
+                    is SpotifyImportProgress.Error -> {
+                        Text(
+                            text = progress.message,
+                            style = typo().bodyMedium,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (finished) {
+                TextButton(onClick = onDismiss) {
+                    Text(text = stringResource(Res.string.ok))
+                }
+            } else {
+                TextButton(onClick = onStop) {
+                    Text(text = stringResource(Res.string.stop))
+                }
+            }
+        },
+    )
+}
+
 @Composable
 private fun ImportProgressDialog(
     progress: ImportProgress,
