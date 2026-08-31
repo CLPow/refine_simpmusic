@@ -121,7 +121,6 @@ import com.maxrave.simpmusic.ui.component.NowPlayingBottomSheet
 import com.maxrave.simpmusic.ui.component.OfflineErrorState
 import com.maxrave.simpmusic.ui.component.QuickPicksItem
 import com.maxrave.simpmusic.ui.component.RippleIconButton
-import com.maxrave.simpmusic.ui.component.ShareSavedLyricsDialog
 import com.maxrave.simpmusic.ui.component.rememberHolderPainter
 import com.maxrave.simpmusic.ui.icon.Groups
 import com.maxrave.simpmusic.ui.icon.History
@@ -292,9 +291,6 @@ fun HomeScreen(
         }
     }
 
-    var showRequestShareLyricsPermissions by rememberSaveable {
-        mutableStateOf(false)
-    }
 
     var topAppBarHeightPx by rememberSaveable {
         mutableIntStateOf(0)
@@ -350,13 +346,10 @@ fun HomeScreen(
     LaunchedEffect(key1 = homeData) {
         accountShow = homeData.find { it.subtitle == accountInfo?.first } == null
     }
-    // Upstream also opened a "rate us" dialog every ten launches and a one-shot promo for the
-    // original developer's blog on the fifth. Both are gone; the lyrics-sharing prompt is the only
-    // thing left that asks the user for something, and it is a real permission, not an ad.
-    LaunchedEffect(openAppTime, shareLyricsPermissions) {
-        showRequestShareLyricsPermissions =
-            (openAppTime == 1 || openAppTime % 15 == 0) && openAppTime <= 60 && !shareLyricsPermissions
-    }
+    // Nothing prompts on launch any more. Upstream opened a "rate us" dialog every ten launches, a
+    // blog promo on the fifth, and asked repeatedly about contributing lyrics; all three are gone.
+    // Lyrics sharing is still available, opt-in, in Settings — which is where someone who wants it
+    // will look, and where someone who does not is never interrupted by it.
 
     val shouldStartPaginate =
         remember {
@@ -389,22 +382,6 @@ fun HomeScreen(
 //            },
 //        )
 //    }
-
-    if (showRequestShareLyricsPermissions) {
-        ShareSavedLyricsDialog(
-            onDismissRequest = {
-                showRequestShareLyricsPermissions = false
-                sharedViewModel.onDoneReview(
-                    isDismissOnly = true,
-                )
-            },
-            onConfirm = { contributor ->
-                sharedViewModel.onDoneRequestingShareLyrics(
-                    contributor,
-                )
-            },
-        )
-    }
 
     if (shouldShowLogInAlert) {
         var doNotShowAgain by rememberSaveable {

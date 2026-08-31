@@ -38,6 +38,17 @@ class SpotifyImportViewModel(
             }
     }
 
+    /** Syncs the whole Spotify library. Re-runnable: see [SpotifyImportRepository.syncEverything]. */
+    fun syncEverything() {
+        if (importJob?.isActive == true) return
+        importJob =
+            viewModelScope.launch {
+                spotifyImportRepository.syncEverything().collect { progress ->
+                    _importState.value = progress
+                }
+            }
+    }
+
     /** Stops an import in progress. Nothing is written until it completes, so nothing is left behind. */
     fun cancel() {
         importJob?.cancel()

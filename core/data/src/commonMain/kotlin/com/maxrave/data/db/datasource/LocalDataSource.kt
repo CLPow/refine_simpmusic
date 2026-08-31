@@ -374,6 +374,10 @@ internal class LocalDataSource(
 
     suspend fun insertLocalPlaylist(localPlaylist: LocalPlaylistEntity) = databaseDao.insertLocalPlaylist(localPlaylist)
 
+    /** The local playlist previously synced from [spotifyUri], if there is one. */
+    suspend fun getLocalPlaylistBySpotifyUri(spotifyUri: String) =
+        databaseDao.getAllLocalPlaylists(Int.MAX_VALUE, 0).firstOrNull { it.spotifyPlaylistUri == spotifyUri }
+
     suspend fun insertLocalPlaylistWithTracks(
         localPlaylist: LocalPlaylistEntity,
         videoIds: List<String>,

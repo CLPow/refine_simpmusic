@@ -6,6 +6,7 @@ import com.maxrave.spotify.model.response.spotify.ClientTokenResponse
 import com.maxrave.spotify.model.response.spotify.PersonalTokenResponse
 import com.maxrave.spotify.model.response.spotify.SpotifyLyricsResponse
 import com.maxrave.spotify.model.response.spotify.SpotifyEmbedResponse
+import com.maxrave.spotify.model.response.spotify.SpotifyLibraryItem
 import com.maxrave.spotify.model.response.spotify.SpotifyPlaylistSlice
 import com.maxrave.spotify.model.response.spotify.SpotifyTrackInfo
 import com.maxrave.spotify.model.response.spotify.search.SpotifySearchResponse
@@ -223,6 +224,64 @@ class Spotify {
         )
     }
 
+    /**
+     * The playlists in the user's library, plus Liked Songs.
+     *
+     * Liked Songs is prepended rather than discovered: it is not a playlist, so it never appears in
+     * a playlist listing, and it is the one list most people care about most.
+     */
+    suspend fun getLibraryPlaylists(
+        offset: Int,
+        limit: Int,
+        authToken: String,
+        clientToken: String,
+    ) = runCatching {
+        val response =
+            spotifyClient.pathfinderQuery(
+                operationName = "libraryV3",
+                sha256Hash = LIBRARY_V3_HASH,
+                // Mirrors the web player's own call: playlists only, default order, and the
+                // LikedSongs feature so the account's saved tracks are represented.
+                variables =
+                    """{"filters":["Playlists"],"order":null,"textFilter":"","features":["LIKED_SONGS"],""" +
+                        """"limit":$limit,"offset":$offset,"flatten":false,"expandedFolders":[],""" +
+                        """"folderUri":null,"includeFoldersWhenFlattening":true}""",
+                authToken = authToken,
+                clientToken = clientToken,
+            )
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException(
+                when (response.status.value) {
+                    401, 403 -> "Spotify rejected the session. Sign out of Spotify in Settings and sign in again."
+                    429 -> "Spotify is rate limiting this account. Try again in a few minutes."
+                    else -> "Spotify returned ${response.status.value}"
+                },
+            )
+        }
+        val root = embedJson.parseToJsonElement(response.bodyAsText())
+        root.jsonObject["errors"]?.let { errors ->
+            throw IllegalStateException(errors.firstMessage() ?: "Spotify rejected the library request.")
+        }
+        // Walked rather than path-bound, for the same reason the playlist reader is: this schema is
+        // undocumented and moves. A library entry is anything carrying a playlist URI and a name.
+        root
+            .allObjects()
+            .mapNotNull { obj ->
+                val uri = obj["uri"]?.stringOrNull() ?: return@mapNotNull null
+                if (!uri.startsWith("spotify:playlist:")) return@mapNotNull null
+                val name = obj["name"]?.stringOrNull()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                SpotifyLibraryItem(
+                    uri = uri,
+                    name = name,
+                    coverArt =
+                        obj.findObject { it["url"]?.stringOrNull()?.startsWith("https://") == true }
+                            ?.get("url")
+                            ?.stringOrNull(),
+                )
+            }.distinctBy { it.uri }
+            .toList()
+    }
+
     private companion object {
         /**
          * Persisted-query hashes, read out of the web player's public JavaScript bundle.
@@ -232,6 +291,10 @@ class Spotify {
          */
         private const val FETCH_PLAYLIST_HASH =
             "86dde7b9d9356e2369414647cf6950cfed96e778e129cfdfc99aea6c1613b3b0"
+
+        private const val LIBRARY_V3_HASH =
+            "390c78e5b951029bad359785e69b07b536a509c581cbcd0aded5e5067f187455"
+
 
         /** The state blob Spotify's embed page carries; `.` must span lines, hence DOT_MATCHES_ALL. */
         private val NEXT_DATA =

@@ -264,8 +264,15 @@ import simpmusic.composeapp.generated.resources.account_protection
 import simpmusic.composeapp.generated.resources.account_protection_on
 import simpmusic.composeapp.generated.resources.account_protection_cooling
 import simpmusic.composeapp.generated.resources.import_from_spotify
-import simpmusic.composeapp.generated.resources.spotify_import_public_hint
 import simpmusic.composeapp.generated.resources.spotify_import_truncated
+import simpmusic.composeapp.generated.resources.spotify_import_signed_in_note
+import simpmusic.composeapp.generated.resources.spotify_import_signed_out_note
+import simpmusic.composeapp.generated.resources.sync_all_from_spotify
+import simpmusic.composeapp.generated.resources.sync_all_from_spotify_description
+import simpmusic.composeapp.generated.resources.sync_all_from_spotify_sign_in
+import simpmusic.composeapp.generated.resources.spotify_sync_result
+import simpmusic.composeapp.generated.resources.spotify_sync_result_present
+import simpmusic.composeapp.generated.resources.spotify_sync_playlist_progress
 import simpmusic.composeapp.generated.resources.spotify_import_start
 import simpmusic.composeapp.generated.resources.spotify_import_link_hint
 import simpmusic.composeapp.generated.resources.import_data_intro
@@ -2586,6 +2593,19 @@ fun SettingScreen(
                 // through the web converter first. Needs no Spotify account of its own: the embed
                 // page behind a share link is public, which is the whole reason this route works
                 // where the signed-in one does not.
+                // The whole-library route. Needs the Spotify session, because a library is not
+                // something a link can address.
+                SettingItem(
+                    title = stringResource(Res.string.sync_all_from_spotify),
+                    subtitle =
+                        if (spotifyLoggedIn) {
+                            stringResource(Res.string.sync_all_from_spotify_description)
+                        } else {
+                            stringResource(Res.string.sync_all_from_spotify_sign_in)
+                        },
+                    isEnable = spotifyLoggedIn,
+                    onClick = { spotifyImportViewModel.syncEverything() },
+                )
                 SettingItem(
                     title = stringResource(Res.string.import_from_spotify),
                     subtitle = stringResource(Res.string.import_from_spotify_description),
@@ -2713,6 +2733,7 @@ fun SettingScreen(
     }
     if (showSpotifyLinkDialog) {
         SpotifyLinkDialog(
+            signedInToSpotify = spotifyLoggedIn,
             onDismiss = { showSpotifyLinkDialog = false },
             onImport = { link ->
                 showSpotifyLinkDialog = false
@@ -3372,6 +3393,7 @@ fun SettingScreen(
  */
 @Composable
 private fun SpotifyLinkDialog(
+    signedInToSpotify: Boolean,
     onDismiss: () -> Unit,
     onImport: (String) -> Unit,
 ) {
@@ -3396,11 +3418,21 @@ private fun SpotifyLinkDialog(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 Spacer(Modifier.height(8.dp))
-                // Said before the attempt rather than after it fails: a private playlist is the
-                // single most likely reason a pasted link will not work.
-                Text(text = stringResource(Res.string.spotify_import_public_hint), style = typo().bodySmall)
-                Spacer(Modifier.height(4.dp))
-                Text(text = stringResource(Res.string.spotify_import_truncated), style = typo().bodySmall)
+                // What is true depends entirely on whether Spotify is signed in: signed in, the
+                // playlist is read through the web player's own endpoint, which sees private
+                // playlists and pages past 100 tracks. Signed out, neither holds. Stating the
+                // wrong one is worse than stating nothing.
+                Text(
+                    text =
+                        stringResource(
+                            if (signedInToSpotify) {
+                                Res.string.spotify_import_signed_in_note
+                            } else {
+                                Res.string.spotify_import_signed_out_note
+                            },
+                        ),
+                    style = typo().bodySmall,
+                )
             }
         },
         confirmButton = {
@@ -3465,7 +3497,20 @@ private fun SpotifyImportProgressDialog(
                     }
 
                     is SpotifyImportProgress.Matching -> {
-                        Text(text = progress.playlistName, style = typo().bodyMedium)
+                        Text(
+                            text =
+                                if (progress.playlistIndex != null && progress.playlistCount != null) {
+                                    stringResource(
+                                        Res.string.spotify_sync_playlist_progress,
+                                        progress.playlistName,
+                                        progress.playlistIndex ?: 0,
+                                        progress.playlistCount ?: 0,
+                                    )
+                                } else {
+                                    progress.playlistName
+                                },
+                            style = typo().bodyMedium,
+                        )
                         Spacer(Modifier.height(4.dp))
                         Text(
                             text =
@@ -3491,15 +3536,41 @@ private fun SpotifyImportProgressDialog(
                     }
 
                     is SpotifyImportProgress.Success -> {
+                        // A library sync leaves the name empty; counting created/updated instead
+                        // would misreport the commonest re-sync of all -- the one where nothing
+                        // changed -- as a single-playlist import of zero tracks.
+                        val wholeLibrary = progress.result.playlistName.isEmpty()
                         Text(
                             text =
-                                stringResource(
-                                    Res.string.spotify_import_result,
-                                    progress.result.tracksMatched,
-                                    progress.result.playlistName,
-                                ),
+                                if (wholeLibrary) {
+                                    stringResource(
+                                        Res.string.spotify_sync_result,
+                                        progress.result.playlistsCreated,
+                                        progress.result.playlistsUpdated,
+                                        progress.result.tracksMatched,
+                                    )
+                                } else {
+                                    stringResource(
+                                        Res.string.spotify_import_result,
+                                        progress.result.tracksMatched,
+                                        progress.result.playlistName,
+                                    )
+                                },
                             style = typo().bodyMedium,
                         )
+                        // Stated because it is the reassuring part: nothing was duplicated, and
+                        // these cost no lookups at all.
+                        if (progress.result.alreadyPresent > 0) {
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                text =
+                                    stringResource(
+                                        Res.string.spotify_sync_result_present,
+                                        progress.result.alreadyPresent,
+                                    ),
+                                style = typo().bodySmall,
+                            )
+                        }
                         // Both of these are normal rather than failures, so they are stated plainly
                         // instead of being dressed up as errors — and the track cap is stated at
                         // all costs, because a silently short playlist is the worst outcome here.

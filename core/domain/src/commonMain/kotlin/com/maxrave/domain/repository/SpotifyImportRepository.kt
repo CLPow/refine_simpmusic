@@ -19,6 +19,15 @@ interface SpotifyImportRepository {
      * Cancelling the collecting scope stops the import before anything is written.
      */
     fun importFromLink(link: String): Flow<SpotifyImportProgress>
+
+    /**
+     * Syncs every playlist in the signed-in Spotify library, Liked Songs included.
+     *
+     * Re-runnable by design. A playlist already synced is updated in place rather than duplicated,
+     * and a track already present is skipped without being searched again, so syncing an unchanged
+     * library costs no YouTube requests at all.
+     */
+    fun syncEverything(): Flow<SpotifyImportProgress>
 }
 
 sealed interface SpotifyImportProgress {
@@ -34,6 +43,9 @@ sealed interface SpotifyImportProgress {
         val processed: Int,
         val total: Int,
         val matched: Int,
+        /** 1-based position in a multi-playlist sync; null for a single link import. */
+        val playlistIndex: Int? = null,
+        val playlistCount: Int? = null,
     ) : SpotifyImportProgress
 
     data class Success(
@@ -57,4 +69,10 @@ data class SpotifyImportResult(
     val tracksMatched: Int,
     val unmatched: Int,
     val possiblyTruncated: Boolean,
+    /** Playlists created for the first time by this run. */
+    val playlistsCreated: Int = 0,
+    /** Playlists that already existed and were topped up in place. */
+    val playlistsUpdated: Int = 0,
+    /** Tracks skipped because the local playlist already had them; no search was spent on these. */
+    val alreadyPresent: Int = 0,
 )

@@ -21,6 +21,14 @@ data class LocalPlaylistEntity(
     val youtubePlaylistId: String? = null,
     @ColumnInfo(name = "youtube_sync_state", defaultValue = "0")
     val syncState: Int = YouTubeSyncState.NotSynced,
+    /**
+     * The Spotify playlist this was synced from, or null for a playlist made here.
+     *
+     * Identity for re-syncing. Matching on the title instead would break the moment someone renames
+     * a playlist on either side, and would silently merge two playlists that happen to share a name.
+     */
+    @ColumnInfo(name = "spotify_playlist_uri")
+    val spotifyPlaylistUri: String? = null,
     val tracks: List<String>? = null,
     // Only synced with YouTube playlist
     // val listSetVideoId: List<String>? = null,

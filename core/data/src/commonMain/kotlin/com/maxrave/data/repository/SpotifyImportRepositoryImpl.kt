@@ -12,6 +12,9 @@ import com.maxrave.kotlinytmusicscraper.YouTube
 import com.maxrave.kotlinytmusicscraper.models.SongItem
 import com.maxrave.logger.Logger
 import com.maxrave.spotify.Spotify
+import com.maxrave.domain.data.entities.PairSongLocalPlaylist
+import com.maxrave.spotify.model.response.spotify.LIKED_SONGS_URI
+import com.maxrave.spotify.model.response.spotify.SpotifyLibraryItem
 import com.maxrave.spotify.model.response.spotify.SpotifyPlaylistSlice
 import com.maxrave.spotify.model.response.spotify.SpotifyTrackInfo
 import kotlinx.coroutines.Dispatchers
@@ -53,6 +56,9 @@ private const val EMBED_TRACK_CAP = 100
 
 /** Page size for the internal API, matching what the web player asks for. */
 private const val PATHFINDER_PAGE = 100
+
+/** Library entries per request. */
+private const val LIBRARY_PAGE = 50
 
 /** A courtesy gap between pages; a burst is the shape that earns a 429. */
 private const val PATHFINDER_PAGE_INTERVAL_MS = 200L
@@ -222,6 +228,203 @@ internal class SpotifyImportRepositoryImpl(
             )
         }.flowOn(Dispatchers.IO)
 
+    override fun syncEverything(): Flow<SpotifyImportProgress> =
+        flow {
+            emit(SpotifyImportProgress.Preparing)
+
+            val tokens =
+                spotifyTokens() ?: run {
+                    emit(SpotifyImportProgress.Error("Sign in to Spotify in Settings first."))
+                    return@flow
+                }
+
+            val library =
+                runCatching { readLibrary(tokens) }
+                    .getOrElse { throwable ->
+                        Logger.e(TAG, "library read failed: ${throwable.message}")
+                        emit(SpotifyImportProgress.Error(throwable.message ?: "Couldn't read your Spotify library"))
+                        return@flow
+                    }
+            if (library.isEmpty()) {
+                emit(SpotifyImportProgress.Error("No playlists found on this Spotify account."))
+                return@flow
+            }
+
+            var created = 0
+            var updated = 0
+            var matched = 0
+            var unmatched = 0
+            var alreadyPresent = 0
+            // Shared across playlists: the same song sitting in five of them costs one search.
+            val resolved = mutableMapOf<String, String?>()
+
+            library.forEachIndexed { index, item ->
+                val slice =
+                    runCatching { readPlaylistByUri(item.uri, tokens) }
+                        .getOrElse { throwable ->
+                            // One unreadable playlist should not abandon the rest of the library.
+                            Logger.w(TAG, "skipping ${item.name}: ${throwable.message}")
+                            null
+                        } ?: return@forEachIndexed
+
+                val existing = localDataSource.getLocalPlaylistBySpotifyUri(item.uri)
+                val existingIds = existing?.tracks.orEmpty()
+                // What the local playlist already holds, indexed the same way tracks are matched.
+                // This is what lets an unchanged playlist cost zero YouTube searches: a Spotify
+                // track that is already here is recognised without ever being looked up.
+                val presentKeys =
+                    localDataSource
+                        .getSongByListVideoIdFull(existingIds)
+                        .map { song ->
+                            tokens(song.title) to song.artistName.orEmpty().flatMap { tokens(it) }.toSet()
+                        }
+
+                val newVideoIds = mutableListOf<String>()
+                val newSongs = mutableListOf<SongEntity>()
+                var processed = 0
+                var consecutiveFailures = 0
+
+                for (track in slice.tracks) {
+                    emit(
+                        SpotifyImportProgress.Matching(
+                            playlistName = item.name,
+                            processed = processed,
+                            total = slice.tracks.size,
+                            matched = matched,
+                            playlistIndex = index + 1,
+                            playlistCount = library.size,
+                        ),
+                    )
+                    processed++
+
+                    if (track.isAlreadyIn(presentKeys)) {
+                        alreadyPresent++
+                        continue
+                    }
+
+                    val key = track.searchKey()
+                    if (key.isBlank()) {
+                        unmatched++
+                        continue
+                    }
+                    val cached = if (resolved.containsKey(key)) resolved[key] else null
+                    if (resolved.containsKey(key)) {
+                        if (cached == null) unmatched++ else if (cached !in existingIds && cached !in newVideoIds) {
+                            newVideoIds.add(cached)
+                            matched++
+                        } else {
+                            alreadyPresent++
+                        }
+                        continue
+                    }
+
+                    delay(SEARCH_INTERVAL_MS + Random.nextLong(SEARCH_JITTER_MS))
+                    val results =
+                        youTube.searchSongsSignedOut(key).getOrElse { throwable ->
+                            Logger.w(TAG, "search failed for '$key': ${throwable.message}")
+                            null
+                        }
+                    if (results == null) {
+                        consecutiveFailures++
+                        if (consecutiveFailures >= SEARCH_FAILURE_LIMIT) {
+                            emit(
+                                SpotifyImportProgress.Error(
+                                    "YouTube stopped answering searches. Playlists finished so far were kept — try again later.",
+                                ),
+                            )
+                            return@flow
+                        }
+                        unmatched++
+                        continue
+                    }
+                    consecutiveFailures = 0
+
+                    val best = results.bestMatchFor(track)
+                    resolved[key] = best?.id
+                    when {
+                        best == null -> unmatched++
+                        best.id in existingIds || best.id in newVideoIds -> alreadyPresent++
+                        else -> {
+                            matched++
+                            newVideoIds.add(best.id)
+                            newSongs.add(best.toSongEntity())
+                        }
+                    }
+                }
+
+                if (newVideoIds.isEmpty()) return@forEachIndexed
+                newSongs.chunked(SONG_BATCH_SIZE).forEach { localDataSource.insertSongs(it) }
+
+                if (existing == null) {
+                    localDataSource.insertLocalPlaylistWithTracks(
+                        localPlaylist =
+                            LocalPlaylistEntity(
+                                title = uniqueTitle(item.name),
+                                thumbnail = item.coverArt,
+                                spotifyPlaylistUri = item.uri,
+                                tracks = newVideoIds,
+                            ),
+                        videoIds = newVideoIds,
+                    )
+                    created++
+                } else {
+                    // Appended, never rewritten: anything the user added or removed locally stays
+                    // exactly as they left it. A sync that silently reordered or dropped their
+                    // edits would be worse than no sync.
+                    val startPosition = existingIds.size
+                    newVideoIds.forEachIndexed { offset, videoId ->
+                        localDataSource.insertPairSongLocalPlaylist(
+                            PairSongLocalPlaylist(
+                                playlistId = existing.id,
+                                songId = videoId,
+                                position = startPosition + offset,
+                            ),
+                        )
+                    }
+                    localDataSource.updateLocalPlaylistTracks(existingIds + newVideoIds, existing.id)
+                    updated++
+                }
+            }
+
+            emit(
+                SpotifyImportProgress.Success(
+                    SpotifyImportResult(
+                        playlistName = "",
+                        tracksMatched = matched,
+                        unmatched = unmatched,
+                        possiblyTruncated = false,
+                        playlistsCreated = created,
+                        playlistsUpdated = updated,
+                        alreadyPresent = alreadyPresent,
+                    ),
+                ),
+            )
+        }.flowOn(Dispatchers.IO)
+
+    /** Liked Songs first, then the account's playlists, paged. */
+    private suspend fun readLibrary(tokens: Pair<String, String>): List<SpotifyLibraryItem> {
+        val items = mutableListOf<SpotifyLibraryItem>()
+        items +=
+            SpotifyLibraryItem(
+                uri = LIKED_SONGS_URI,
+                name = "Liked Songs",
+                coverArt = null,
+                isLikedSongs = true,
+            )
+        var offset = 0
+        while (true) {
+            val page =
+                spotify
+                    .getLibraryPlaylists(offset, LIBRARY_PAGE, tokens.first, tokens.second)
+                    .getOrThrow()
+            items += page
+            offset += LIBRARY_PAGE
+            if (page.size < LIBRARY_PAGE) break
+            delay(PATHFINDER_PAGE_INTERVAL_MS)
+        }
+        return items.distinctBy { it.uri }
+    }
+
     /**
      * Reads the whole playlist, preferring the route that can see all of it.
      *
@@ -230,8 +433,14 @@ internal class SpotifyImportRepositoryImpl(
      */
     private suspend fun readPlaylist(playlistId: String): SpotifyPlaylistSlice {
         val tokens = spotifyTokens() ?: return spotify.getPlaylistFromEmbed(playlistId).getOrThrow()
+        return runCatching { readPlaylistByUri("spotify:playlist:" + playlistId, tokens) }
+            .getOrElse { spotify.getPlaylistFromEmbed(playlistId).getOrThrow() }
+    }
 
-        val uri = "spotify:playlist:" + playlistId
+    private suspend fun readPlaylistByUri(
+        uri: String,
+        tokens: Pair<String, String>,
+    ): SpotifyPlaylistSlice {
         val collected = mutableListOf<SpotifyTrackInfo>()
         var name: String? = null
         var total: Int? = null
@@ -244,8 +453,8 @@ internal class SpotifyImportRepositoryImpl(
                         // These query hashes are pinned to a web-player release and will eventually
                         // stop matching. Falling back beats failing outright; the cost is the embed
                         // page limits, and only for a playlist that has a public link.
-                        Logger.w(TAG, "pathfinder read failed, falling back: " + throwable.message)
-                        if (collected.isEmpty()) return spotify.getPlaylistFromEmbed(playlistId).getOrThrow()
+                        Logger.w(TAG, "pathfinder read failed: " + throwable.message)
+                        if (collected.isEmpty()) throw throwable
                         return SpotifyPlaylistSlice(name, null, total, collected)
                     }
             if (name == null) name = page.name
@@ -317,6 +526,24 @@ internal class SpotifyImportRepositoryImpl(
         var suffix = 2
         while ("$name ($suffix)".trim().lowercase() in taken) suffix++
         return "$name ($suffix)"
+    }
+}
+
+/**
+ * Whether a locally-held song already covers this Spotify track.
+ *
+ * Compared on the same tokens the matcher scores with, so "already synced" means the same thing
+ * here as "matched" does there. This is what makes re-syncing an unchanged playlist free: the track
+ * is recognised from what is already in the database, without spending a YouTube search to learn
+ * its video id.
+ */
+private fun SpotifyTrackInfo.isAlreadyIn(present: List<Pair<Set<String>, Set<String>>>): Boolean {
+    val wantTitle = tokens(title)
+    if (wantTitle.isEmpty()) return false
+    val wantArtists = tokens(artist)
+    return present.any { (haveTitle, haveArtists) ->
+        overlap(wantTitle, haveTitle) >= 0.85 &&
+            (wantArtists.isEmpty() || overlap(wantArtists, haveArtists) >= 0.5)
     }
 }
 
