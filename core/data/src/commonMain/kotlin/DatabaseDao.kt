@@ -43,6 +43,8 @@ import com.maxrave.domain.data.type.RecentlyType
 import com.maxrave.domain.extension.now
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDateTime
+import com.maxrave.domain.data.entities.sync.SyncTombstone
+import com.maxrave.domain.data.entities.sync.SyncTombstoneEntity
 
 /**
  * The album name older builds stored when they could not find a real one.
@@ -1515,5 +1517,33 @@ interface DatabaseDao {
         deleteAllAutoEqEntries()
         insertAutoEqEntries(entries)
         upsertAutoEqIndexMeta(meta)
+    }
+
+    // ============================== Sync tombstones ==============================
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSyncTombstone(tombstone: SyncTombstoneEntity)
+
+    @Query("SELECT * FROM sync_tombstone")
+    suspend fun getAllSyncTombstones(): List<SyncTombstoneEntity>
+
+    @Query("DELETE FROM sync_tombstone WHERE deletedAt < :cutoff")
+    suspend fun pruneSyncTombstones(cutoff: LocalDateTime)
+
+    /**
+     * Deletes a local playlist and remembers that it was deleted.
+     *
+     * One transaction, because a deletion without its tombstone is a deletion the next sync will
+     * undo -- the row is simply absent, which is indistinguishable from one the other device has
+     * not seen yet.
+     */
+    @Transaction
+    suspend fun deleteLocalPlaylistTracked(id: Long) {
+        deleteLocalPlaylist(id)
+        insertSyncTombstone(
+            SyncTombstoneEntity(
+                entityKey = SyncTombstone.key(SyncTombstone.TYPE_LOCAL_PLAYLIST, id.toString()),
+            ),
+        )
     }
 }

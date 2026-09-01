@@ -29,6 +29,16 @@ data class LocalPlaylistEntity(
      */
     @ColumnInfo(name = "spotify_playlist_uri")
     val spotifyPlaylistUri: String? = null,
+    /**
+     * When this playlist last changed, for merging two devices.
+     *
+     * Distinct from [inLibrary], which is when it was added: a merge needs to know which side holds
+     * the newer version, and creation time cannot answer that. Nullable so rows written before this
+     * column existed are recognisable as "unknown", rather than being dated to the migration and
+     * winning every comparison against a genuinely newer copy.
+     */
+    @ColumnInfo(name = "updated_at")
+    val updatedAt: LocalDateTime? = null,
     val tracks: List<String>? = null,
     // Only synced with YouTube playlist
     // val listSetVideoId: List<String>? = null,

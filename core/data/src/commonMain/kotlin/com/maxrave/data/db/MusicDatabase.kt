@@ -31,9 +31,11 @@ import com.maxrave.domain.data.entities.TranslatedLyricsEntity
 import com.maxrave.domain.data.entities.YourYouTubePlaylistList
 import com.maxrave.domain.data.entities.analytics.EventArtistEntity
 import com.maxrave.domain.data.entities.analytics.PlaybackEventEntity
+import com.maxrave.domain.data.entities.sync.SyncTombstoneEntity
 
 @Database(
     entities = [
+        SyncTombstoneEntity::class,
         NewFormatEntity::class, SongInfoEntity::class, SearchHistory::class, SongEntity::class, ArtistEntity::class,
         AlbumEntity::class, PlaylistEntity::class, LocalPlaylistEntity::class, LyricsEntity::class, QueueEntity::class,
         SetVideoIdEntity::class, PairSongLocalPlaylist::class, GoogleAccountEntity::class, FollowedArtistSingleAndAlbum::class,
@@ -41,7 +43,7 @@ import com.maxrave.domain.data.entities.analytics.PlaybackEventEntity
         YourYouTubePlaylistList::class, PlaybackEventEntity::class, EventArtistEntity::class,
         AutoEqEntryEntity::class, AutoEqIndexMetaEntity::class, AutoEqCurveEntity::class
     ],
-    version = 26,
+    version = 27,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 2, to = 3), AutoMigration(
@@ -86,6 +88,7 @@ import com.maxrave.domain.data.entities.analytics.PlaybackEventEntity
         // the migration itself — no spec, and no path by which existing rows can be touched.
         AutoMigration(24, 25),
         AutoMigration(25, 26),
+        AutoMigration(26, 27),
         AutoMigration(23, 25),
         AutoMigration(22, 25),
     ],

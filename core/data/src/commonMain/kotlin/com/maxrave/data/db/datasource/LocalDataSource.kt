@@ -383,7 +383,17 @@ internal class LocalDataSource(
         videoIds: List<String>,
     ) = databaseDao.insertLocalPlaylistWithTracks(localPlaylist, videoIds)
 
-    suspend fun deleteLocalPlaylist(id: Long) = databaseDao.deleteLocalPlaylist(id)
+    /**
+     * Deletes a playlist and records the deletion, so a later sync does not bring it back.
+     *
+     * The untracked [databaseDao.deleteLocalPlaylist] is left in place for internal rewrites that
+     * are not user intent; anything the user removes should go through here.
+     */
+    suspend fun deleteLocalPlaylist(id: Long) = databaseDao.deleteLocalPlaylistTracked(id)
+
+    suspend fun getAllSyncTombstones() = databaseDao.getAllSyncTombstones()
+
+    suspend fun pruneSyncTombstones(cutoff: LocalDateTime) = databaseDao.pruneSyncTombstones(cutoff)
 
     suspend fun updateLocalPlaylistTitle(
         title: String,
