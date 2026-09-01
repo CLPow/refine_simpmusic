@@ -45,6 +45,7 @@ import com.maxrave.domain.mediaservice.handler.QueueData
 import com.maxrave.domain.mediaservice.handler.RepeatState
 import com.maxrave.domain.mediaservice.handler.SimpleMediaState
 import com.maxrave.domain.mediaservice.handler.SleepTimerState
+import com.maxrave.domain.repository.PlaybackPingStatus
 import com.maxrave.domain.repository.AlbumRepository
 import com.maxrave.domain.repository.CacheRepository
 import com.maxrave.domain.repository.LocalPlaylistRepository
@@ -124,6 +125,9 @@ class SharedViewModel(
 ) : BaseViewModel() {
     /** See [StreamRepository.accountGuardCooldownMs]. 0 when account traffic is flowing normally. */
     fun accountGuardCooldownMs(): Long = streamRepository.accountGuardCooldownMs()
+
+    /** See [StreamRepository.lastPlaybackPingStatus]. Null until a track has played. */
+    fun lastPlaybackPingStatus(): PlaybackPingStatus? = streamRepository.lastPlaybackPingStatus()
 
     var isFirstLiked: Boolean = false
     var isFirstMiniplayer: Boolean = false
@@ -737,6 +741,20 @@ class SharedViewModel(
                         track.videoId,
                         lyricsData,
                     )
+                } else {
+                    // The end of the chain, and the only place that can honestly say there are
+                    // none: every source has been asked and nothing was saved from an earlier run.
+                    // Previously this branch did not exist, so a track with no lyrics anywhere left
+                    // the screen in whatever state it was already in, with no indication that the
+                    // search had finished.
+                    Logger.d(tag, "No lyrics from any source for ${track.videoId}")
+                    updateLyrics(
+                        track.videoId,
+                        track.durationSeconds ?: 0,
+                        null,
+                        false,
+                        LyricsProvider.OFFLINE,
+                    )
                 }
             }
         }
@@ -1334,42 +1352,93 @@ class SharedViewModel(
                         ?: ""
                 }
             resetLyricsVoteState()
-            val lyricsProvider = dataStoreManager.lyricsProvider.first()
-            when (lyricsProvider) {
-                DataStoreManager.SIMPMUSIC -> {
-                    getSimpMusicLyrics(
-                        videoId,
-                        song,
-                        (artist ?: ""),
-                        duration,
-                    )
-                }
+            // A fresh attempt: every source is eligible again for this track.
+            triedLyricsSources.clear()
+            tryLyricsSource(
+                preferred = dataStoreManager.lyricsProvider.first(),
+                videoId = videoId,
+                song = song,
+                artist = artist ?: "",
+                duration = duration,
+            )
+        }
+    }
 
-                DataStoreManager.LRCLIB -> {
-                    getLrclibLyrics(
-                        song,
-                        (artist ?: ""),
-                        duration,
-                    )
-                }
+    /**
+     * Which sources have already been asked for the track being loaded.
+     *
+     * Confined to the single coroutine that loads lyrics, so no synchronisation is needed; cleared
+     * at the start of each attempt.
+     */
+    private val triedLyricsSources = mutableSetOf<String>()
 
-                DataStoreManager.YOUTUBE -> {
-                    getYouTubeCaption(
-                        videoId,
-                        song,
-                        (artist ?: ""),
-                        duration,
-                    )
-                }
+    /**
+     * Key for Spotify within the chain.
+     *
+     * Spotify is not one of the four providers a user can pick in Settings — it has never been in
+     * that list — so it has no `DataStoreManager` constant. It still needs a name here to be
+     * ordered and marked as tried like the rest.
+     */
+    private val SPOTIFY_LYRICS_SOURCE = "spotify_lyrics_source"
 
-                DataStoreManager.BETTER_LYRICS -> {
-                    getBetterLyrics(
-                        song,
-                        (artist ?: "").toString(),
-                        duration,
-                    )
-                }
-            }
+    /**
+     * Order the sources are consulted in once the user's choice has been tried.
+     *
+     * SimpMusic first because it is the app's own database and carries timing contributed for these
+     * exact videos; Spotify next because its coverage is the best of the remainder when a session
+     * exists; LRCLIB then BetterLyrics as broad community sources; YouTube captions last, since a
+     * caption track is often auto-generated or a translation rather than lyrics.
+     */
+    private val lyricsSourceOrder =
+        listOf(
+            DataStoreManager.SIMPMUSIC,
+            SPOTIFY_LYRICS_SOURCE,
+            DataStoreManager.LRCLIB,
+            DataStoreManager.BETTER_LYRICS,
+            DataStoreManager.YOUTUBE,
+        )
+
+    /**
+     * Runs the next source that has not been tried, starting with [preferred].
+     *
+     * Every source used to hard-code which one it fell back to, which left BetterLyrics and YouTube
+     * captions unreachable unless explicitly selected, and made LRCLIB a dead end. Routing every
+     * miss through here means a track is only reported as having no lyrics once every source has
+     * actually been asked.
+     */
+    private suspend fun tryLyricsSource(
+        preferred: String?,
+        videoId: String,
+        song: SongEntity,
+        artist: String,
+        duration: Int,
+    ) {
+        val next =
+            preferred?.takeIf { it !in triedLyricsSources }
+                ?: lyricsSourceOrder.firstOrNull { it !in triedLyricsSources }
+
+        if (next == null) {
+            // Everything has been asked. Fall through to whatever was saved locally on an earlier
+            // run; that function reports the empty case, so the user is told rather than left
+            // watching a spinner that never resolves.
+            getSavedLyrics(song.toTrack().copy(durationSeconds = duration))
+            return
+        }
+        triedLyricsSources += next
+
+        when (next) {
+            DataStoreManager.SIMPMUSIC -> getSimpMusicLyrics(videoId, song, artist, duration)
+            SPOTIFY_LYRICS_SOURCE ->
+                getSpotifyLyrics(
+                    song.toTrack().copy(durationSeconds = duration),
+                    "${song.title} $artist",
+                    duration,
+                )
+            DataStoreManager.LRCLIB -> getLrclibLyrics(song, artist, duration)
+            DataStoreManager.BETTER_LYRICS -> getBetterLyrics(song, artist, duration)
+            DataStoreManager.YOUTUBE -> getYouTubeCaption(videoId, song, artist, duration)
+            // An unrecognised stored value used to fall through the `when` and quietly load nothing.
+            else -> tryLyricsSource(null, videoId, song, artist, duration)
         }
     }
 
@@ -1398,18 +1467,11 @@ class SharedViewModel(
                     videoId,
                     data,
                 )
-            } else if (dataStoreManager.spotifyLyrics.first() == TRUE) {
-                getSpotifyLyrics(
-                    song.toTrack().copy(durationSeconds = duration),
-                    "${song.title} $artist",
-                    duration,
-                )
             } else {
-                getLrclibLyrics(
-                    song,
-                    (artist ?: ""),
-                    duration,
-                )
+                // Spotify used to sit here behind its own toggle, and LRCLIB was the hard-coded
+                // tail. Both are now just entries in the chain, so nothing is skipped because a
+                // switch happened to be off.
+                tryLyricsSource(null, videoId, song, artist ?: "", duration)
             }
         }
     }
@@ -1454,12 +1516,7 @@ class SharedViewModel(
                     }
 
                     else -> {
-                        getSimpMusicLyrics(
-                            videoId,
-                            song,
-                            (artist ?: ""),
-                            duration,
-                        )
+                        tryLyricsSource(null, videoId, song, artist ?: "", duration)
                     }
                 }
             }
@@ -1500,11 +1557,7 @@ class SharedViewModel(
                         }
 
                         else -> {
-                            getSavedLyrics(
-                                song.toTrack().copy(
-                                    durationSeconds = duration,
-                                ),
-                            )
+                            tryLyricsSource(null, song.videoId, song, artist, duration)
                         }
                     }
                 }
@@ -1547,12 +1600,7 @@ class SharedViewModel(
 
                         else -> {
                             log("Get BetterLyrics Error: ${res.message}")
-                            getSimpMusicLyrics(
-                                song.videoId,
-                                song,
-                                artist,
-                                duration,
-                            )
+                            tryLyricsSource(null, song.videoId, song, artist, duration)
                         }
                     }
                 }
@@ -1714,10 +1762,12 @@ class SharedViewModel(
                     }
 
                     else -> {
-                        getLrclibLyrics(
-                            track.toSongEntity(),
-                            track.artists.toListName().firstOrNull() ?: "",
-                            duration ?: 0,
+                        tryLyricsSource(
+                            preferred = null,
+                            videoId = track.videoId,
+                            song = track.toSongEntity(),
+                            artist = track.artists.toListName().firstOrNull() ?: "",
+                            duration = duration ?: 0,
                         )
                     }
                 }

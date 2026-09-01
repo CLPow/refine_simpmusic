@@ -2103,16 +2103,23 @@ internal class CrossfadeExoPlayerAdapter(
         targetSpeedRatio: Float = 1.0f,
         targetPitchRatio: Float = 1.0f,
     ) {
-        val steps = 50 // 50 steps for smooth transition
-        val delayPerStep = (effectiveDurationMs / steps).coerceAtLeast(20) // min 20ms per step
         val targetVolume = internalVolume
         val useDjFilter = djCrossfadeEnabled
         val useAutoMixRamp = targetSpeedRatio != 1.0f || targetPitchRatio != 1.0f
         Logger.d(
             TAG,
-            "Crossfade animation: ${effectiveDurationMs}ms, $steps steps, ${delayPerStep}ms/step, " +
+            "Crossfade animation: ${effectiveDurationMs}ms, tick ${RAMP_TICK_MS}ms, " +
                 "dj=$useDjFilter, autoMix=$useAutoMixRamp (speed=$targetSpeedRatio, pitch=$targetPitchRatio)",
         )
+
+        // The gain is handed to the audio processors, not written to player.volume: they interpolate
+        // it across each buffer on the audio thread, so this loop only has to publish where the fade
+        // is heading and jitter here cannot be heard. Both players keep their own volume at the
+        // user's level throughout, which is also what restores cleanly if the fade is cancelled.
+        currentPlayerFilter?.resetGain(1f)
+        secondaryPlayerFilter?.resetGain(0f)
+        currentPlayer?.volume = targetVolume
+        nextPlayer.volume = targetVolume
 
         // Setup DJ filters before starting animation
         if (useDjFilter) {
@@ -2142,10 +2149,22 @@ internal class CrossfadeExoPlayerAdapter(
         crossfadeJob =
             coroutineScope.launch {
                 try {
-                    for (step in 0..steps) {
-                        if (!isActive) break
+                    // Fading into a player that is still buffering spends the first seconds of the
+                    // transition on silence, and the incoming track then arrives already part-way
+                    // up the curve with its opening gone. Hold the outgoing track at full level
+                    // until there is something to fade into. Bounded, because a track that never
+                    // becomes ready must not wedge the transition -- past the deadline the fade
+                    // proceeds regardless, which is no worse than the old behaviour.
+                    awaitPlayerReady(nextPlayer, READY_WAIT_TIMEOUT_MS)
 
-                        val progress = step.toFloat() / steps
+                    // Driven by elapsed time rather than by counting steps. The old loop ran
+                    // `0..steps` with a delay after every iteration, so a fade always overran its
+                    // own duration by a step plus whatever the scheduler added -- which is exactly
+                    // the "old track fades for too long" this was reported as.
+                    val startedAtMs = elapsedRealtimeMs()
+                    val durationMs = effectiveDurationMs.toFloat().coerceAtLeast(1f)
+                    while (isActive) {
+                        val progress = ((elapsedRealtimeMs() - startedAtMs) / durationMs).coerceIn(0f, 1f)
 
                         // Equal-power crossfade (cos/sin curves) instead of linear.
                         // Human loudness perception is logarithmic — linear volume fade makes
@@ -2158,12 +2177,12 @@ internal class CrossfadeExoPlayerAdapter(
                         val fadeAngle = (progress * PI / 2).toFloat()
 
                         // Fade out current player (old track): cos curve, slow at start, fast at end
-                        val fadeOutVolume = targetVolume * cos(fadeAngle)
-                        currentPlayer?.volume = fadeOutVolume
+                        val fadeOutGain = cos(fadeAngle)
+                        currentPlayerFilter?.targetGain = fadeOutGain
 
                         // Fade in next player (new track): sin curve, fast at start, slow at end
-                        val fadeInVolume = targetVolume * sin(fadeAngle)
-                        nextPlayer.volume = fadeInVolume
+                        val fadeInGain = sin(fadeAngle)
+                        secondaryPlayerFilter?.targetGain = fadeInGain
 
                         // DJ-style filter sweep (alongside volume)
                         // S-curve (sigmoid) on time axis: holds flat at start/end,
@@ -2215,7 +2234,8 @@ internal class CrossfadeExoPlayerAdapter(
                             }
                         }
 
-                        delay(delayPerStep.toLong())
+                        if (progress >= 1f) break
+                        delay(RAMP_TICK_MS)
                     }
 
                     // Transition complete
@@ -2225,6 +2245,10 @@ internal class CrossfadeExoPlayerAdapter(
                     // Cleanup DJ filters
                     currentPlayerFilter?.enabled = false
                     secondaryPlayerFilter?.enabled = false
+                    // The gain lives in the processor now, so the player that survives a cancelled
+                    // fade has to be handed it back explicitly. Without this it keeps whatever
+                    // partial gain the ramp had reached and plays on quietly for ever.
+                    currentPlayerFilter?.resetGain(1f)
                     // Restore outgoing player's speed/pitch to natural
                     currentPlayer?.playbackParameters =
                         PlaybackParameters(internalPlaybackSpeed, internalPlaybackPitch)
@@ -2236,6 +2260,34 @@ internal class CrossfadeExoPlayerAdapter(
                 }
             }
     }
+
+    /**
+     * Suspends until [player] has buffered enough to produce audio, or [timeoutMs] elapses.
+     *
+     * Polled rather than driven by a listener: the crossfade already owns this player's listener
+     * slot through the swap pattern, and adding a second one purely to await a state that usually
+     * arrives within a frame or two would be more machinery than the job needs.
+     */
+    private suspend fun awaitPlayerReady(
+        player: ExoPlayer,
+        timeoutMs: Long,
+    ) {
+        val deadline = elapsedRealtimeMs() + timeoutMs
+        while (player.playbackState == Player.STATE_BUFFERING && elapsedRealtimeMs() < deadline) {
+            delay(READY_POLL_MS)
+        }
+        if (player.playbackState == Player.STATE_BUFFERING) {
+            Logger.w(TAG, "Incoming track still buffering after ${timeoutMs}ms; fading anyway")
+        }
+    }
+
+    /**
+     * Monotonic milliseconds for driving the fade.
+     *
+     * `nanoTime` rather than the wall clock: a clock adjustment part-way through a transition would
+     * otherwise jump the fade forwards or backwards.
+     */
+    private fun elapsedRealtimeMs(): Long = System.nanoTime() / 1_000_000L
 
     // ========== AutoMix Public API ==========
 
@@ -2654,6 +2706,19 @@ internal class CrossfadeExoPlayerAdapter(
         // Prevents SonicAudioProcessor from popping on micro-adjustments
         private const val SPEED_PITCH_STEP = 0.02f
 
+        /**
+         * How often the fade publishes a new gain target.
+         *
+         * Only sets how finely the curve is sampled, not how smooth it sounds -- the processors
+         * interpolate between whatever they are given. Frequent enough that the equal-power curve
+         * is followed closely, sparse enough to stay cheap on the main thread.
+         */
+        private const val RAMP_TICK_MS = 25L
+
+        /** How long the fade will wait for the incoming track to buffer before starting anyway. */
+        private const val READY_WAIT_TIMEOUT_MS = 1_500L
+        private const val READY_POLL_MS = 20L
+
         // Front-loaded BPM/pitch ramp portion (fraction of crossfade duration).
         // Outgoing tempo reaches target within the first [BPM_RAMP_PORTION] of the
         // crossfade (smoothstep S-curve) and then holds for the remainder.
@@ -2700,7 +2765,11 @@ internal class CrossfadeExoPlayerAdapter(
         // Audio focus is held at the adapter level (see Audio Focus section),
         // not per-player, so it survives this crossfade swap (#2155).
 
-        // Ensure correct volume and playback parameters
+        // Ensure correct volume and playback parameters. The gain is reset on the processor as
+        // well: it ends a fade at 1.0 already, but snapping it makes that a guarantee rather than a
+        // consequence of the ramp having run to completion -- which it has not, if we got here by
+        // any path other than the fade finishing.
+        currentPlayerFilter?.resetGain(1f)
         currentPlayer?.volume = internalVolume
         currentPlayer?.playbackParameters = PlaybackParameters(internalPlaybackSpeed, internalPlaybackPitch)
         currentPlayer?.skipSilenceEnabled = internalSkipSilence
@@ -2773,7 +2842,10 @@ internal class CrossfadeExoPlayerAdapter(
                                     val isPrecached = nextVideoId != null && precachedPlayers.containsKey(nextVideoId)
                                     // If next track is precached, trigger at exactly crossfadeDurationMs.
                                     // If NOT precached, trigger 3s earlier to allow preparation time.
-                                    val preparationBufferMs = if (isPrecached) 0L else 3000L
+                                    // Precached still needs a moment: the player has to be swapped in
+                                // and started, and asking for the fade at exactly the fade's own
+                                // length before the end leaves nothing for that.
+                                val preparationBufferMs = if (isPrecached) 500L else 3000L
                                     // In Auto mode, calculate beat-quantized duration for trigger threshold.
                                     val resolvedDurationMs =
                                         if (crossfadeDurationMs == DataStoreManager.CROSSFADE_DURATION_AUTO) {

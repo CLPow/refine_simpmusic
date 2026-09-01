@@ -8,22 +8,26 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * Media3 [AudioProcessor] that applies a real-time Biquad low-pass or high-pass filter
- * to the audio stream. Used for DJ-style crossfade transitions.
+ * Media3 [AudioProcessor] carrying the two things a crossfade does to one track: its **gain**, and
+ * optionally a low-pass or high-pass sweep for the DJ-style blend.
  *
  * Key design:
- * - [enabled], [cutoffFrequencyHz], and [filterType] can be changed at runtime (thread-safe).
- * - When [enabled] is false, [isActive] returns false and ExoPlayer skips this processor
- *   entirely — zero CPU overhead during normal playback.
+ * - [enabled], [cutoffFrequencyHz], [filterType] and [targetGain] can all be changed at runtime.
  * - Coefficient recalculation is lazy: only when cutoff or filter type changes.
  * - Supports PCM 16-bit audio (mono and stereo).
+ *
+ * The gain lives here rather than on the player because `ExoPlayer.volume` is a coarse control: the
+ * crossfade coroutine can only rewrite it a handful of times a second, from the main thread, and
+ * each write lands on a whole buffer at once. Ramping a fade that way is audible as stepping. Here
+ * the coroutine only publishes where the gain should be heading, and [queueInput] slides towards it
+ * across the samples of each buffer on the audio thread, so main-thread scheduling cannot roughen
+ * the fade.
  */
 @UnstableApi
 class CrossfadeFilterAudioProcessor : BaseAudioProcessor() {
-
     /**
-     * Whether the filter is active. When false, audio passes through unmodified.
-     * Changing this triggers a flush in ExoPlayer's pipeline.
+     * Whether the filter is active. When false, audio passes through unfiltered — though
+     * [targetGain] still applies, since a crossfade fades whether or not the DJ sweep is on.
      */
     @Volatile
     var enabled: Boolean = false
@@ -60,6 +64,30 @@ class CrossfadeFilterAudioProcessor : BaseAudioProcessor() {
             }
         }
 
+    /**
+     * Where the gain should be heading, 0f..1f. Published by the crossfade ramp.
+     *
+     * Never applied abruptly: [queueInput] interpolates from wherever the gain actually is to this
+     * value across the buffer it is handed, so a jump between published values becomes a slide
+     * rather than a click.
+     */
+    @Volatile
+    var targetGain: Float = UNITY_GAIN
+
+    /**
+     * Snaps the gain, skipping the slide.
+     *
+     * For the start and end of a fade, where the value is already correct and interpolating from a
+     * stale one would audibly ramp from the wrong place.
+     */
+    fun resetGain(value: Float) {
+        targetGain = value
+        appliedGain = value
+    }
+
+    /** Audio-thread only: where the gain actually is, between buffers. */
+    private var appliedGain: Float = UNITY_GAIN
+
     private val filter = BiquadFilter()
 
     @Volatile
@@ -78,22 +106,32 @@ class CrossfadeFilterAudioProcessor : BaseAudioProcessor() {
         return inputAudioFormat
     }
 
+    /**
+     * Always in the chain.
+     *
+     * Returning false when idle would let ExoPlayer drop the processor, and it would then have to
+     * be reinstated mid-transition — a reconfiguration during the one moment that has to sound
+     * seamless. The idle path in [queueInput] is a straight buffer copy, so the cost of staying is
+     * a memcpy.
+     */
     override fun isActive(): Boolean = true
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         val remaining = inputBuffer.remaining()
         if (remaining == 0) return
 
-        if (!enabled || sampleRate == 0) {
-            // Pass through: copy input to output (avoid put(sameBuffer) which throws)
+        val target = targetGain
+        val filtering = enabled && sampleRate != 0
+        val silentOnGain = appliedGain == UNITY_GAIN && target == UNITY_GAIN
+
+        if (!filtering && silentOnGain) {
             val output = replaceOutputBuffer(remaining)
             copyBuffer(inputBuffer, output, remaining)
             output.flip()
             return
         }
 
-        // Recalculate coefficients if cutoff or type changed
-        if (coefficientsDirty) {
+        if (filtering && coefficientsDirty) {
             filter.updateCoefficients(
                 cutoffHz = cutoffFrequencyHz,
                 sampleRate = sampleRate,
@@ -105,53 +143,82 @@ class CrossfadeFilterAudioProcessor : BaseAudioProcessor() {
         val output = replaceOutputBuffer(remaining)
         inputBuffer.order(ByteOrder.nativeOrder())
 
+        val bytesPerFrame = BYTES_PER_SAMPLE * channelCount
+        val frames = if (bytesPerFrame > 0) remaining / bytesPerFrame else 0
+        // Spread the whole move across this buffer, so consecutive buffers join without a step even
+        // when the published target jumps.
+        val gainStep = if (frames > 0) (target - appliedGain) / frames else 0f
+
         when (channelCount) {
-            1 -> processMonoBlock(inputBuffer, output)
-            2 -> processStereoBlock(inputBuffer, output)
-            else -> {
-                // Unsupported channel count: pass through
-                copyBuffer(inputBuffer, output, remaining)
-            }
+            1 -> processMono(inputBuffer, output, gainStep, filtering)
+            2 -> processStereo(inputBuffer, output, gainStep, filtering)
+            else -> copyBuffer(inputBuffer, output, remaining)
         }
 
+        // Land exactly on the target rather than on an accumulation of floating-point steps.
+        appliedGain = target
         output.flip()
     }
 
     /**
-     * Copy bytes from src to dst. Use this instead of dst.put(src) because
-     * replaceOutputBuffer() may return the same buffer as input, and
-     * ByteBuffer.put(ByteBuffer) throws if source and destination are the same.
+     * Copy bytes from src to dst. Use this instead of dst.put(src) when they may be the same
+     * buffer: `ByteBuffer.put(ByteBuffer)` throws if source and destination are identical.
      */
-    private fun copyBuffer(src: ByteBuffer, dst: ByteBuffer, size: Int) {
+    private fun copyBuffer(
+        src: ByteBuffer,
+        dst: ByteBuffer,
+        size: Int,
+    ) {
         if (src === dst) {
             dst.position(0)
             dst.limit(size)
             return
         }
-        val pos = src.position()
-        for (i in 0 until size) {
-            dst.put(src.get(pos + i))
-        }
-        src.position(pos + size)
+        dst.put(src)
     }
 
-    private fun processMonoBlock(input: ByteBuffer, output: ByteBuffer) {
-        while (input.remaining() >= 2) {
+    private fun processMono(
+        input: ByteBuffer,
+        output: ByteBuffer,
+        gainStep: Float,
+        filtering: Boolean,
+    ) {
+        var gain = appliedGain
+        while (input.remaining() >= BYTES_PER_SAMPLE) {
             val sample = input.short.toDouble() / Short.MAX_VALUE
-            val filtered = filter.processSampleMono(sample)
-            output.putShort((filtered.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort())
+            val shaped = if (filtering) filter.processSampleMono(sample) else sample
+            output.putShort(toPcm(shaped * gain))
+            gain += gainStep
         }
     }
 
-    private fun processStereoBlock(input: ByteBuffer, output: ByteBuffer) {
-        while (input.remaining() >= 4) {
+    private fun processStereo(
+        input: ByteBuffer,
+        output: ByteBuffer,
+        gainStep: Float,
+        filtering: Boolean,
+    ) {
+        var gain = appliedGain
+        while (input.remaining() >= BYTES_PER_SAMPLE * 2) {
             val left = input.short.toDouble() / Short.MAX_VALUE
             val right = input.short.toDouble() / Short.MAX_VALUE
-            val (filteredL, filteredR) = filter.processStereo(left, right)
-            output.putShort((filteredL.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort())
-            output.putShort((filteredR.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort())
+            val shapedL: Double
+            val shapedR: Double
+            if (filtering) {
+                val (l, r) = filter.processStereo(left, right)
+                shapedL = l
+                shapedR = r
+            } else {
+                shapedL = left
+                shapedR = right
+            }
+            output.putShort(toPcm(shapedL * gain))
+            output.putShort(toPcm(shapedR * gain))
+            gain += gainStep
         }
     }
+
+    private fun toPcm(value: Double): Short = (value.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
 
     override fun onFlush() {
         super.onFlush()
@@ -163,6 +230,12 @@ class CrossfadeFilterAudioProcessor : BaseAudioProcessor() {
         enabled = false
         cutoffFrequencyHz = 20000f
         filterType = BiquadFilter.FilterType.LOW_PASS
+        resetGain(UNITY_GAIN)
         filter.reset()
+    }
+
+    private companion object {
+        const val UNITY_GAIN = 1f
+        const val BYTES_PER_SAMPLE = 2
     }
 }

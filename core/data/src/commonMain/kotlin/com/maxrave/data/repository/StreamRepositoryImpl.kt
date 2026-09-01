@@ -14,6 +14,7 @@ import com.maxrave.domain.extension.isBefore
 import com.maxrave.domain.extension.now
 import com.maxrave.domain.extension.plusSeconds
 import com.maxrave.domain.manager.DataStoreManager
+import com.maxrave.domain.repository.PlaybackPingStatus
 import com.maxrave.domain.repository.StreamRepository
 import com.maxrave.domain.utils.Resource
 import com.maxrave.kotlinytmusicscraper.YouTube
@@ -27,12 +28,36 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 internal class StreamRepositoryImpl(
     private val localDataSource: LocalDataSource,
     private val youTube: YouTube,
 ) : StreamRepository {
     override fun accountGuardCooldownMs(): Long = youTube.accountGuard.cooldownRemainingMs
+
+    /**
+     * Last playback-tracking outcome. Written from the playback path, read from Settings; a plain
+     * volatile field because it is one immutable value and the reader only ever wants the latest.
+     */
+    @Volatile
+    private var lastPingStatus: PlaybackPingStatus? = null
+
+    override fun lastPlaybackPingStatus(): PlaybackPingStatus? = lastPingStatus
+
+    @OptIn(ExperimentalTime::class)
+    private fun recordPing(
+        name: String,
+        code: Int,
+    ) {
+        lastPingStatus = PlaybackPingStatus(name, code, Clock.System.now().toEpochMilliseconds())
+        if (code !in 200..299) {
+            Logger.w("PlaybackPing", "$name rejected with $code -- listening will not reach the account")
+        } else {
+            Logger.d("PlaybackPing", "$name accepted ($code)")
+        }
+    }
 
     override suspend fun insertNewFormat(newFormat: NewFormatEntity) =
         withContext(Dispatchers.IO) {
@@ -305,9 +330,11 @@ internal class StreamRepositoryImpl(
             youTube
                 .initPlayback(playback, atr, watchTime, cpn, playlistId)
                 .onSuccess { response ->
+                    recordPing("initPlayback", response.first)
                     emit(response)
                 }.onFailure {
                     Logger.e("InitPlayback", "Error: ${it.message}")
+                    recordPing("initPlayback", 0)
                     emit(Pair(0, 0f))
                 }
         }.flowOn(Dispatchers.IO)

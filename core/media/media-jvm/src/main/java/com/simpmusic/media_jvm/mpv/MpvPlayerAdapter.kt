@@ -1968,8 +1968,10 @@ class MpvPlayerAdapter(
         targetSpeedRatio: Float = 1.0f,
         targetPitchRatio: Float = 1.0f,
     ) {
-        val steps = 50
-        val delayPerStep = (effectiveDurationMs / steps).coerceAtLeast(20)
+        // Driven by elapsed time below rather than by counting steps; this is only how often the
+        // curve is resampled. The old loop delayed after each of 51 iterations, so a fade always
+        // ran past its own duration.
+        val rampTickMs = 25L
         // A pure 0..100 attenuation per handle: the user's level rides on the master volume and must
         // come out of the crossfade exactly as it went in.
         val targetVolume = 100
@@ -2014,7 +2016,7 @@ class MpvPlayerAdapter(
 
         Logger.d(
             TAG,
-            "Crossfade animation: ${effectiveDurationMs}ms, $steps steps, ${delayPerStep}ms/step, " +
+            "Crossfade animation: ${effectiveDurationMs}ms, tick ${rampTickMs}ms, " +
                 "internalVolume=$internalVolume, dj=$wantDjFilter (out=$sweepOutgoing, in=$sweepIncoming), " +
                 "autoMix=$wantAutoMixRamp (speed=$targetSpeedRatio ramp=$rampSpeed, " +
                 "pitch=$targetPitchRatio ramp=$rampPitch)",
@@ -2025,10 +2027,13 @@ class MpvPlayerAdapter(
         var lastOutgoingPitch = -1f
 
         try {
-            for (step in 0..steps) {
+            val startedAtMs = System.nanoTime() / 1_000_000L
+            val durationMs = effectiveDurationMs.toFloat().coerceAtLeast(1f)
+            while (true) {
                 currentCoroutineContext().ensureActive()
 
-                val progress = step.toFloat() / steps
+                val elapsedMs = (System.nanoTime() / 1_000_000L) - startedAtMs
+                val progress = (elapsedMs / durationMs).coerceIn(0f, 1f)
                 val angle = progress * Math.PI / 2.0
 
                 val fadeOutVolume = (targetVolume * kotlin.math.cos(angle)).toInt()
@@ -2082,7 +2087,8 @@ class MpvPlayerAdapter(
                     }
                 }
 
-                delay(delayPerStep.toLong())
+                if (progress >= 1f) break
+                delay(rampTickMs)
             }
 
             finalizeCrossfade(nextIndex, nextPlayer)

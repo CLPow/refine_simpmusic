@@ -7,9 +7,11 @@ import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
+import kotlin.math.tanh
 
 /**
  * The ten band centres, in Hz.
@@ -31,6 +33,39 @@ private const val STATE_PER_BAND = 4
 
 private const val PCM16_MIN = -32_768.0
 private const val PCM16_MAX = 32_767.0
+
+/**
+ * Level, as a fraction of full scale, above which the limiter starts to bend.
+ *
+ * Below it nothing is touched at all, so ordinary material passes through bit-exact and the
+ * limiter contributes no colour of its own.
+ */
+private const val LIMITER_THRESHOLD = 0.85
+
+/**
+ * Rounds off peaks instead of shearing them at the PCM rails.
+ *
+ * A boosted band on an already-loud master pushes samples past full scale, and the previous
+ * `coerceIn` flattened those peaks into a straight edge — which is audible as harsh, buzzy
+ * distortion, worst on exactly the loud modern masters people play most. The gain stages after this
+ * one only ever attenuate, so this is the last place where clipping can be introduced and therefore
+ * the right place to stop it.
+ *
+ * Above the threshold the remaining headroom is compressed through `tanh`, which is smooth and
+ * monotonic and meets the linear region at the same value and slope, so there is no discontinuity
+ * to hear at the crossover. Being instantaneous rather than time-based, it cannot pump or breathe
+ * the way an attack/release limiter can; the trade is a little harmonic distortion on peaks, which
+ * is enormously preferable to a hard corner.
+ */
+private fun softLimit(sample: Double): Double {
+    val normalized = sample / PCM16_MAX
+    val magnitude = abs(normalized)
+    if (magnitude <= LIMITER_THRESHOLD) return sample
+
+    val headroom = 1.0 - LIMITER_THRESHOLD
+    val limited = LIMITER_THRESHOLD + headroom * tanh((magnitude - LIMITER_THRESHOLD) / headroom)
+    return (if (normalized < 0) -limited else limited) * PCM16_MAX
+}
 
 /**
  * One equalizer setting, as a single immutable value.
@@ -147,7 +182,10 @@ class EqualizerAudioProcessor(
         // here keeps every sample on its own channel's filter history.
         var channel = 0
         while (inputBuffer.remaining() >= 2) {
-            val processed = process(inputBuffer.short.toDouble(), channel)
+            val processed = softLimit(process(inputBuffer.short.toDouble(), channel))
+            // softLimit already bounds the result inside full scale; the coerce is a belt-and-braces
+            // guard against a NaN or infinity arriving from a degenerate filter state, which would
+            // otherwise convert to an arbitrary short.
             output.putShort(processed.coerceIn(PCM16_MIN, PCM16_MAX).toInt().toShort())
             channel++
             if (channel == channelCount) channel = 0

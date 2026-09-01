@@ -1324,9 +1324,17 @@ internal class DataStoreManagerImpl(
         }
     }
 
+    /**
+     * Off by default.
+     *
+     * DJ mode high-pass sweeps the incoming track from 2 kHz down to 20 Hz across the whole
+     * overlap, so the next song's opening arrives with its bass stripped, quietly, underneath the
+     * outgoing one. As an effect somebody chooses that is a fine thing to offer; as the default it
+     * simply made every transition sound wrong.
+     */
     override val crossfadeDjMode: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            preferences[CROSSFADE_DJ_MODE] ?: TRUE
+            preferences[CROSSFADE_DJ_MODE] ?: FALSE
         }
 
     override suspend fun setCrossfadeDjMode(enabled: Boolean) {
@@ -1556,9 +1564,17 @@ internal class DataStoreManagerImpl(
         }
     }
 
+    /**
+     * On by default, and it never leaves the device.
+     *
+     * This is what fills `playback_event` and `event_artist`. Defaulting it off meant a fresh
+     * install recorded nothing, so Wrapped and the analytics screen had nothing to show and there
+     * was no local signal to rank recommendations with. Unlike [sendBackToGoogle], nothing here is
+     * transmitted anywhere.
+     */
     override val localTrackingEnabled: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            preferences[LOCAL_TRACKING_ENABLED] ?: FALSE
+            preferences[LOCAL_TRACKING_ENABLED] ?: TRUE
         }
 
     override suspend fun setLocalTrackingEnabled(enabled: Boolean) {

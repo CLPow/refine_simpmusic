@@ -260,6 +260,10 @@ import simpmusic.composeapp.generated.resources.spotify_import_slow_notice
 import simpmusic.composeapp.generated.resources.spotify_import_matching_tracks
 import simpmusic.composeapp.generated.resources.spotify_import_reading_library
 import simpmusic.composeapp.generated.resources.import_from_spotify_description
+import simpmusic.composeapp.generated.resources.playback_reporting_status
+import simpmusic.composeapp.generated.resources.playback_reporting_accepted
+import simpmusic.composeapp.generated.resources.playback_reporting_rejected
+import simpmusic.composeapp.generated.resources.playback_reporting_none
 import simpmusic.composeapp.generated.resources.account_protection
 import simpmusic.composeapp.generated.resources.account_protection_on
 import simpmusic.composeapp.generated.resources.account_protection_cooling
@@ -1145,6 +1149,22 @@ fun SettingScreen(
                         } else {
                             stringResource(Res.string.account_protection_on)
                         },
+                )
+                // Sits directly under the switch it reports on: enabling that and seeing nothing
+                // change is indistinguishable from the pings being refused, so the answer belongs
+                // where the question is asked.
+                val lastPing = sharedViewModel.lastPlaybackPingStatus()
+                SettingItem(
+                    title = stringResource(Res.string.playback_reporting_status),
+                    subtitle =
+                        when {
+                            lastPing == null -> stringResource(Res.string.playback_reporting_none)
+                            lastPing.accepted ->
+                                stringResource(Res.string.playback_reporting_accepted, lastPing.code.toString())
+                            else ->
+                                stringResource(Res.string.playback_reporting_rejected, lastPing.code.toString())
+                        },
+                    isEnable = sendData,
                 )
                 SettingItem(
                     title = stringResource(Res.string.send_back_listening_data_to_google),

@@ -7,6 +7,19 @@ import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.utils.Resource
 import kotlinx.coroutines.flow.Flow
 
+/**
+ * @param code HTTP status YouTube returned, or 0 when the request never completed.
+ * @param acceptedAt epoch millis of the attempt.
+ */
+data class PlaybackPingStatus(
+    val name: String,
+    val code: Int,
+    val acceptedAt: Long,
+) {
+    /** YouTube answers these with 204, and any 2xx means it took the ping. */
+    val accepted: Boolean get() = code in 200..299
+}
+
 interface StreamRepository {
     /**
      * Milliseconds the account guard is holding back requests that carry the user's account, or 0
@@ -16,6 +29,17 @@ interface StreamRepository {
      * the app module has no business reaching into the scraper directly.
      */
     fun accountGuardCooldownMs(): Long
+
+    /**
+     * How the last playback-tracking ping to YouTube was answered, or null if none has been sent
+     * this session.
+     *
+     * These pings are what make listening in this app count towards the account's history, and so
+     * what feeds YouTube's recommendations. Enabling the setting and seeing no improvement is
+     * indistinguishable from the pings being silently rejected, so the outcome is surfaced rather
+     * than left to be inferred.
+     */
+    fun lastPlaybackPingStatus(): PlaybackPingStatus?
 
     suspend fun insertNewFormat(newFormat: NewFormatEntity)
 
