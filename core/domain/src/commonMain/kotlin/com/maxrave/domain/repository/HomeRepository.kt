@@ -10,6 +10,21 @@ import kotlinx.coroutines.flow.Flow
 
 interface HomeRepository {
     /**
+     * Shelves built from the user's own listening, to sit above YouTube's feed.
+     *
+     * Separate from [getHomeData] rather than folded into it: these read the local database and
+     * always succeed, so a slow or failed network call must not delay or discard them, and a home
+     * refresh should not have to wait on disk either.
+     *
+     * @param onRepeatTitle localized title for the most-played shelf
+     * @param buriedTitle localized title for the well-played-but-neglected shelf
+     */
+    fun getLocalShelves(
+        onRepeatTitle: String,
+        buriedTitle: String,
+    ): Flow<List<HomeItem>>
+
+    /**
      * @return Pair of continueParams and HomeItem List
      */
     fun getHomeData(

@@ -33,6 +33,10 @@ import simpmusic.composeapp.generated.resources.music_video
 import simpmusic.composeapp.generated.resources.new_release
 import simpmusic.composeapp.generated.resources.song
 import simpmusic.composeapp.generated.resources.view_count
+import kotlinx.coroutines.flow.firstOrNull
+import org.jetbrains.compose.resources.getString
+import simpmusic.composeapp.generated.resources.shelf_on_repeat
+import simpmusic.composeapp.generated.resources.shelf_buried_favourites
 
 class HomeViewModel(
     private val dataStoreManager: DataStoreManager,
@@ -229,15 +233,28 @@ class HomeViewModel(
                     val exploreMoodItem = result.mood
                     val chart = result.chart
                     val newRelease = result.newRelease
+                    // Local shelves lead. They are the part of the feed that knows what was
+                    // actually played here, and YouTube's own ranking only ever sees listening done
+                    // in YouTube's apps. They are also instant, so putting them first means the
+                    // screen has something real on it before the network settles.
+                    val localShelves =
+                        homeRepository
+                            .getLocalShelves(
+                                onRepeatTitle = getString(Res.string.shelf_on_repeat),
+                                buriedTitle = getString(Res.string.shelf_buried_favourites),
+                            ).firstOrNull()
+                            .orEmpty()
                     when (home) {
                         is Resource.Success -> {
                             _continuation.value = home.data?.first
-                            _homeItemList.value = home.data?.second ?: listOf()
+                            _homeItemList.value = localShelves + (home.data?.second ?: listOf())
                         }
 
                         else -> {
                             _continuation.value = null
-                            _homeItemList.value = listOf()
+                            // Even when YouTube fails entirely, what the user has played is still
+                            // there to show; an empty screen would be a worse answer than a short one.
+                            _homeItemList.value = localShelves
                         }
                     }
                     if (continuation.value.isNullOrEmpty()) {

@@ -1372,11 +1372,16 @@ fun SettingScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
-                    SettingItem(
-                        title = stringResource(Res.string.normalize_volume),
-                        subtitle = stringResource(Res.string.balance_media_loudness),
-                        switch = (normalizeVolume to { viewModel.setNormalizeVolume(it) }),
-                    )
+                    // Android only: the desktop handler's loudness code is commented out in full
+                    // (JvmMediaPlayerHandlerImpl), so this switch had nothing behind it there. A
+                    // control that silently does nothing is worse than an absent one.
+                    if (getPlatform() == Platform.Android) {
+                        SettingItem(
+                            title = stringResource(Res.string.normalize_volume),
+                            subtitle = stringResource(Res.string.balance_media_loudness),
+                            switch = (normalizeVolume to { viewModel.setNormalizeVolume(it) }),
+                        )
+                    }
                     SettingItem(
                         title = stringResource(Res.string.skip_silent),
                         subtitle = stringResource(Res.string.skip_no_music_part),

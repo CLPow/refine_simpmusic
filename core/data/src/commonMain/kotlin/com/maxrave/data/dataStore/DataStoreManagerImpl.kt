@@ -118,9 +118,18 @@ internal class DataStoreManagerImpl(
         }
     }
 
+    /**
+     * Defaults to the best tier YouTube gives every account, not the worst.
+     *
+     * `items[0]` is "Low - 66kps" (itag 250), which is what this defaulted to before: every install
+     * streamed at roughly 66 kbps despite itag 251 being served to Premium and non-Premium accounts
+     * alike. Nothing was gating the better stream -- it simply was not being asked for. That is a
+     * far larger audible difference than anything above it, since the tiers past this one need a
+     * Premium entitlement that no client-side change can supply.
+     */
     override val quality: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            preferences[QUALITY] ?: COMMON_QUALITY.items[0].toString()
+            preferences[QUALITY] ?: COMMON_QUALITY.items[COMMON_QUALITY.BEST_FREE_QUALITY_INDEX].toString()
         }
 
     override suspend fun setQuality(quality: String) {
@@ -131,9 +140,10 @@ internal class DataStoreManagerImpl(
         }
     }
 
+    /** Same reasoning as [quality]: a download kept at 66 kbps is kept badly, and permanently. */
     override val downloadQuality: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            preferences[DOWNLOAD_QUALITY] ?: COMMON_QUALITY.items[0].toString()
+            preferences[DOWNLOAD_QUALITY] ?: COMMON_QUALITY.items[COMMON_QUALITY.BEST_FREE_QUALITY_INDEX].toString()
         }
 
     override suspend fun setDownloadQuality(quality: String) {

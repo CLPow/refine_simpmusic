@@ -27,6 +27,8 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import com.maxrave.data.db.datasource.LocalDataSource
+import kotlinx.coroutines.flow.catch
 
 /**
  * One resolved category cover plus when it was fetched.
@@ -49,7 +51,30 @@ private const val MOOD_ARTWORK_TTL_MILLIS = 7L * 24 * 60 * 60 * 1000
 internal class HomeRepositoryImpl(
     private val dataStoreManager: DataStoreManager,
     private val youTube: YouTube,
+    private val localDataSource: LocalDataSource,
 ) : HomeRepository {
+    override fun getLocalShelves(
+        onRepeatTitle: String,
+        buriedTitle: String,
+    ): Flow<List<HomeItem>> =
+        flow {
+            // getMostPlayedSongs already filters to totalPlayTime > 1 and orders by it, which is
+            // exactly the candidate set both shelves want; taking it once keeps this to a single
+            // query rather than one per shelf.
+            val played = localDataSource.getMostPlayedSongs().first()
+            emit(
+                listOfNotNull(
+                    LocalShelfBuilder.onRepeat(played, onRepeatTitle),
+                    LocalShelfBuilder.buriedFavourites(played, buriedTitle),
+                ),
+            )
+        }.catch { throwable ->
+            // Local shelves are an addition, never a dependency. If this fails the home feed should
+            // look exactly as it did before they existed.
+            Logger.e("HomeRepository", "local shelves failed: ${throwable.message}")
+            emit(emptyList())
+        }.flowOn(Dispatchers.IO)
+
     /**
      * Same posture as the Room converters: a cache written by an older build must not crash the
      * app after the model gains a field, so unknown keys are dropped rather than rejected.

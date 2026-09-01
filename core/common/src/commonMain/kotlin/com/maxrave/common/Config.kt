@@ -307,6 +307,15 @@ object QUALITY {
             "High AAC - 256kps (YT Premium)",
         )
 
+    /**
+     * Index of the highest tier YouTube serves without a Premium entitlement.
+     *
+     * The two entries above it (774 Opus 256, 141 AAC 256) are absent from the player response
+     * entirely for a free account, so selecting them gains nothing and falls back anyway. This is
+     * the ceiling a client can actually reach, and therefore the right default.
+     */
+    const val BEST_FREE_QUALITY_INDEX: Int = 1
+
     /** Parallel to [items]: an index into one is an index into the other, so the order is load-bearing. */
     val itags: Array<Int> =
         arrayOf(

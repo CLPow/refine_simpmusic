@@ -703,6 +703,8 @@
     <string name="playback_reporting_accepted">Accepted (%1$s). Plays here are counting towards your recommendations.</string>
     <string name="playback_reporting_rejected">Rejected (%1$s). Plays here are NOT reaching your account, which is why recommendations may look stale.</string>
     <string name="playback_reporting_none">Nothing reported yet. Play a track with the switch above on.</string>
+    <string name="shelf_on_repeat">On repeat</string>
+    <string name="shelf_buried_favourites">You used to love these</string>
     <string name="account_protection">Account protection</string>
     <string name="account_protection_on">On. Requests that use your account are spaced out, and if YouTube pushes back the app waits instead of retrying.</string>
     <string name="account_protection_cooling">YouTube is refusing requests right now. Waiting %1$d seconds before using your account again.</string>
