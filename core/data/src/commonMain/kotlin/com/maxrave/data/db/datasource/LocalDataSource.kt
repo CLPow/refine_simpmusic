@@ -375,8 +375,16 @@ internal class LocalDataSource(
     suspend fun insertLocalPlaylist(localPlaylist: LocalPlaylistEntity) = databaseDao.insertLocalPlaylist(localPlaylist)
 
     /** The local playlist previously synced from [spotifyUri], if there is one. */
-    suspend fun getLocalPlaylistBySpotifyUri(spotifyUri: String) =
-        databaseDao.getAllLocalPlaylists(Int.MAX_VALUE, 0).firstOrNull { it.spotifyPlaylistUri == spotifyUri }
+    suspend fun getLocalPlaylistBySpotifyUri(spotifyUri: String) = databaseDao.getLocalPlaylistBySpotifyUri(spotifyUri)
+
+    /**
+     * Titles only.
+     *
+     * The uniqueness check during a sync needs nothing else, and loading every playlist in full --
+     * with its whole track list -- once per playlist created turned that check into a full table
+     * read per playlist.
+     */
+    suspend fun getAllLocalPlaylistTitles() = databaseDao.getAllLocalPlaylistTitles()
 
     suspend fun insertLocalPlaylistWithTracks(
         localPlaylist: LocalPlaylistEntity,

@@ -31,6 +31,24 @@ import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
+/**
+ * Rough ordering of the audio itags by quality, so a fallback can look *downwards* from what was
+ * asked for.
+ *
+ * Bitrate cannot answer this on its own: the requested itag is usually missing from the response --
+ * that being the whole reason a fallback is running -- so there is no bitrate of its own to compare
+ * against. An itag absent from this table ranks highest, which stops an unfamiliar high-quality
+ * format from being mistaken for the cheap option.
+ */
+private fun Int.tierRank(): Int =
+    when (this) {
+        ITAG.AUDIO_OPUS_LOW -> 0
+        ITAG.AUDIO_OPUS_MEDIUM -> 1
+        ITAG.AUDIO_AAC_HIGH -> 2
+        ITAG.AUDIO_OPUS_HIGH -> 3
+        else -> Int.MAX_VALUE
+    }
+
 internal class StreamRepositoryImpl(
     private val localDataSource: LocalDataSource,
     private val youTube: YouTube,
@@ -176,12 +194,38 @@ internal class StreamRepositoryImpl(
                             ?: formatList.find { it.itag == ITAG.VIDEO_360P }
                             ?: formatList.find { !it.isAudio && it.url.isNullOrEmpty().not() }
                     val audioTwinItag = ITAG.highQualityTwinOf(itag)
+                    // Ordered best-first, so every fallback below lands on the best remaining
+                    // stream rather than on whichever happened to be first. YouTube returns
+                    // adaptiveFormats ascending, so `find { isAudio }` used to pick itag 249 --
+                    // roughly 50 kbps -- any time the requested itag was missing.
+                    val playableAudio =
+                        formatList
+                            .filter { it.isAudio && it.url.isNullOrEmpty().not() }
+                            .sortedByDescending { it.bitrate }
                     val audioFormat =
-                        formatList.find { it.itag == itag } ?: if (audioTwinItag != null) {
-                            formatList.find { it.itag == audioTwinItag }
-                        } else {
-                            formatList.find { it.isAudio && it.url.isNullOrEmpty().not() }
-                        }
+                        // What the user asked for.
+                        playableAudio.find { it.itag == itag }
+                            // Its other 256 kbps rendition: a high-quality account is given one
+                            // family or the other, so the twin is a peer, not a downgrade.
+                            ?: audioTwinItag?.let { twin -> playableAudio.find { it.itag == twin } }
+                            // Otherwise the closest tier at or below what was asked for. Taking the
+                            // highest available would invert a deliberate choice: someone who picked
+                            // "Low" to save data, or set it as their download quality, would be
+                            // handed the largest stream on offer instead of the nearest smaller one.
+                            ?: playableAudio.firstOrNull { it.itag.tierRank() <= itag.tierRank() }
+                            // Nothing at or below exists, so the smallest thing above it is the
+                            // least-worst answer -- still better than no audio at all.
+                            ?: playableAudio.lastOrNull()
+                    // What YouTube actually offered, not merely what was picked. Only the selected
+                    // format is persisted, so without this there is no way to tell "the account is
+                    // not entitled to 774" from "774 was offered and the old first-match fallback
+                    // threw it away" -- a distinction worth settling with evidence.
+                    Logger.i(
+                        "AudioFormats",
+                        "offered for $videoId: " +
+                            playableAudio.joinToString { "${it.itag}/${it.bitrate / 1000}k" } +
+                            " | requested $itag | chose ${audioFormat?.itag}",
+                    )
                     var format =
                         if (isVideo) {
                             videoFormat
@@ -189,7 +233,22 @@ internal class StreamRepositoryImpl(
                             audioFormat
                         }
                     if (format == null) {
-                        format = formatList.lastOrNull { it.url.isNullOrEmpty().not() }
+                        // Last resort. Restricted to muxed streams when audio was wanted: an
+                        // adaptive video format carries no audio at all, so falling back to one
+                        // for audio playback produces silence rather than a lower quality.
+                        format =
+                            if (isVideo) {
+                                formatList.lastOrNull { it.url.isNullOrEmpty().not() }
+                            } else {
+                                // Any progressive stream will do, identified by carrying audio
+                                // channels rather than by itag: pinning this to 18 alone meant a
+                                // response offering some other muxed format (22, 43) and no adaptive
+                                // audio yielded no playable format at all, so the track went silent
+                                // where it used to play.
+                                formatList.lastOrNull {
+                                    it.audioChannels != null && it.url.isNullOrEmpty().not()
+                                }
+                            }
                     }
                     if (muxed) {
                         format = formatList

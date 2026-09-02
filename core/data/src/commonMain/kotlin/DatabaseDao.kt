@@ -1524,6 +1524,12 @@ interface DatabaseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSyncTombstone(tombstone: SyncTombstoneEntity)
 
+    @Query("SELECT * FROM local_playlist WHERE spotify_playlist_uri = :spotifyUri LIMIT 1")
+    suspend fun getLocalPlaylistBySpotifyUri(spotifyUri: String): LocalPlaylistEntity?
+
+    @Query("SELECT title FROM local_playlist")
+    suspend fun getAllLocalPlaylistTitles(): List<String>
+
     @Query("SELECT * FROM sync_tombstone")
     suspend fun getAllSyncTombstones(): List<SyncTombstoneEntity>
 

@@ -27,7 +27,7 @@ data class LocalPlaylistEntity(
      * Identity for re-syncing. Matching on the title instead would break the moment someone renames
      * a playlist on either side, and would silently merge two playlists that happen to share a name.
      */
-    @ColumnInfo(name = "spotify_playlist_uri")
+    @ColumnInfo(name = "spotify_playlist_uri", index = true)
     val spotifyPlaylistUri: String? = null,
     /**
      * When this playlist last changed, for merging two devices.

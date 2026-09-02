@@ -185,6 +185,8 @@ import simpmusic.composeapp.generated.resources.let_s_pick_a_playlist_for_you
 import simpmusic.composeapp.generated.resources.let_s_start_with_a_radio
 import simpmusic.composeapp.generated.resources.log_in_warning
 import simpmusic.composeapp.generated.resources.party
+import simpmusic.composeapp.generated.resources.recommendations_unavailable
+import simpmusic.composeapp.generated.resources.recommendations_unavailable_action
 import simpmusic.composeapp.generated.resources.quick_picks
 import simpmusic.composeapp.generated.resources.relax
 import simpmusic.composeapp.generated.resources.romance
@@ -229,6 +231,7 @@ fun HomeScreen(
     val isScrollingUp by scrollState.isScrollingUp()
     val accountInfo by viewModel.accountInfo.collectAsStateWithLifecycle()
     val homeData by viewModel.homeItemList.collectAsStateWithLifecycle()
+    val recommendationsFailed by viewModel.recommendationsFailed.collectAsStateWithLifecycle()
     val newRelease by viewModel.newRelease.collectAsStateWithLifecycle()
     val chart by viewModel.chart.collectAsStateWithLifecycle()
     val moodMomentAndGenre by viewModel.exploreMoodItem.collectAsStateWithLifecycle()
@@ -482,6 +485,41 @@ fun HomeScreen(
                         state = scrollState,
                         verticalArrangement = Arrangement.spacedBy(20.dp),
                     ) {
+                        // Shown when YouTube's shelves failed but local ones remain. Without it the
+                        // page just looks short: the empty-state and its retry button never appear,
+                        // because local shelves keep the list non-empty.
+                        if (recommendationsFailed) {
+                            item(key = "recommendations_failed") {
+                                Column(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 12.dp),
+                                ) {
+                                    // The app bar is a sibling overlay, not part of this list, so
+                                    // whatever is first has to make room for it itself. Without
+                                    // this the banner sits underneath and is invisible in exactly
+                                    // the situation it exists to explain. The first shelf does the
+                                    // same below, and skips it while this is showing.
+                                    Spacer(
+                                        Modifier.height(
+                                            with(LocalDensity.current) { topAppBarHeightPx.toDp() },
+                                        ),
+                                    )
+                                    Text(
+                                        text = stringResource(Res.string.recommendations_unavailable),
+                                        style = typo().labelMedium,
+                                        color = MaterialTheme.colorScheme.onBackground,
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Text(
+                                        text = stringResource(Res.string.recommendations_unavailable_action),
+                                        style = typo().bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                         itemsIndexed(homeData, key = { _, item ->
                             item.hashCode().toString() + (mainHomeThumbnail ?: "nothumb")
                         }) { index, item ->
@@ -515,7 +553,10 @@ fun HomeScreen(
                                         Modifier
                                             .padding(horizontal = 15.dp),
                                 ) {
-                                    if (index == 0) {
+                                    // Skipped when the failure banner is showing: it is above this
+                                    // and has already made the room, so applying it twice would push
+                                    // the first shelf down by a whole app bar.
+                                    if (index == 0 && !recommendationsFailed) {
                                         Spacer(
                                             Modifier.height(
                                                 with(LocalDensity.current) { topAppBarHeightPx.toDp() },

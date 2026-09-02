@@ -519,8 +519,8 @@ internal class SpotifyImportRepositoryImpl(
     private suspend fun uniqueTitle(name: String): String {
         val taken =
             localDataSource
-                .getAllLocalPlaylists(Int.MAX_VALUE, 0)
-                .map { it.title.trim().lowercase() }
+                .getAllLocalPlaylistTitles()
+                .map { it.trim().lowercase() }
                 .toSet()
         if (name.trim().lowercase() !in taken) return name
         var suffix = 2

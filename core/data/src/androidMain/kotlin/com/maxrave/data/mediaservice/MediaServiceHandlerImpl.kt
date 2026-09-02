@@ -1106,10 +1106,16 @@ internal class MediaServiceHandlerImpl(
                                 delay(sleepFadeTailMs)
                             }
                             count--
+                            // Logged per tick so an early stop can be attributed. If playback ends
+                            // while these are still counting down, the timer did not do it -- on
+                            // Android the usual culprit is the OS killing the playback service, and
+                            // without this there is no way to tell that from a timer that fired early.
+                            Logger.i(TAG, "Sleep timer: $count of $minutes minutes remaining")
                             _sleepTimerState.update {
                                 it.copy(isDone = false, timeRemaining = count)
                             }
                         }
+                        Logger.i(TAG, "Sleep timer elapsed after $minutes minutes; pausing")
                         player.pause()
                         stoppedPlayback = true
                         _sleepTimerState.update {

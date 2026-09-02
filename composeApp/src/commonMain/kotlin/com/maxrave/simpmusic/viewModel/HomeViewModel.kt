@@ -52,6 +52,16 @@ class HomeViewModel(
     private var _continuation = MutableStateFlow<String?>(null)
     val continuation: StateFlow<String?> = _continuation
 
+    /**
+     * True when YouTube's part of the home feed did not arrive.
+     *
+     * Distinct from an empty [homeItemList]: local shelves keep that non-empty, so without this the
+     * screen cannot tell "nothing to show" from "recommendations failed to load" -- and the empty
+     * state, with its retry, would never appear again.
+     */
+    private val _recommendationsFailed = MutableStateFlow(false)
+    val recommendationsFailed: StateFlow<Boolean> = _recommendationsFailed
+
     private val _exploreMoodItem: MutableStateFlow<Mood?> = MutableStateFlow(null)
     val exploreMoodItem: StateFlow<Mood?> = _exploreMoodItem
     private val _accountInfo: MutableStateFlow<Pair<String?, String?>?> = MutableStateFlow(null)
@@ -195,6 +205,9 @@ class HomeViewModel(
                     ?: SUPPORTED_LANGUAGE.codes.first()
             }
         regionCode = runBlocking { dataStoreManager.location.first() }
+        // Cleared as the load starts: leaving the previous run's failure set would sit the banner
+        // over the shimmer during a retry that may well succeed.
+        _recommendationsFailed.value = false
         homeJob?.cancel()
         homeJob =
             viewModelScope.launch {
@@ -205,12 +218,21 @@ class HomeViewModel(
                 // list stays on screen because collect never replaces it. On desktop that
                 // outlives "restarting" the app, since closing the window only hides it to the
                 // tray and the composition is never destroyed.
+                // Set the moment the combine delivers, before the lambda does any of its own
+                // suspending work. `loading` is only cleared at the very end of that lambda, so a
+                // load that arrives at 29.9s and then reads DataStore could still be running when
+                // the watchdog fires -- and would be reported as failed over a fully populated feed.
+                var emitted = false
                 launch {
                     delay(HOME_LOAD_TIMEOUT_MS)
-                    if (loading.value) {
+                    if (loading.value && !emitted) {
                         Logger.w("HomeViewModel", "Home load timed out after ${HOME_LOAD_TIMEOUT_MS}ms; clearing loading")
                         loading.value = false
                         _homeListState.value = ListState.IDLE
+                        // A timeout is a failed load, and has to say so. Clearing the spinner alone
+                        // leaves the screen looking merely short, with nothing to indicate that
+                        // anything went wrong or that pulling down would help.
+                        _recommendationsFailed.value = true
                     }
                 }
                 combine(
@@ -228,6 +250,7 @@ class HomeViewModel(
                 ) { home, exploreMood, exploreChart, newRelease ->
                     HomeDataCombine(home, exploreMood, exploreChart, newRelease)
                 }.collect { result ->
+                    emitted = true
                     val home = result.home
                     Logger.d("home size", "${home.data?.second?.size}")
                     val exploreMoodItem = result.mood
@@ -245,15 +268,31 @@ class HomeViewModel(
                             ).firstOrNull()
                             .orEmpty()
                     when (home) {
-                        is Resource.Success -> {
+                        is Resource.Success if !home.data?.second.isNullOrEmpty() -> {
+                            _recommendationsFailed.value = false
                             _continuation.value = home.data?.first
                             _homeItemList.value = localShelves + (home.data?.second ?: listOf())
                         }
 
-                        else -> {
+                        // A success carrying no shelves is a failure wearing a success's clothes:
+                        // the request completed and the feed is empty, which on screen is
+                        // indistinguishable from everything working and there being nothing to show.
+                        is Resource.Success -> {
+                            Logger.w("HomeViewModel", "Home returned no shelves; treating as a failed load")
+                            _recommendationsFailed.value = true
                             _continuation.value = null
-                            // Even when YouTube fails entirely, what the user has played is still
-                            // there to show; an empty screen would be a worse answer than a short one.
+                            _homeItemList.value = localShelves
+                        }
+
+                        else -> {
+                            Logger.e("HomeViewModel", "Home load failed: ${home.message}")
+                            _recommendationsFailed.value = true
+                            _continuation.value = null
+                            // Keeping the local shelves is right -- what the user has played is
+                            // still worth showing -- but it must be flagged. They make homeData
+                            // non-empty, which suppressed the empty state the screen used to fall
+                            // back to, so a failed load rendered as a short page with no error and
+                            // no way to retry.
                             _homeItemList.value = localShelves
                         }
                     }

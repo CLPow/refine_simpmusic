@@ -1201,10 +1201,15 @@ class JvmMediaPlayerHandlerImpl(
                                 delay(sleepFadeTailMs)
                             }
                             count--
+                            // Logged per tick so an early stop can be attributed. If playback ends
+                            // while these are still counting down, the timer did not do it -- on
+                            // desktop that points at mpv or the stream, not at this countdown.
+                            Logger.i(TAG, "Sleep timer: $count of $minutes minutes remaining")
                             _sleepTimerState.update {
                                 it.copy(isDone = false, timeRemaining = count)
                             }
                         }
+                        Logger.i(TAG, "Sleep timer elapsed after $minutes minutes; pausing")
                         player.pause()
                         stoppedPlayback = true
                         _sleepTimerState.update {
