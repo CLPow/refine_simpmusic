@@ -115,6 +115,9 @@ class SettingsViewModel(
     private var _mainLyricsProvider: MutableStateFlow<String?> = MutableStateFlow(null)
     val mainLyricsProvider: StateFlow<String?> = _mainLyricsProvider
 
+    private var _androidAutoLyricsMode: MutableStateFlow<String?> = MutableStateFlow(null)
+    val androidAutoLyricsMode: StateFlow<String?> = _androidAutoLyricsMode
+
     private var _translationLanguage: MutableStateFlow<String?> = MutableStateFlow(null)
     val translationLanguage: StateFlow<String?> = _translationLanguage
     private var _useTranslation: MutableStateFlow<String?> = MutableStateFlow(null)
@@ -290,6 +293,7 @@ class SettingsViewModel(
         getTranslationLanguage()
         getYoutubeSubtitleLanguage()
         getLyricsProvider()
+        getAndroidAutoLyricsMode()
         getUseTranslation()
         getPlayVideoInsteadOfAudio()
         getRadioAudioOnly()
@@ -1043,6 +1047,20 @@ class SettingsViewModel(
         viewModelScope.launch {
             dataStoreManager.setLyricsProvider(provider)
             getLyricsProvider()
+        }
+    }
+
+    fun getAndroidAutoLyricsMode() {
+        viewModelScope.launch {
+            dataStoreManager.androidAutoLyricsMode.collect { mode ->
+                _androidAutoLyricsMode.emit(mode)
+            }
+        }
+    }
+
+    fun setAndroidAutoLyricsMode(mode: String) {
+        viewModelScope.launch {
+            dataStoreManager.setAndroidAutoLyricsMode(mode)
         }
     }
 

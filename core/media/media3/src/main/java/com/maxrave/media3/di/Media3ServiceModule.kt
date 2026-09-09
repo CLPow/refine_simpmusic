@@ -61,6 +61,8 @@ import com.maxrave.domain.repository.SearchRepository
 import com.maxrave.domain.repository.SongRepository
 import com.maxrave.domain.repository.StreamRepository
 import com.maxrave.logger.Logger
+import com.maxrave.media3.carapp.CarLyricsOverlay
+import com.maxrave.media3.carapp.CarLyricsSource
 import com.maxrave.media3.cast.CastHandoffManager
 import com.maxrave.media3.cast.CastStreamResolver
 import com.maxrave.media3.exoplayer.CrossfadeExoPlayerAdapter
@@ -221,6 +223,26 @@ private val mediaServiceModule =
                 get<HomeRepository>(),
                 get<ArtistRepository>(),
                 get<StreamRepository>(),
+            )
+        }
+
+        // Android Auto lyrics. Bound to the adapter's own ForwardingPlayer rather than the
+        // session player: only that one carries the metadata overlay, and in the Cast build the
+        // session player is a CastPlayer that would drop it anyway.
+        //
+        // Not created at start: it is started by SimpleMediaService, so nothing here forces the
+        // player and its handler into existence before there is anything to play.
+        single<CarLyricsOverlay> {
+            CarLyricsOverlay(
+                player = (get<MediaPlayerInterface>() as CrossfadeExoPlayerAdapter).forwardingPlayer,
+                mediaPlayerHandler = get(),
+                dataStoreManager = get(),
+                source =
+                    CarLyricsSource(
+                        lyricsCanvasRepository = get(),
+                        dataStoreManager = get(),
+                    ),
+                scope = get(named(SERVICE_SCOPE)),
             )
         }
 

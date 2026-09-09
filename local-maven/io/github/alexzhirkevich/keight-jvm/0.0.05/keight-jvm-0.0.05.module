@@ -1,0 +1,144 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../keight/0.0.05/keight-0.0.05.module",
+    "group": "io.github.alexzhirkevich",
+    "module": "keight",
+    "version": "0.0.05",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.14.3"
+    }
+  },
+  "variants": [
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.7.1"
+          }
+        },
+        {
+          "group": "io.github.alexzhirkevich",
+          "module": "keight-core",
+          "version": {
+            "requires": "0.0.05"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.3.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "keight-jvm-0.0.05.jar",
+          "url": "keight-jvm-0.0.05.jar",
+          "size": 1869134,
+          "sha512": "2a6eba3f7297f5eb83eb00788b98b3d4db10ed94049d3dd13adc68eb9b39426196341edbe45b6df1b3fb4a62c85527d0505c010b4e471853521211a3bfc38bfb",
+          "sha256": "c6399a43abd869da68cc4e2bafcca310e1a69683b7af39029d970106c7f28776",
+          "sha1": "d8ede4eca76f8fcace16574aef5c58ba05c2e161",
+          "md5": "b56294a079f79a01beeb4d6c887f655a"
+        }
+      ]
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.7.1"
+          }
+        },
+        {
+          "group": "io.github.alexzhirkevich",
+          "module": "keight-core",
+          "version": {
+            "requires": "0.0.05"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.3.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "keight-jvm-0.0.05.jar",
+          "url": "keight-jvm-0.0.05.jar",
+          "size": 1869134,
+          "sha512": "2a6eba3f7297f5eb83eb00788b98b3d4db10ed94049d3dd13adc68eb9b39426196341edbe45b6df1b3fb4a62c85527d0505c010b4e471853521211a3bfc38bfb",
+          "sha256": "c6399a43abd869da68cc4e2bafcca310e1a69683b7af39029d970106c7f28776",
+          "sha1": "d8ede4eca76f8fcace16574aef5c58ba05c2e161",
+          "md5": "b56294a079f79a01beeb4d6c887f655a"
+        }
+      ]
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "files": [
+        {
+          "name": "keight-jvm-0.0.05-sources.jar",
+          "url": "keight-jvm-0.0.05-sources.jar",
+          "size": 115762,
+          "sha512": "ea3c5a0b42b26b82b01e7a22439f31984b11e7ee370ff4131a6c04016a6c3af98941cd9595ba9abc2fc3bb2b312f431729de1bbb200945681c9395191eaba341",
+          "sha256": "a9772449a633f2da48223546c0e07b809eef888c3390af544d04a6498344cbb8",
+          "sha1": "a18c94613aed7a92d313746eb6e6451eaa80ea32",
+          "md5": "27fa0e7e27a005fa214feb5f03808ed4"
+        }
+      ]
+    }
+  ]
+}

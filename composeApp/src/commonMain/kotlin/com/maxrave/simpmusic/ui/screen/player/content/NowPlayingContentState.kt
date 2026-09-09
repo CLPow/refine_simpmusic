@@ -12,6 +12,7 @@ import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.data.model.streams.TimeLine
 import com.maxrave.domain.data.player.GenericCastState
 import com.maxrave.domain.mediaservice.handler.ControlState
+import com.maxrave.domain.lyrics.stripRichSyncTimestamps
 import com.maxrave.simpmusic.extension.GradientOffset
 import com.maxrave.simpmusic.viewModel.LyricsProvider
 import com.maxrave.simpmusic.viewModel.NowPlayingScreenData
@@ -47,16 +48,11 @@ internal fun NowPlayingScreenData.LyricsData?.canVote(): Boolean {
 // area below the gradient so all three match exactly and leave no seam.
 internal val PlayerBackdropColor = Color(0xFF121212)
 
-private val RICH_SYNC_TIMESTAMP_REGEX = Regex("""<\d{2}:\d{2}\.\d{2,3}>\s*""")
-private val WHITESPACE_REGEX = Regex("""\s+""")
-
 // Word-by-word lyrics carry a timestamp per word; replace each with a space
 // (not ""), then collapse — otherwise the words run together.
-// Shared by every Now Playing content style (Spotify + M3 Expressive).
-internal fun String.stripRichSyncTimestamps(): String =
-    replace(RICH_SYNC_TIMESTAMP_REGEX, " ")
-        .replace(WHITESPACE_REGEX, " ")
-        .trim()
+// Shared by every Now Playing content style (Spotify + M3 Expressive), and with the Android Auto
+// overlay through the domain function this delegates to.
+internal fun String.stripRichSyncTimestamps(): String = stripRichSyncTimestamps(this)
 
 // Codec label for the Apple Music style's progress-bar badge. Derived from the stream's
 // mimeType (e.g. `audio/webm; codecs="opus"`, `audio/mp4; codecs="mp4a.40.2"`) rather than the

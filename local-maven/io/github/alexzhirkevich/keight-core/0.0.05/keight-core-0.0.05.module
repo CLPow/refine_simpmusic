@@ -1,0 +1,1076 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "io.github.alexzhirkevich",
+    "module": "keight-core",
+    "version": "0.0.05",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.14.3"
+    }
+  },
+  "variants": [
+    {
+      "name": "metadataApiElements",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.7.1"
+          }
+        },
+        {
+          "group": "org.jetbrains",
+          "module": "annotations",
+          "version": {
+            "requires": "26.1.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.3.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "keight-core-metadata-0.0.05.jar",
+          "url": "keight-core-0.0.05.jar",
+          "size": 10249,
+          "sha512": "86ced2d207fe4cade3c81ae257708d3ac11835ca3f75d3109778d367c7757b73c4d6b4cfac39672c9f82a1f95a1de392d8920edb820626ebc6ded56837532f3b",
+          "sha256": "420fa1c5eb4d840573d352e25879d7c3a3c38c79529a2c424cb054e81e1cacfb",
+          "sha1": "60277bff48aca2aa5ed7eb08d50947dc88a19048",
+          "md5": "56c532a2e8d2901260b5fc80e58bdca6"
+        }
+      ]
+    },
+    {
+      "name": "metadataSourcesElements",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "common"
+      },
+      "files": [
+        {
+          "name": "keight-core-kotlin-0.0.05-sources.jar",
+          "url": "keight-core-0.0.05-sources.jar",
+          "size": 9141,
+          "sha512": "e29bc68631d876effadce3ac3f4099cec523ac5df3a54fe980ce9f2652f759257445f5c62edbc2e21d3a78fa97f80c64ed6d43ff1a33115ce4cd9d9f6d44a427",
+          "sha256": "be18a0b034d2624b4f7a840eddc6d326e0559641b4fd01eacf8c8a8f5b305510",
+          "sha1": "94f498fe5b5da9867415b77e569869e8e156b546",
+          "md5": "c6217c7e1725e0f3738462480a19a56d"
+        }
+      ]
+    },
+    {
+      "name": "releaseApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../keight-core-android/0.0.05/keight-core-android-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-android",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "releaseRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../keight-core-android/0.0.05/keight-core-android-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-android",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "releaseSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "available-at": {
+        "url": "../../keight-core-android/0.0.05/keight-core-android-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-android",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "androidNativeArm32ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "android_arm32",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-androidnativearm32/0.0.05/keight-core-androidnativearm32-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-androidnativearm32",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "androidNativeArm32SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "android_arm32",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-androidnativearm32/0.0.05/keight-core-androidnativearm32-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-androidnativearm32",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "androidNativeArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "android_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-androidnativearm64/0.0.05/keight-core-androidnativearm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-androidnativearm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "androidNativeArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "android_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-androidnativearm64/0.0.05/keight-core-androidnativearm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-androidnativearm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "androidNativeX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "android_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-androidnativex64/0.0.05/keight-core-androidnativex64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-androidnativex64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "androidNativeX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "android_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-androidnativex64/0.0.05/keight-core-androidnativex64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-androidnativex64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "androidNativeX86ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "android_x86",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-androidnativex86/0.0.05/keight-core-androidnativex86-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-androidnativex86",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "androidNativeX86SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "android_x86",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-androidnativex86/0.0.05/keight-core-androidnativex86-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-androidnativex86",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "iosArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "ios_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-iosarm64/0.0.05/keight-core-iosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-iosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "iosArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "ios_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-iosarm64/0.0.05/keight-core-iosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-iosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "iosArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "ios_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-iosarm64/0.0.05/keight-core-iosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-iosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "iosSimulatorArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "ios_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-iossimulatorarm64/0.0.05/keight-core-iossimulatorarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-iossimulatorarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "iosSimulatorArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "ios_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-iossimulatorarm64/0.0.05/keight-core-iossimulatorarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-iossimulatorarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "iosSimulatorArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "ios_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-iossimulatorarm64/0.0.05/keight-core-iossimulatorarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-iossimulatorarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "iosX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "ios_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-iosx64/0.0.05/keight-core-iosx64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-iosx64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "iosX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "ios_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-iosx64/0.0.05/keight-core-iosx64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-iosx64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "iosX64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "ios_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-iosx64/0.0.05/keight-core-iosx64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-iosx64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "jsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.js.compiler": "ir",
+        "org.jetbrains.kotlin.platform.type": "js"
+      },
+      "available-at": {
+        "url": "../../keight-core-js/0.0.05/keight-core-js-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-js",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "jsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.js.compiler": "ir",
+        "org.jetbrains.kotlin.platform.type": "js"
+      },
+      "available-at": {
+        "url": "../../keight-core-js/0.0.05/keight-core-js-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-js",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "jsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.js.compiler": "ir",
+        "org.jetbrains.kotlin.platform.type": "js"
+      },
+      "available-at": {
+        "url": "../../keight-core-js/0.0.05/keight-core-js-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-js",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "jvmApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../keight-core-jvm/0.0.05/keight-core-jvm-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-jvm",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "jvmRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../keight-core-jvm/0.0.05/keight-core-jvm-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-jvm",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "jvmSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "standard-jvm",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "jvm"
+      },
+      "available-at": {
+        "url": "../../keight-core-jvm/0.0.05/keight-core-jvm-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-jvm",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "linuxArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "linux_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-linuxarm64/0.0.05/keight-core-linuxarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-linuxarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "linuxArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "linux_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-linuxarm64/0.0.05/keight-core-linuxarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-linuxarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "linuxX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-linuxx64/0.0.05/keight-core-linuxx64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-linuxx64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "linuxX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "linux_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-linuxx64/0.0.05/keight-core-linuxx64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-linuxx64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "macosArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-macosarm64/0.0.05/keight-core-macosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-macosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "macosArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-macosarm64/0.0.05/keight-core-macosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-macosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "macosArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "macos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-macosarm64/0.0.05/keight-core-macosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-macosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "mingwX64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "mingw_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-mingwx64/0.0.05/keight-core-mingwx64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-mingwx64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "mingwX64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "mingw_x64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-mingwx64/0.0.05/keight-core-mingwx64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-mingwx64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "tvosArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "tvos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-tvosarm64/0.0.05/keight-core-tvosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-tvosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "tvosArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "tvos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-tvosarm64/0.0.05/keight-core-tvosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-tvosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "tvosArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "tvos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-tvosarm64/0.0.05/keight-core-tvosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-tvosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "tvosSimulatorArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "tvos_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-tvossimulatorarm64/0.0.05/keight-core-tvossimulatorarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-tvossimulatorarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "tvosSimulatorArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "tvos_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-tvossimulatorarm64/0.0.05/keight-core-tvossimulatorarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-tvossimulatorarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "tvosSimulatorArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "tvos_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-tvossimulatorarm64/0.0.05/keight-core-tvossimulatorarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-tvossimulatorarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "wasmJsApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../keight-core-wasm-js/0.0.05/keight-core-wasm-js-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-wasm-js",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "wasmJsRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../keight-core-wasm-js/0.0.05/keight-core-wasm-js-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-wasm-js",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "wasmJsSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "js"
+      },
+      "available-at": {
+        "url": "../../keight-core-wasm-js/0.0.05/keight-core-wasm-js-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-wasm-js",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "wasmWasiApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "wasi"
+      },
+      "available-at": {
+        "url": "../../keight-core-wasm-wasi/0.0.05/keight-core-wasm-wasi-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-wasm-wasi",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "wasmWasiRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "wasi"
+      },
+      "available-at": {
+        "url": "../../keight-core-wasm-wasi/0.0.05/keight-core-wasm-wasi-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-wasm-wasi",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "wasmWasiSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.platform.type": "wasm",
+        "org.jetbrains.kotlin.wasm.target": "wasi"
+      },
+      "available-at": {
+        "url": "../../keight-core-wasm-wasi/0.0.05/keight-core-wasm-wasi-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-wasm-wasi",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosArm32ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "watchos_arm32",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchosarm32/0.0.05/keight-core-watchosarm32-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchosarm32",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosArm32SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "watchos_arm32",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchosarm32/0.0.05/keight-core-watchosarm32-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchosarm32",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosArm32MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "watchos_arm32",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchosarm32/0.0.05/keight-core-watchosarm32-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchosarm32",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "watchos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchosarm64/0.0.05/keight-core-watchosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "watchos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchosarm64/0.0.05/keight-core-watchosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "watchos_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchosarm64/0.0.05/keight-core-watchosarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchosarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosDeviceArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "watchos_device_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchosdevicearm64/0.0.05/keight-core-watchosdevicearm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchosdevicearm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosDeviceArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "watchos_device_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchosdevicearm64/0.0.05/keight-core-watchosdevicearm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchosdevicearm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosDeviceArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "watchos_device_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchosdevicearm64/0.0.05/keight-core-watchosdevicearm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchosdevicearm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosSimulatorArm64ApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-api",
+        "org.jetbrains.kotlin.native.target": "watchos_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchossimulatorarm64/0.0.05/keight-core-watchossimulatorarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchossimulatorarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosSimulatorArm64SourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-runtime",
+        "org.jetbrains.kotlin.native.target": "watchos_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchossimulatorarm64/0.0.05/keight-core-watchossimulatorarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchossimulatorarm64",
+        "version": "0.0.05"
+      }
+    },
+    {
+      "name": "watchosSimulatorArm64MetadataElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "non-jvm",
+        "org.gradle.usage": "kotlin-metadata",
+        "org.jetbrains.kotlin.native.target": "watchos_simulator_arm64",
+        "org.jetbrains.kotlin.platform.type": "native"
+      },
+      "available-at": {
+        "url": "../../keight-core-watchossimulatorarm64/0.0.05/keight-core-watchossimulatorarm64-0.0.05.module",
+        "group": "io.github.alexzhirkevich",
+        "module": "keight-core-watchossimulatorarm64",
+        "version": "0.0.05"
+      }
+    }
+  ]
+}

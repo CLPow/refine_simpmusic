@@ -255,6 +255,11 @@
     <string name="backup_create_success">Backup create success</string>
     <string name="backup_create_failed">Backup create failed</string>
     <string name="main_lyrics_provider">Main Lyrics Provider</string>
+    <string name="android_auto_lyrics">Lyrics on Android Auto</string>
+    <string name="android_auto_lyrics_off">Song name and artist</string>
+    <string name="android_auto_lyrics_title_and_lyric">Song name, then the current line</string>
+    <string name="android_auto_lyrics_both_lines">Current line, then the next one</string>
+    <string name="android_auto_lyrics_message">Android Auto draws its own screen, so lyrics have to go in the two rows of text it shows. Only songs with timed lyrics can follow along; the rest keep showing the song name.</string>
     <string name="use_ai_translation">Use AI Lyric Translation</string>
     <string name="use_ai_translation_description">Enable lyrics translation using AI</string>
     <string name="translation_language">Translation Language</string>

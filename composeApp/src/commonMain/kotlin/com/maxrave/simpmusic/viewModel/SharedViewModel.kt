@@ -33,6 +33,7 @@ import com.maxrave.domain.extension.isSong
 import com.maxrave.domain.extension.isVideo
 import com.maxrave.domain.extension.toGenericMediaItem
 import com.maxrave.domain.manager.DataStoreManager
+import com.maxrave.domain.lyrics.LyricsSourceOrder
 import com.maxrave.domain.data.model.lyrics.RomanizationLanguage
 import com.maxrave.domain.manager.DataStoreManager.Values.FALSE
 import com.maxrave.domain.manager.DataStoreManager.Values.TRUE
@@ -1373,30 +1374,12 @@ class SharedViewModel(
     private val triedLyricsSources = mutableSetOf<String>()
 
     /**
-     * Key for Spotify within the chain.
-     *
-     * Spotify is not one of the four providers a user can pick in Settings — it has never been in
-     * that list — so it has no `DataStoreManager` constant. It still needs a name here to be
-     * ordered and marked as tried like the rest.
-     */
-    private val SPOTIFY_LYRICS_SOURCE = "spotify_lyrics_source"
-
-    /**
      * Order the sources are consulted in once the user's choice has been tried.
      *
-     * SimpMusic first because it is the app's own database and carries timing contributed for these
-     * exact videos; Spotify next because its coverage is the best of the remainder when a session
-     * exists; LRCLIB then BetterLyrics as broad community sources; YouTube captions last, since a
-     * caption track is often auto-generated or a translation rather than lyrics.
+     * Shared with the Android Auto overlay, which resolves lyrics on its own — the phone and the
+     * car asking in different orders would mean a track with lyrics in one and none in the other.
      */
-    private val lyricsSourceOrder =
-        listOf(
-            DataStoreManager.SIMPMUSIC,
-            SPOTIFY_LYRICS_SOURCE,
-            DataStoreManager.LRCLIB,
-            DataStoreManager.BETTER_LYRICS,
-            DataStoreManager.YOUTUBE,
-        )
+    private val lyricsSourceOrder = LyricsSourceOrder.DEFAULT
 
     /**
      * Runs the next source that has not been tried, starting with [preferred].
@@ -1428,7 +1411,7 @@ class SharedViewModel(
 
         when (next) {
             DataStoreManager.SIMPMUSIC -> getSimpMusicLyrics(videoId, song, artist, duration)
-            SPOTIFY_LYRICS_SOURCE ->
+            LyricsSourceOrder.SPOTIFY ->
                 getSpotifyLyrics(
                     song.toTrack().copy(durationSeconds = duration),
                     "${song.title} $artist",

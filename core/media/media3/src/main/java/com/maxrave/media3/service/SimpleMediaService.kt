@@ -30,6 +30,7 @@ import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.logger.Logger
 import com.maxrave.media3.R
+import com.maxrave.media3.carapp.CarLyricsOverlay
 import com.maxrave.media3.extension.toCommandButton
 import com.maxrave.media3.utils.CoilBitmapLoader
 import kotlinx.coroutines.CoroutineScope
@@ -60,6 +61,12 @@ internal class SimpleMediaService :
 
     private val simpleMediaServiceHandler: MediaPlayerHandler by inject<MediaPlayerHandler>()
     private val dataStoreManager: DataStoreManager by inject<DataStoreManager>()
+
+    /**
+     * Android Auto lyrics. Injected here rather than created at start-up so it comes into being
+     * with playback, which is also the only time a car can be attached.
+     */
+    private val carLyricsOverlay: CarLyricsOverlay by inject<CarLyricsOverlay>()
 
     private val binder = MusicBinder()
 
@@ -93,6 +100,8 @@ internal class SimpleMediaService :
     override fun onCreate() {
         super.onCreate()
         Logger.w("Service", "Simple Media Service Created")
+
+        carLyricsOverlay.start()
 
         setMediaNotificationProvider(
             DefaultMediaNotificationProvider(

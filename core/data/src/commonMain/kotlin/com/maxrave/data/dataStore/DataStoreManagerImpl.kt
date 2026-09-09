@@ -13,6 +13,7 @@ import com.maxrave.common.SponsorBlockType
 import com.maxrave.domain.data.model.network.ProxyConfiguration
 import com.maxrave.data.security.SecretCodec
 import com.maxrave.domain.manager.DataStoreManager
+import com.maxrave.domain.manager.DataStoreManager.Values.AA_LYRICS_TITLE_AND_LYRIC
 import com.maxrave.domain.manager.DataStoreManager.Values.AI_PROVIDER_GEMINI
 import com.maxrave.domain.manager.DataStoreManager.Values.FALSE
 import com.maxrave.domain.manager.DataStoreManager.Values.GITHUB
@@ -466,6 +467,26 @@ internal class DataStoreManagerImpl(
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
                 settings[LYRICS_PROVIDER] = provider
+            }
+        }
+    }
+
+    /**
+     * Defaults to keeping the song name and putting the current line beneath it.
+     *
+     * On by default because the whole point is that it works in the car without anyone having gone
+     * looking for a setting first, and this is the mode that adds lyrics without taking anything
+     * away: the driver can still see what is playing at a glance.
+     */
+    override val androidAutoLyricsMode =
+        settingsDataStore.data.map { preferences ->
+            preferences[ANDROID_AUTO_LYRICS_MODE] ?: AA_LYRICS_TITLE_AND_LYRIC
+        }
+
+    override suspend fun setAndroidAutoLyricsMode(mode: String) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[ANDROID_AUTO_LYRICS_MODE] = mode
             }
         }
     }
@@ -1679,6 +1700,7 @@ internal class DataStoreManagerImpl(
         val CROSSFADE_SKIP_ALBUM = stringPreferencesKey("crossfade_skip_album")
         val AUTO_DOWNLOAD_LIKED_SONGS = stringPreferencesKey("auto_download_liked_songs")
         val LYRICS_PROVIDER = stringPreferencesKey("lyrics_provider")
+        val ANDROID_AUTO_LYRICS_MODE = stringPreferencesKey("android_auto_lyrics_mode")
         val TRANSLATION_LANGUAGE = stringPreferencesKey("translation_language")
         val USE_TRANSLATION_LANGUAGE = stringPreferencesKey("use_translation_language")
 

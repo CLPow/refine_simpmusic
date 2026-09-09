@@ -342,6 +342,11 @@ import simpmusic.composeapp.generated.resources.romanization_ukrainian
 import simpmusic.composeapp.generated.resources.lyrics_style_apple_music
 import simpmusic.composeapp.generated.resources.lyrics_style_classic
 import simpmusic.composeapp.generated.resources.main_lyrics_provider
+import simpmusic.composeapp.generated.resources.android_auto_lyrics
+import simpmusic.composeapp.generated.resources.android_auto_lyrics_both_lines
+import simpmusic.composeapp.generated.resources.android_auto_lyrics_message
+import simpmusic.composeapp.generated.resources.android_auto_lyrics_off
+import simpmusic.composeapp.generated.resources.android_auto_lyrics_title_and_lyric
 import simpmusic.composeapp.generated.resources.manage_your_youtube_accounts
 import simpmusic.composeapp.generated.resources.fork_maintainer
 import simpmusic.composeapp.generated.resources.fork_maintainer_name
@@ -538,6 +543,7 @@ fun SettingScreen(
     val saveLastPlayed by remember { viewModel.saveRecentSongAndQueue.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = false)
     val killServiceOnExit by remember { viewModel.killServiceOnExit.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = true)
     val mainLyricsProvider by viewModel.mainLyricsProvider.collectAsStateWithLifecycle()
+    val androidAutoLyricsMode by viewModel.androidAutoLyricsMode.collectAsStateWithLifecycle()
     val youtubeSubtitleLanguage by viewModel.youtubeSubtitleLanguage.collectAsStateWithLifecycle()
     val spotifyLoggedIn by viewModel.spotifyLogIn.collectAsStateWithLifecycle()
     val spotifyLyrics by viewModel.spotifyLyrics.collectAsStateWithLifecycle()
@@ -1635,6 +1641,46 @@ fun SettingScreen(
                     },
                 )
 
+                if (getPlatform() == Platform.Android) {
+                    val androidAutoLyricsLabels =
+                        listOf(
+                            DataStoreManager.AA_LYRICS_OFF to stringResource(Res.string.android_auto_lyrics_off),
+                            DataStoreManager.AA_LYRICS_TITLE_AND_LYRIC to
+                                stringResource(Res.string.android_auto_lyrics_title_and_lyric),
+                            DataStoreManager.AA_LYRICS_BOTH_LINES to stringResource(Res.string.android_auto_lyrics_both_lines),
+                        )
+                    SettingItem(
+                        title = stringResource(Res.string.android_auto_lyrics),
+                        subtitle =
+                            androidAutoLyricsLabels
+                                .firstOrNull { it.first == androidAutoLyricsMode }
+                                ?.second
+                                ?: stringResource(Res.string.android_auto_lyrics_title_and_lyric),
+                        onClick = {
+                            viewModel.setAlertData(
+                                SettingAlertState(
+                                    title = runBlocking { getString(Res.string.android_auto_lyrics) },
+                                    message = runBlocking { getString(Res.string.android_auto_lyrics_message) },
+                                    selectOne =
+                                        SettingAlertState.SelectData(
+                                            listSelect =
+                                                androidAutoLyricsLabels.map {
+                                                    (it.first == androidAutoLyricsMode) to it.second
+                                                },
+                                        ),
+                                    confirm =
+                                        runBlocking { getString(Res.string.change) } to { state ->
+                                            androidAutoLyricsLabels
+                                                .firstOrNull { it.second == state.selectOne?.getSelected() }
+                                                ?.first
+                                                ?.let { viewModel.setAndroidAutoLyricsMode(it) }
+                                        },
+                                    dismiss = runBlocking { getString(Res.string.cancel) },
+                                ),
+                            )
+                        },
+                    )
+                }
                 SettingItem(
                     title = stringResource(Res.string.translation_language),
                     subtitle = translationLanguage ?: "",

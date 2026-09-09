@@ -126,6 +126,21 @@ interface DataStoreManager {
 
     suspend fun setLyricsProvider(provider: String)
 
+    /**
+     * How the two text rows Android Auto draws should be used while a car is attached.
+     *
+     * Android Auto renders the now-playing screen itself from the media session, so the only text
+     * this app can put in front of the driver is the title row and the row beneath it. Lyrics
+     * therefore have to displace something, and which thing is a matter of taste: keeping the song
+     * name costs a line of lyrics, dropping it buys the line back.
+     *
+     * One of [Values.AA_LYRICS_OFF], [Values.AA_LYRICS_TITLE_AND_LYRIC] or
+     * [Values.AA_LYRICS_BOTH_LINES].
+     */
+    val androidAutoLyricsMode: Flow<String>
+
+    suspend fun setAndroidAutoLyricsMode(mode: String)
+
     val translationLanguage: Flow<String>
 
     suspend fun setTranslationLanguage(language: String)
@@ -510,6 +525,15 @@ interface DataStoreManager {
         const val YOUTUBE = "youtube"
         const val LRCLIB = "lrclib"
         const val BETTER_LYRICS = "better_lyrics"
+
+        /** Android Auto shows the song name and artist, as it always has. */
+        const val AA_LYRICS_OFF = "aa_lyrics_off"
+
+        /** Title row keeps the song name; the row below it carries the current line. */
+        const val AA_LYRICS_TITLE_AND_LYRIC = "aa_lyrics_title_and_lyric"
+
+        /** Both rows carry lyrics: the current line above, the one coming next below. */
+        const val AA_LYRICS_BOTH_LINES = "aa_lyrics_both_lines"
 
         const val FDROID = "fdroid"
         const val GITHUB_FOSS_NIGHTLY = "github_foss_nightly"

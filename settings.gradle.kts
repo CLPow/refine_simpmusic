@@ -12,6 +12,16 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        // Vendored copies of dependencies that no longer exist upstream. First, so nothing
+        // reaches the network for them.
+        //
+        // compottie's 2.2.2-compose-1.12 snapshot was deleted from the Maven Central Portal
+        // snapshot repo, as snapshots eventually are — every repository below now answers 404
+        // for it, and the build could not resolve at all. Downgrading is not an option: the
+        // comment on the version in libs.versions.toml records why this exact build is pinned
+        // (material3 1.12-alpha forces skiko 0.148.2, which stable compottie crashes against).
+        // So the artifacts are kept here instead of depending on a publisher not to delete them.
+        maven { url = uri("local-maven") }
         google()
         mavenCentral()
         gradlePluginPortal()
