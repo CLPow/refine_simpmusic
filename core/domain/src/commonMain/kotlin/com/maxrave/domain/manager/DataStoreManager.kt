@@ -127,6 +127,18 @@ interface DataStoreManager {
     suspend fun setLyricsProvider(provider: String)
 
     /**
+     * Which generation of the lyrics matcher filled the local lyrics cache.
+     *
+     * A cached wrong match cannot be told from a right one — correct title, correct artist,
+     * somebody else's words — so fixing the matcher does nothing for a song whose lyrics are
+     * already stored. Bumping [Values.LYRICS_CACHE_GENERATION] empties the cache once, so the fix
+     * reaches songs that were already wrong instead of only new ones.
+     */
+    val lyricsCacheGeneration: Flow<Int>
+
+    suspend fun setLyricsCacheGeneration(generation: Int)
+
+    /**
      * How the two text rows Android Auto draws should be used while a car is attached.
      *
      * Android Auto renders the now-playing screen itself from the media session, so the only text
@@ -527,6 +539,15 @@ interface DataStoreManager {
         const val BETTER_LYRICS = "better_lyrics"
 
         /** Android Auto shows the song name and artist, as it always has. */
+        /**
+         * Raise this whenever a change makes previously cached lyrics untrustworthy. Costs each
+         * user one re-fetch per song they play, and nothing else.
+         *
+         * 1 — the matcher that took the first search result, so live takes, covers and karaoke
+         *     tracks were stored under the right song's name.
+         */
+        const val LYRICS_CACHE_GENERATION = 1
+
         const val AA_LYRICS_OFF = "aa_lyrics_off"
 
         /** Title row keeps the song name; the row below it carries the current line. */

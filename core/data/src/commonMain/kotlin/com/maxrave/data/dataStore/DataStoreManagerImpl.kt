@@ -471,6 +471,19 @@ internal class DataStoreManagerImpl(
         }
     }
 
+    override val lyricsCacheGeneration =
+        settingsDataStore.data.map { preferences ->
+            preferences[LYRICS_CACHE_GENERATION_KEY] ?: 0
+        }
+
+    override suspend fun setLyricsCacheGeneration(generation: Int) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[LYRICS_CACHE_GENERATION_KEY] = generation
+            }
+        }
+    }
+
     /**
      * Defaults to keeping the song name and putting the current line beneath it.
      *
@@ -1701,6 +1714,7 @@ internal class DataStoreManagerImpl(
         val AUTO_DOWNLOAD_LIKED_SONGS = stringPreferencesKey("auto_download_liked_songs")
         val LYRICS_PROVIDER = stringPreferencesKey("lyrics_provider")
         val ANDROID_AUTO_LYRICS_MODE = stringPreferencesKey("android_auto_lyrics_mode")
+        val LYRICS_CACHE_GENERATION_KEY = intPreferencesKey("lyrics_cache_generation")
         val TRANSLATION_LANGUAGE = stringPreferencesKey("translation_language")
         val USE_TRANSLATION_LANGUAGE = stringPreferencesKey("use_translation_language")
 

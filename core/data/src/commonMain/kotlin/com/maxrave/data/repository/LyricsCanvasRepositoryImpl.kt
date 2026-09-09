@@ -13,6 +13,7 @@ import com.maxrave.domain.data.model.canvas.CanvasResult
 import com.maxrave.domain.data.model.metadata.Lyrics
 import com.maxrave.domain.data.model.metadata.SimpMusicLyrics
 import com.maxrave.domain.extension.now
+import com.maxrave.domain.lyrics.TrackMatch
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.repository.LyricsCanvasRepository
 import com.maxrave.domain.utils.Resource
@@ -25,6 +26,7 @@ import com.maxrave.domain.utils.toSyncedLyrics
 import com.maxrave.kotlinytmusicscraper.YouTube
 import com.maxrave.logger.Logger
 import com.maxrave.spotify.Spotify
+import com.maxrave.spotify.model.response.spotify.search.SpotifySearchResponse
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
@@ -39,7 +41,6 @@ import org.simpmusic.lyrics.am.toImageUrl
 import org.simpmusic.lyrics.models.request.LyricsBody
 import org.simpmusic.lyrics.models.request.TranslatedLyricsBody
 import org.simpmusic.lyrics.parser.parseTtmlLyrics
-import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -94,6 +95,14 @@ internal class LyricsCanvasRepositoryImpl(
                     }
             }
         }.flowOn(Dispatchers.IO)
+
+    override suspend fun purgeLyricsCacheIfStale(dataStoreManager: DataStoreManager) {
+        val stored = dataStoreManager.lyricsCacheGeneration.first()
+        if (stored >= DataStoreManager.LYRICS_CACHE_GENERATION) return
+        val removed = localDataSource.deleteAllLyrics()
+        dataStoreManager.setLyricsCacheGeneration(DataStoreManager.LYRICS_CACHE_GENERATION)
+        Logger.i("Lyrics", "Cleared $removed cached lyrics rows written by an older matcher")
+    }
 
     override fun getCanvas(
         dataStoreManager: DataStoreManager,
@@ -168,33 +177,11 @@ internal class LyricsCanvasRepositoryImpl(
                             .onSuccess { searchResponse ->
                                 Logger.w("Canvas", "searchSpotifyResponse: $searchResponse")
                                 val track =
-                                    if (duration != 0) {
-                                        searchResponse.data?.searchV2?.tracksV2?.items?.find {
-                                            abs(
-                                                (
-                                                    (
-                                                        (
-                                                            it.item
-                                                                ?.data
-                                                                ?.duration
-                                                                ?.totalMilliseconds ?: (0 / 1000)
-                                                        ) - duration
-                                                    )
-                                                ),
-                                            ) < 1
-                                        }
-                                            ?: searchResponse.data
-                                                ?.searchV2
-                                                ?.tracksV2
-                                                ?.items
-                                                ?.firstOrNull()
-                                    } else {
-                                        searchResponse.data
-                                            ?.searchV2
-                                            ?.tracksV2
-                                            ?.items
-                                            ?.firstOrNull()
-                                    }
+                                    searchResponse.pickTrack(
+                                        title = song?.title.orEmpty(),
+                                        artist = song?.artistName?.firstOrNull().orEmpty(),
+                                        durationSeconds = duration,
+                                    )
                                 if (track != null) {
                                     Logger.w("Canvas", "track: $track")
                                     spotify
@@ -244,13 +231,14 @@ internal class LyricsCanvasRepositoryImpl(
 
     override fun getSpotifyLyrics(
         dataStoreManager: DataStoreManager,
-        query: String,
+        title: String,
+        artist: String,
         duration: Int?,
     ): Flow<Resource<Lyrics>> =
         flow {
             runCatching {
                 val q =
-                    query
+                    "$title $artist"
                         .replace(
                             Regex("\\((feat\\.|ft.|cùng với|con|mukana|com|avec|合作音乐人: ) "),
                             " ",
@@ -316,33 +304,11 @@ internal class LyricsCanvasRepositoryImpl(
                         .searchSpotifyTrack(q, authToken, spotifyClientToken)
                         .onSuccess { searchResponse ->
                             val track =
-                                if (duration != 0 && duration != null) {
-                                    searchResponse.data?.searchV2?.tracksV2?.items?.find {
-                                        abs(
-                                            (
-                                                (
-                                                    (
-                                                        it.item
-                                                            ?.data
-                                                            ?.duration
-                                                            ?.totalMilliseconds ?: (0 / 1000)
-                                                    ) - duration
-                                                )
-                                            ),
-                                        ) < 1
-                                    }
-                                        ?: searchResponse.data
-                                            ?.searchV2
-                                            ?.tracksV2
-                                            ?.items
-                                            ?.firstOrNull()
-                                } else {
-                                    searchResponse.data
-                                        ?.searchV2
-                                        ?.tracksV2
-                                        ?.items
-                                        ?.firstOrNull()
-                                }
+                                searchResponse.pickTrack(
+                                    title = title,
+                                    artist = artist,
+                                    durationSeconds = duration,
+                                )
                             Logger.d("Lyrics", "track: $track")
                             if (track != null) {
                                 spotify
@@ -394,9 +360,24 @@ internal class LyricsCanvasRepositoryImpl(
                     .replace(Regex("([()])"), "")
                     .replace(".", " ")
             simpMusicLyrics
-                .searchLrclibLyrics(qtrack, qartist, duration)
-                .onSuccess {
-                    it?.let { emit(Resource.Success<Lyrics>(it.toLyrics())) }
+                .searchLrclibLyrics(
+                    q_track = qtrack,
+                    q_artist = qartist,
+                    duration = duration,
+                    // The loosened strings above are for finding candidates; the untouched ones
+                    // are for judging them. Matching on the stripped text is what let a cover
+                    // through: with the brackets gone, "Song (Live)" and "Song" read the same.
+                    trackName = strack,
+                    artistName = sartist,
+                ).onSuccess { matched ->
+                    // No match is a result, and it has to be emitted: the caller advances to the
+                    // next source when it sees an error, and a flow that ends without emitting
+                    // anything leaves the lyrics chain waiting for a value that never comes.
+                    if (matched != null) {
+                        emit(Resource.Success<Lyrics>(matched.toLyrics()))
+                    } else {
+                        emit(Resource.Error<Lyrics>("No LRCLIB result matched this recording"))
+                    }
                 }.onFailure {
                     it.printStackTrace()
                     emit(Resource.Error<Lyrics>("Not found"))
@@ -691,4 +672,41 @@ internal class LyricsCanvasRepositoryImpl(
                     emit(Resource.Error<String>(it.message ?: "Failed to insert translated lyrics"))
                 }
         }.flowOn(Dispatchers.IO)
+}
+
+/**
+ * The search result that is this exact recording, or null when Spotify returned nothing that is.
+ *
+ * Replaces a duration test that could never pass: it compared the candidate's length in
+ * milliseconds against the track's in seconds, so `abs(213000 - 213) < 1` was false for every
+ * result and selection always fell through to "the first thing the search returned". For a
+ * well-known song that first result is routinely a live take, a cover or a sped-up edit, which is
+ * exactly what turned up as the wrong lyrics.
+ */
+private fun SpotifySearchResponse.pickTrack(
+    title: String,
+    artist: String,
+    durationSeconds: Int?,
+): SpotifySearchResponse.Data.Search.TracksV2.Items? {
+    val items = data?.searchV2?.tracksV2?.items.orEmpty()
+    return TrackMatch.best(
+        title = title,
+        artist = artist,
+        durationSeconds = durationSeconds,
+        candidates =
+            items.map { entry ->
+                val track = entry.item?.data
+                TrackMatch.Candidate(
+                    title = track?.name,
+                    artist =
+                        track
+                            ?.artists
+                            ?.items
+                            ?.mapNotNull { it.profile?.name }
+                            ?.joinToString(" "),
+                    durationSeconds = track?.duration?.totalMilliseconds?.let { it / 1000 },
+                    value = entry,
+                )
+            },
+    )
 }

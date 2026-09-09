@@ -52,6 +52,9 @@ internal class CarLyricsSource(
      */
     private val cache = mutableMapOf<String, List<TimedLine>?>()
 
+    @Volatile
+    private var purgedStaleCache = false
+
     /**
      * Timed lines for [song], or null when no source has any.
      *
@@ -67,6 +70,14 @@ internal class CarLyricsSource(
 
         val resolved =
             withContext(Dispatchers.IO) {
+                // The phone's UI does this too, but it may never have run: someone can get into
+                // the car and press play without opening the app at all. Once per process is
+                // enough -- the repository would no-op after the first call anyway, and this keeps
+                // a settings read off every track change.
+                if (!purgedStaleCache) {
+                    purgedStaleCache = true
+                    runCatching { lyricsCanvasRepository.purgeLyricsCacheIfStale(dataStoreManager) }
+                }
                 runCatching { resolve(song) }
                     .onFailure { Logger.w(TAG, "Lyrics lookup failed for $videoId: ${it.message}") }
                     .getOrNull()
@@ -128,7 +139,7 @@ internal class CarLyricsSource(
                 // No token check first: the repository owns that, and asking it is the only way to
                 // find out. Without a session it simply fails and the chain moves on.
                 lyricsCanvasRepository
-                    .getSpotifyLyrics(dataStoreManager, "${song.title} $artist", duration)
+                    .getSpotifyLyrics(dataStoreManager, song.title, artist, duration)
                     .firstSuccess()
 
             DataStoreManager.LRCLIB ->

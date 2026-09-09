@@ -13,6 +13,15 @@ import kotlinx.coroutines.flow.Flow
 interface LyricsCanvasRepository {
     fun getSavedLyrics(videoId: String): Flow<LyricsEntity?>
 
+    /**
+     * Empties the lyrics cache once, when it was filled by a matcher since found to be wrong.
+     *
+     * Safe to call from anywhere and as often as you like; it does nothing after the first time.
+     * Both entry points call it, because either may be the first to run — the phone's UI, or the
+     * car, when someone gets in and presses play without ever opening the app.
+     */
+    suspend fun purgeLyricsCacheIfStale(dataStoreManager: DataStoreManager)
+
     suspend fun insertLyrics(lyricsEntity: LyricsEntity)
 
     suspend fun insertTranslatedLyrics(translatedLyrics: TranslatedLyricsEntity)
@@ -48,9 +57,17 @@ interface LyricsCanvasRepository {
         canvasThumbUrl: String,
     )
 
+    /**
+     * Spotify's timed lyrics for this exact recording.
+     *
+     * Title and artist stay separate rather than arriving pre-joined into one search string: the
+     * search needs them fused, but deciding whether a result is the right recording needs them
+     * apart, and a joined string cannot be reliably taken back apart.
+     */
     fun getSpotifyLyrics(
         dataStoreManager: DataStoreManager,
-        query: String,
+        title: String,
+        artist: String,
         duration: Int?,
     ): Flow<Resource<Lyrics>>
 

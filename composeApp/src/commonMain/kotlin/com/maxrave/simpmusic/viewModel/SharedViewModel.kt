@@ -253,6 +253,8 @@ class SharedViewModel(
                 )
             }
             dataStoreManager.openApp()
+            // Before anything reads a cached lyric.
+            runCatching { lyricsCanvasRepository.purgeLyricsCacheIfStale(dataStoreManager) }
             val timeLineJob =
                 launch {
                     nowPlayingState
@@ -1414,7 +1416,8 @@ class SharedViewModel(
             LyricsSourceOrder.SPOTIFY ->
                 getSpotifyLyrics(
                     song.toTrack().copy(durationSeconds = duration),
-                    "${song.title} $artist",
+                    song.title,
+                    artist,
                     duration,
                 )
             DataStoreManager.LRCLIB -> getLrclibLyrics(song, artist, duration)
@@ -1714,12 +1717,13 @@ class SharedViewModel(
 
     private fun getSpotifyLyrics(
         track: Track,
-        query: String,
+        title: String,
+        artist: String,
         duration: Int? = null,
     ) {
         viewModelScope.launch {
-            Logger.d("Check SpotifyLyrics", "SpotifyLyrics $query")
-            lyricsCanvasRepository.getSpotifyLyrics(dataStoreManager, query, duration).cancellable().collect { response ->
+            Logger.d("Check SpotifyLyrics", "SpotifyLyrics $title $artist")
+            lyricsCanvasRepository.getSpotifyLyrics(dataStoreManager, title, artist, duration).cancellable().collect { response ->
                 Logger.d("Check SpotifyLyrics", response.toString())
                 val data = response.data
                 when (response) {

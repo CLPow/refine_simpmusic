@@ -1266,6 +1266,16 @@ interface DatabaseDao {
     @Query("DELETE FROM lyrics WHERE videoId NOT IN (SELECT videoId FROM song)")
     suspend fun deleteStaleLyrics(): Int
 
+    // Empties the lyrics cache outright, for when the words themselves are suspect rather than
+    // orphaned. A wrong match is indistinguishable from a right one once stored -- correct title,
+    // correct artist, somebody else's words -- so there is nothing to select on, and re-fetching is
+    // cheap. Translations go with them: they were translated from whatever was cached.
+    @Query("DELETE FROM lyrics")
+    suspend fun deleteAllLyrics(): Int
+
+    @Query("DELETE FROM translated_lyrics")
+    suspend fun deleteAllTranslatedLyrics(): Int
+
     @Query("DELETE FROM translated_lyrics WHERE videoId NOT IN (SELECT videoId FROM song)")
     suspend fun deleteStaleTranslatedLyrics(): Int
 

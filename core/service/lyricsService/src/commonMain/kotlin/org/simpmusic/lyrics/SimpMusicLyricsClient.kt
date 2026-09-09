@@ -1,5 +1,6 @@
 package org.simpmusic.lyrics
 
+import com.maxrave.domain.lyrics.TrackMatch
 import com.maxrave.ktorext.crypto.Hmac
 import com.maxrave.ktorext.crypto.HmacUri
 import com.maxrave.logger.Logger
@@ -16,7 +17,6 @@ import org.simpmusic.lyrics.models.response.LyricsResponse
 import org.simpmusic.lyrics.models.response.TranslatedLyricsResponse
 import org.simpmusic.lyrics.parser.parseSyncedLyrics
 import org.simpmusic.lyrics.parser.parseUnsyncedLyrics
-import kotlin.math.abs
 
 private const val TAG = "SimpMusicLyricsClient"
 
@@ -107,10 +107,24 @@ class SimpMusicLyricsClient {
             lyricsService.voteTranslatedLyrics(translatedLyricsId, upvote, hmacTimestamp).bodyOrThrow<TranslatedLyricsResponse>()
         }
 
+    /**
+     * @param q_track loosened text for the search itself; LRCLIB matches it fuzzily on purpose.
+     * @param q_artist the same, for the artist.
+     * @param trackName the track's real title, used to judge the results rather than to find them.
+     * @param artistName the track's real artist credit, likewise.
+     *
+     * The search deliberately casts a wide net -- brackets, features and punctuation stripped --
+     * so it reaches entries whose metadata is written differently. That is also why the results
+     * cannot be trusted in the order they arrive: a search for a famous song returns its live
+     * recording, several covers and a karaoke track, all of them plausible on title and artist.
+     * [TrackMatch] decides which of them is this exact recording, from the untouched metadata.
+     */
     suspend fun searchLrclibLyrics(
         q_track: String,
         q_artist: String,
         duration: Int?,
+        trackName: String,
+        artistName: String,
     ) = runCatching {
         val rs =
             lyricsService
@@ -119,11 +133,22 @@ class SimpMusicLyricsClient {
                     q_artist = q_artist,
                 ).body<List<LrclibObject>>()
         val lrclibObject: LrclibObject? =
-            if (duration != null) {
-                rs.find { abs(it.duration.toInt() - duration) <= 10 }
-            } else {
-                rs.firstOrNull()
-            }
+            TrackMatch.best(
+                title = trackName,
+                artist = artistName,
+                durationSeconds = duration,
+                candidates =
+                    rs.map { entry ->
+                        TrackMatch.Candidate(
+                            title = entry.trackName ?: entry.name,
+                            artist = entry.artistName,
+                            durationSeconds = entry.duration.toInt(),
+                            value = entry,
+                            isSynced = !entry.syncedLyrics.isNullOrEmpty(),
+                            isInstrumental = entry.instrumental,
+                        )
+                    },
+            )
         if (lrclibObject != null) {
             val syncedLyrics = lrclibObject.syncedLyrics
             val plainLyrics = lrclibObject.plainLyrics
