@@ -185,7 +185,12 @@ internal class SongRepositoryImpl(
         val liveQueue = mediaPlayerHandler.queueData.value?.data?.listTracks.orEmpty()
         if (liveQueue.isEmpty()) return false
         Logger.d(TAG, "Clear history: pinning ${liveQueue.size} queued tracks before the sweep")
-        localDataSource.recoverQueue(QueueEntity(listTrack = liveQueue))
+        localDataSource.recoverQueue(
+            QueueEntity(
+                listTrack = liveQueue,
+                playlistType = mediaPlayerHandler.queueData.value?.data?.playlistType?.name,
+            ),
+        )
         return true
     }
 
@@ -327,8 +332,15 @@ internal class SongRepositoryImpl(
     override suspend fun getSongInfoEntity(videoId: String): Flow<SongInfoEntity?> =
         flow { emit(localDataSource.getSongInfo(videoId)) }.flowOn(Dispatchers.Main)
 
-    override suspend fun recoverQueue(temp: List<Track>) {
-        val queueEntity = QueueEntity(listTrack = temp)
+    override suspend fun recoverQueue(
+        temp: List<Track>,
+        playlistType: String?,
+    ) {
+        val queueEntity =
+            QueueEntity(
+                listTrack = temp,
+                playlistType = playlistType,
+            )
         withContext(Dispatchers.IO) { localDataSource.recoverQueue(queueEntity) }
     }
 

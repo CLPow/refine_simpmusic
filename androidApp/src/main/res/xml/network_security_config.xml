@@ -1,8 +1,17 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?><!--
+    Cleartext is deny-by-default. Only a handful of first-party HTTP endpoints
+    still lack a usable HTTPS path (Google suggest, some ytimg fallbacks).
+    Everything else, including Google account login and stream extraction, is
+    HTTPS-only and fails closed on downgrade.
+-->
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">suggestqueries.google.com</domain>
+        <domain includeSubdomains="true">i.ytimg.com</domain>
+    </domain-config>
 </network-security-config>

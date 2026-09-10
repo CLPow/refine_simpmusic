@@ -116,6 +116,7 @@ import simpmusic.composeapp.generated.resources.lt_credit_protocol
 import simpmusic.composeapp.generated.resources.lt_disconnect
 import simpmusic.composeapp.generated.resources.lt_display_name
 import simpmusic.composeapp.generated.resources.lt_display_name_hint
+import simpmusic.composeapp.generated.resources.lt_privacy_note
 import simpmusic.composeapp.generated.resources.lt_host_badge
 import simpmusic.composeapp.generated.resources.lt_in_room
 import simpmusic.composeapp.generated.resources.lt_join_requests
@@ -486,6 +487,11 @@ private fun TitleBlock(inRoom: Boolean) {
             Text(
                 text = stringResource(Res.string.lt_tagline),
                 style = typo().bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(Res.string.lt_privacy_note),
+                style = typo().bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

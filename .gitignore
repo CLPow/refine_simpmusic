@@ -46,3 +46,6 @@ sentry.properties
 /desktopApp/generated.conveyor.conf
 # Conveyor output directory
 /output/
+# Local build/compile scratch dumps that should never ship
+/*.log
+/artwork-capture.log

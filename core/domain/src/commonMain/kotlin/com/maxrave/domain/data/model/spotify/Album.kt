@@ -4,7 +4,7 @@ data class Album(
     val albumType: String,
     val artists: List<ArtistX>,
     val availableMarkets: List<String>,
-    val externalUrls: ExternalUrlsXXX,
+    val externalUrls: ExternalUrls,
     val href: String,
     val id: String,
     val images: List<Image>,

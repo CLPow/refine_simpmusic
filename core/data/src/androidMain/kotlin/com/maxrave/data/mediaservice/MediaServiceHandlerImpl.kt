@@ -539,7 +539,7 @@ internal class MediaServiceHandlerImpl(
                         var thumbUrl =
                             track?.thumbnails?.lastOrNull()?.url
                                 ?: songEntity.thumbnails
-                                ?: "http://i.ytimg.com/vi/${songEntity.videoId}/maxresdefault.jpg"
+                                ?: "https://i.ytimg.com/vi/${songEntity.videoId}/maxresdefault.jpg"
                         Logger.w(TAG, "getDataOfNowPlayingState before: $thumbUrl")
                         thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
                         Logger.w(TAG, "getDataOfNowPlayingState: $thumbUrl")
@@ -581,7 +581,7 @@ internal class MediaServiceHandlerImpl(
                         _controlState.update { it.copy(isLiked = false) }
                         var thumbUrl =
                             track?.thumbnails?.lastOrNull()?.url
-                                ?: "http://i.ytimg.com/vi/${track?.videoId}/maxresdefault.jpg"
+                                ?: "https://i.ytimg.com/vi/${track?.videoId}/maxresdefault.jpg"
                         Logger.w(TAG, "getDataOfNowPlayingState before: $thumbUrl")
                         thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
                         val songEntity =
@@ -1663,7 +1663,7 @@ internal class MediaServiceHandlerImpl(
             val track = listTrack[i]
             var thumbUrl =
                 track.thumbnails?.lastOrNull()?.url
-                    ?: "http://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+                    ?: "https://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
             thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
             val artistName: String = track.artists.toListName().connectArtists()
             val isSong =
@@ -1804,7 +1804,7 @@ internal class MediaServiceHandlerImpl(
                 if (track == current) continue
                 var thumbUrl =
                     track.thumbnails?.lastOrNull()?.url
-                        ?: "http://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+                        ?: "https://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
                 thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
                 val isSong =
                     (
@@ -2028,7 +2028,7 @@ internal class MediaServiceHandlerImpl(
                 .toCollection(arrayListOf())
         var thumbUrl =
             track.thumbnails?.lastOrNull()?.url
-                ?: "http://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+                ?: "https://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
         thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
         val artistName: String = track.artists.toListName().connectArtists()
         val isSong =
@@ -2202,7 +2202,10 @@ internal class MediaServiceHandlerImpl(
                         temp.clear()
                         temp.addAll(_queueData.value.data.listTracks)
                         Logger.w("Check recover queue", temp.toString())
-                        songRepository.recoverQueue(temp)
+                        songRepository.recoverQueue(
+                            temp,
+                            playlistType = _queueData.value.data.playlistType?.name,
+                        )
                     }
                 }
             }
@@ -2333,11 +2336,13 @@ internal class MediaServiceHandlerImpl(
                     // onMediaItemTransition -> mayBeSaveRecentSong, which rewrites the stored
                     // position before the seek below would otherwise read it.
                     val savedPosition = dataStoreManager.recentPosition.first().toLongOrNull() ?: 0L
-                    val savedTracks =
+                    val savedQueueEntity =
                         songRepository
                             .getSavedQueue()
                             .singleOrNull()
                             ?.firstOrNull()
+                    val savedTracks =
+                        savedQueueEntity
                             ?.listTrack
                             .orEmpty()
                     // The saved queue may not contain the saved track (e.g. persisted while the
@@ -2359,7 +2364,12 @@ internal class MediaServiceHandlerImpl(
                             firstPlayedTrack = currentPlayingTrack,
                             playlistId = LOCAL_PLAYLIST_ID_SAVED_QUEUE,
                             playlistName = dataStoreManager.playlistFromSaved.first(),
-                            playlistType = PlaylistType.PLAYLIST,
+                            playlistType =
+                                runCatching {
+                                    savedQueueEntity?.playlistType?.let {
+                                        PlaylistType.valueOf(it)
+                                    }
+                                }.getOrNull() ?: PlaylistType.PLAYLIST,
                             continuation = null,
                         ),
                     )

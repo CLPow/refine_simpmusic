@@ -596,13 +596,13 @@ internal class DataStoreManagerImpl(
 
     override val spdc =
         settingsDataStore.data.map { preferences ->
-            preferences[SPDC] ?: ""
+            SecretCodec.decode(preferences[SPDC] ?: "")
         }
 
     override suspend fun setSpdc(spdc: String) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[SPDC] = spdc
+                settings[SPDC] = SecretCodec.encode(spdc)
             }
         }
     }
@@ -719,13 +719,13 @@ internal class DataStoreManagerImpl(
 
     override val spotifyClientToken: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            preferences[SPOTIFY_CLIENT_TOKEN] ?: ""
+            SecretCodec.decode(preferences[SPOTIFY_CLIENT_TOKEN] ?: "")
         }
 
     override suspend fun setSpotifyClientToken(token: String) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[SPOTIFY_CLIENT_TOKEN] = token
+                settings[SPOTIFY_CLIENT_TOKEN] = SecretCodec.encode(token)
             }
         }
     }
@@ -761,26 +761,26 @@ internal class DataStoreManagerImpl(
 
     override val tidalClientSecret: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            preferences[TIDAL_CLIENT_SECRET] ?: ""
+            SecretCodec.decode(preferences[TIDAL_CLIENT_SECRET] ?: "")
         }
 
     override suspend fun setTidalClientSecret(value: String) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[TIDAL_CLIENT_SECRET] = value
+                settings[TIDAL_CLIENT_SECRET] = SecretCodec.encode(value)
             }
         }
     }
 
     override val spotifyPersonalToken: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            preferences[SPOTIFY_PERSONAL_TOKEN] ?: ""
+            SecretCodec.decode(preferences[SPOTIFY_PERSONAL_TOKEN] ?: "")
         }
 
     override suspend fun setSpotifyPersonalToken(token: String) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[SPOTIFY_PERSONAL_TOKEN] = token
+                settings[SPOTIFY_PERSONAL_TOKEN] = SecretCodec.encode(token)
             }
         }
     }

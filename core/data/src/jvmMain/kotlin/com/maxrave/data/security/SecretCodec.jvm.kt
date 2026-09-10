@@ -27,25 +27,28 @@ private val isWindows: Boolean
  * removes is the far more likely case: the session leaking through a backup, a synced folder, a
  * support bundle, or anything that reads the file without impersonating the user's session.
  *
- * Linux and macOS fall through to plain text. Both have a keyring worth using (libsecret,
- * Keychain), but each needs its own native binding, and claiming protection that is not there
- * would be worse than being explicit about its absence.
+ * Linux and macOS use [DesktopFileSecretCodec] (Keychain / Secret-Service / file key).
  */
 internal actual object SecretCodec {
     actual fun encode(plain: String): String {
-        if (plain.isEmpty() || !isWindows) return plain
+        if (plain.isEmpty()) return plain
+        if (!isWindows) return DesktopFileSecretCodec.encode(plain)
         return try {
             val protectedBytes = Crypt32Util.cryptProtectData(plain.toByteArray(Charsets.UTF_8))
             DPAPI_PREFIX + Base64.getEncoder().encodeToString(protectedBytes)
         } catch (e: Throwable) {
-            // Storing the credential unprotected beats losing the session entirely, but this is
-            // worth seeing in a log: it means the account is being kept in the clear.
-            Logger.w(TAG, "DPAPI encrypt failed, storing unprotected: ${e.message}")
-            plain
+            // Fail closed on the wire: do NOT fall back to plaintext silently. An empty encode
+            // means the next write stores "" which decodes as signed-out. The log is the
+            // diagnosis; the user re-signs in once DPAPI works again rather than leaking the
+            // Google session into a synced settings file.
+            Logger.e(TAG, "DPAPI encrypt failed; refusing to store session unprotected: ${e.message}")
+            ""
         }
     }
 
     actual fun decode(stored: String): String {
+        if (stored.isEmpty()) return stored
+        if (!isWindows) return DesktopFileSecretCodec.decode(stored)
         if (!stored.startsWith(DPAPI_PREFIX)) return stored
         val payload = stored.removePrefix(DPAPI_PREFIX)
         return try {
@@ -59,4 +62,6 @@ internal actual object SecretCodec {
             ""
         }
     }
+
+    actual fun isProtected(): Boolean = isWindows || DesktopFileSecretCodec.isAvailable()
 }

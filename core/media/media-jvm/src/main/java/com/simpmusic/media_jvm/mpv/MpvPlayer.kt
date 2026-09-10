@@ -120,6 +120,9 @@ class MpvPlayer private constructor(
          */
         private const val EQ_LABEL = "simpEq"
 
+        /** `@label:` of the loudness-normalization entry (`dynaudnorm`). */
+        private const val LOUDNORM_LABEL = "simpLoudnorm"
+
         /** ISO octave centres for a ten-band equalizer, the spacing AutoEq profiles assume. */
         val EQ_BANDS_HZ = listOf(31, 62, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000)
 
@@ -761,6 +764,13 @@ class MpvPlayer private constructor(
     @Volatile
     private var eqEntry: String? = null
 
+    /**
+     * Loudness-normalization entry (`dynaudnorm`), or null when the user has volume
+     * normalization off. Lives in `af` beside the equalizer so a fresh handle re-asserts both.
+     */
+    @Volatile
+    private var loudnormEntry: String? = null
+
     /** Crossfade entries currently installed, so an equalizer change can rewrite around them. */
     @Volatile
     private var crossfadeEntries: List<String> = emptyList()
@@ -769,11 +779,31 @@ class MpvPlayer private constructor(
      * Write `af` from both tiers at once.
      *
      * The equalizer goes first so the crossfade sweep acts on the signal the listener actually
-     * hears, rather than on one that is about to be re-shaped behind it.
+     * hears, rather than on one that is about to be re-shaped behind it. Loudness sits with EQ
+     * (before the crossfade chain) so normalization is applied to the source, not the fade.
      */
     private fun applyAudioFilters(): Boolean {
-        val entries = listOfNotNull(eqEntry) + crossfadeEntries
+        val entries = listOfNotNull(eqEntry, loudnormEntry) + crossfadeEntries
         return setPropertyString("af", entries.joinToString(","))
+    }
+
+    /**
+     * Enable or disable loudness normalization.
+     *
+     * Android uses Media3's `LoudnessEnhancer` driven by the stream's `loudnessDb`. mpv has no
+     * equivalent session effect; `dynaudnorm` is the portable stand-in — dynamic range
+     * compression that keeps quiet passages audible without the peak boost that `loudnorm`
+     * two-pass would need (there is no second pass on a live radio stream).
+     */
+    fun setLoudnessNormalize(enabled: Boolean): Boolean {
+        if (isReleased) return false
+        loudnormEntry =
+            if (enabled) {
+                "@$LOUDNORM_LABEL:dynaudnorm=f=75:g=3:p=0.9"
+            } else {
+                null
+            }
+        return applyAudioFilters()
     }
 
     /**

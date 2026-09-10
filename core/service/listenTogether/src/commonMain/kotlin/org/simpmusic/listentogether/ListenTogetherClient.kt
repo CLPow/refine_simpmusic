@@ -421,6 +421,12 @@ class ListenTogetherClient(
          * The one public server, run by "Nyx" and already shared by several Metrolist forks.
          * Rooms are only shared by clients pointed at the SAME server, so this default is what
          * makes SimpMusic interoperable out of the box.
+         *
+         * Privacy: while a room is live this host receives the current track id, playback
+         * position, and the display name the guest chose. It does not receive library contents,
+         * Google/YouTube credentials, or listening history outside the room. Users who do not
+         * want that third-party hop should leave Listen Together unused (it is opt-in) or point
+         * at a self-hosted metroserver via the settings field.
          */
         const val DEFAULT_SERVER_URL = "wss://metroserverx.meowery.eu/ws"
 

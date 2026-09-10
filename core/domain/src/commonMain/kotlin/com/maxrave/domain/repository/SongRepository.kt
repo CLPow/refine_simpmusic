@@ -109,7 +109,10 @@ interface SongRepository {
 
     suspend fun getSongInfoEntity(videoId: String): Flow<SongInfoEntity?>
 
-    suspend fun recoverQueue(temp: List<Track>)
+    suspend fun recoverQueue(
+        temp: List<Track>,
+        playlistType: String? = null,
+    )
 
     suspend fun removeQueue()
 

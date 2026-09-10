@@ -4,6 +4,7 @@ import com.maxrave.spotify.SpotifyClient
 import com.maxrave.spotify.model.response.spotify.PersonalTokenResponse
 import io.ktor.client.call.body
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -18,14 +19,23 @@ class SpotifyAuth(
 
     suspend fun getTotpSecret(): Result<Boolean> =
         runCatching {
-            val response = spotifyClient.getSpotifyLastestTotpSecret().body<Map<String, List<Int>>>()
-            if (response.isNotEmpty()) {
-                val latestDict = response.entries.last()
-                val firstKey = latestDict.key.toInt()
-                totpSecret = Pair(
-                    firstKey,
-                    latestDict.value
-                )
+            val jsonText = spotifyClient.getSpotifyLastestTotpSecretJson()
+            val root = Json.parseToJsonElement(jsonText).jsonObject
+            if (root.isNotEmpty()) {
+                val latestDict =
+                    root.entries.last().let { (key, value) ->
+                        val ints =
+                            value.let {
+                                when (it) {
+                                    is JsonArray ->
+                                        it.map { elem -> elem.jsonPrimitive.content.toInt() }
+                                    else -> emptyList()
+                                }
+                            }
+                        key to ints
+                    }
+                val firstKey = latestDict.first.toIntOrNull() ?: return@runCatching false
+                totpSecret = Pair(firstKey, latestDict.second)
                 return@runCatching true
             } else false
         }

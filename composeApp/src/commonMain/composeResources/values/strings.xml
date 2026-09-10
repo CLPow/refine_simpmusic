@@ -746,6 +746,7 @@
     <!-- Listen Together -->
     <string name="listen_together">Listen Together</string>
     <string name="lt_tagline">One song, one position, together. Create a room and share the code with friends.</string>
+    <string name="lt_privacy_note">Rooms sync track and position to the public metroserver. Nothing about your library or account is sent.</string>
     <string name="lt_not_connected">Not connected</string>
     <string name="lt_connected">Connected</string>
     <string name="lt_connecting">Connecting…</string>

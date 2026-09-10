@@ -1,11 +1,9 @@
 # CLAUDE.md - SimpMusic Project Guide for AI Agents
 
-## 🌐 Language Rule
+## Language
 
-**Response language**: Always respond in **English**, and after each sentence, add a **Vietnamese translation in parentheses**.
-Example: "Hello, how are you? (Xin chào, bạn khỏe không?)"
+Reply in the language the user writes. Do **not** append a second-language translation after every sentence — that rule was experimental and made every response unusably long. Keep technical terms, code, API names, and CLI commands verbatim.
 
-This applies to all conversations in this project. The user is using Max plan so token cost is not a concern.
 
 ## 📋 Project Overview
 
@@ -741,6 +739,18 @@ if (getPlatform() == Platform.Android) {
   - `PlatformRomanizer.android` builds the tokenizer only when all 8 files are on disk and caches **only a successful build**, so Japanese lines come alive the moment the download lands — no restart. Until then `japanese()` returns null, the pipeline's existing "show nothing" contract. State (`NOT_DOWNLOADED/DOWNLOADING/READY/FAILED`) flows `LyricsRomanizerRepository` → Settings row subtitle; retry = confirm the dialog again.
   - Known gap, accepted: a device that had Japanese enabled *before* this build only starts the download on the next dialog confirm — irrelevant for v2.0.0 since no such users exist yet.
 
+- **Security hardening pass (2026-09-10, security-enhancements branch)**:
+  - Network security config is **HTTPS by default**; cleartext only for `suggestqueries.google.com` and `i.ytimg.com`. Media-session artwork fallbacks use `https://i.ytimg.com`.
+  - `allowBackup=false` and `backup_rules.xml` excludes DataStore/database so a restore cannot ship a Google session cookie off-device.
+  - Spotify TOTP `secretDict.json` is **SHA-256 pinned** (`SpotifyClient.getSpotifyLastestTotpSecretJson`). Refresh the pin when upstream rotates the dictionary.
+  - Spotify tokens, `sp_dc`, and Tidal client secret go through `SecretCodec` like the YouTube cookie. Windows DPAPI **fails closed** (empty encode, loud log) instead of writing plaintext. macOS uses Keychain (`security` CLI); Linux uses AES-GCM with a 0600 key file under `~/.simpmusic/.secret-key`.
+  - `SecretCodec.isProtected()` exists so Settings can surface "session not protected" later.
+  - Room **v29**: `queue.playlistType` persists album vs playlist so crossfade album exclusions survive restart.
+  - Desktop **volume normalization** ships via mpv `dynaudnorm` (`MpvPlayer.setLoudnessNormalize`); the Settings toggle moved under Playback (both platforms).
+  - Listen Together shows a privacy note; `DEFAULT_SERVER_URL` documents what leaves the device.
+  - `ExternalUrlsXXX` renamed to `ExternalUrls`. `*.log` gitignored (none are tracked).
+  - Android Auto release builds already used the sample host allowlist (only debug is `ALLOW_ALL`).
+
 ## 🔄 CLAUDE.md Auto-Update Rule (MANDATORY)
 
 After completing any of the following types of changes, the AI agent **MUST** update this CLAUDE.md file:
@@ -765,6 +775,6 @@ After completing any of the following types of changes, the AI agent **MUST** up
 
 *This document helps AI Agents quickly understand the SimpMusic project. Update regularly when there are major changes to architecture or structure.*
 
-**Last updated**: 2026-08-28
+**Last updated**: 2026-09-10
 **Project version**: Check latest release on GitHub
 **Maintained by**: maxrave-dev and contributors

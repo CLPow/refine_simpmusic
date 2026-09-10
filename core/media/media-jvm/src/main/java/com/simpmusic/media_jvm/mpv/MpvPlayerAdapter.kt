@@ -1029,6 +1029,7 @@ class MpvPlayerAdapter(
         if (internalEqualizerBands.isNotEmpty() || internalEqualizerPreamp != 0f) {
             setEqualizer(internalEqualizerBands, internalEqualizerPreamp)
         }
+        setLoudnessNormalize(internalNormalizeVolume)
     }
 
     /**
@@ -1064,6 +1065,20 @@ class MpvPlayerAdapter(
 
     @Volatile
     private var internalEqualizerPreamp: Float = 0f
+
+    private var internalNormalizeVolume: Boolean = false
+
+    /**
+     * Volume normalization on/off. Applied through mpv `dynaudnorm` — see
+     * [MpvPlayer.setLoudnessNormalize]. Must reach every live handle because a fresh handle
+     * starts with an empty `af`.
+     */
+    fun setNormalizeVolume(enabled: Boolean) {
+        internalNormalizeVolume = enabled
+        coroutineScope.launch {
+            forEachLiveHandle { it.setLoudnessNormalize(enabled) }
+        }
+    }
 
     override fun setEqualizer(
         bandsDb: List<Float>,

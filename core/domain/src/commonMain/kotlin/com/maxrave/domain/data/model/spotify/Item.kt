@@ -8,7 +8,7 @@ data class Item(
     val durationMs: Int?,
     val explicit: Boolean?,
     val externalIds: ExternalIds?,
-    val externalUrls: ExternalUrlsXXX?,
+    val externalUrls: ExternalUrls?,
     val href: String?,
     val id: String?,
     val isLocal: Boolean?,

@@ -15,9 +15,16 @@ package com.maxrave.data.security
  * Values are round-tripped through [decode], which must accept anything [encode] has ever
  * produced *and* plain text, so an existing install keeps working and is re-protected on the next
  * write rather than being invalidated.
+ *
+ * [isProtected] reports whether the last [encode] actually wrapped the value. Callers that store
+ * credentials should surface a "session not protected" state instead of failing closed into a
+ * silent sign-out.
  */
 internal expect object SecretCodec {
     fun encode(plain: String): String
 
     fun decode(stored: String): String
+
+    /** True when the platform can (and last encode did) protect credentials at rest. */
+    fun isProtected(): Boolean
 }

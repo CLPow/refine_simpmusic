@@ -1,7 +1,7 @@
 package com.maxrave.domain.data.model.spotify
 
 data class ArtistX(
-    val externalUrls: ExternalUrlsXXX,
+    val externalUrls: ExternalUrls,
     val href: String,
     val id: String,
     val name: String,

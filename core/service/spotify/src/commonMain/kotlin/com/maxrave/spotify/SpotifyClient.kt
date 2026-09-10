@@ -25,9 +25,11 @@ import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import io.ktor.http.userAgent
 import io.ktor.serialization.kotlinx.KotlinxSerializationConverter
 import io.ktor.serialization.kotlinx.json.json
@@ -116,13 +118,40 @@ class SpotifyClient {
         }
 
     /**
-     * Thanks to @Thereallo1026 and @misiektoja for providing the latest TOTP secret
+     * Thanks to @Thereallo1026 and @misiektoja for providing the latest TOTP secret.
+     *
+     * Body is integrity-checked against a pinned SHA-256 before it is returned. The dictionary
+     * rotates with Spotify client releases, so the pin lives next to the URL and must be
+     * refreshed when the upstream file changes — a silent accept of a tampered secretDict
+     * would mint attacker-chosen TOTP material for the signed-in account.
+     *
+     * Returns the verified JSON text (not an HttpResponse) because the body is already
+     * consumed for the checksum and a second `body<>()` read would fail.
      */
-    suspend fun getSpotifyLastestTotpSecret() =
-        spotifyClient.get("https://raw.githubusercontent.com/xyloflake/spot-secrets-go/refs/heads/main/secrets/secretDict.json") {
-            userAgent(USER_AGENT)
-            contentType(ContentType.Application.Json)
+    suspend fun getSpotifyLastestTotpSecretJson(): String {
+        val response =
+            spotifyClient.get(TOTP_SECRET_DICT_URL) {
+                userAgent(USER_AGENT)
+                contentType(ContentType.Application.Json)
+            }
+        if (!response.status.isSuccess()) {
+            throw IllegalStateException("Spotify TOTP secretDict HTTP ${response.status.value}")
         }
+        val body = response.bodyAsText()
+        val actual = body.sha256Hex()
+        if (!actual.equals(TOTP_SECRET_DICT_SHA256, ignoreCase = true)) {
+            throw IllegalStateException(
+                "Spotify TOTP secretDict checksum mismatch: expected $TOTP_SECRET_DICT_SHA256, got $actual",
+            )
+        }
+        return body
+    }
+
+    private fun String.sha256Hex(): String {
+        val digest = java.security.MessageDigest.getInstance("SHA-256")
+        val bytes = digest.digest(toByteArray(Charsets.UTF_8))
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
 
     suspend fun getSpotifyServerTime(spdc: String) =
         spotifyClient.get("https://open.spotify.com/api/server-time") {
@@ -313,5 +342,11 @@ class SpotifyClient {
 
     companion object {
         const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.157 Safari/537.36"
+
+        const val TOTP_SECRET_DICT_URL =
+            "https://raw.githubusercontent.com/xyloflake/spot-secrets-go/refs/heads/main/secrets/secretDict.json"
+        // Refresh this pin when upstream rotates the dictionary (new Spotify client versions).
+        const val TOTP_SECRET_DICT_SHA256 =
+            "c306e1e21d6afe35c20bd6cf2eee098df547c6f97845c28813e3d2a991895942"
     }
 }

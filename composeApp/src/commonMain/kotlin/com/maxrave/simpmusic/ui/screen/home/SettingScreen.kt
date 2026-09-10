@@ -1378,16 +1378,8 @@ fun SettingScreen(
                         color = MaterialTheme.colorScheme.onBackground,
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
-                    // Android only: the desktop handler's loudness code is commented out in full
-                    // (JvmMediaPlayerHandlerImpl), so this switch had nothing behind it there. A
-                    // control that silently does nothing is worse than an absent one.
-                    if (getPlatform() == Platform.Android) {
-                        SettingItem(
-                            title = stringResource(Res.string.normalize_volume),
-                            subtitle = stringResource(Res.string.balance_media_loudness),
-                            switch = (normalizeVolume to { viewModel.setNormalizeVolume(it) }),
-                        )
-                    }
+                    // Normalize volume lives in Playback (both platforms): Android uses
+                    // LoudnessEnhancer off the stream loudnessDb, Desktop uses mpv dynaudnorm.
                     SettingItem(
                         title = stringResource(Res.string.skip_silent),
                         subtitle = stringResource(Res.string.skip_no_music_part),
@@ -1408,6 +1400,11 @@ fun SettingScreen(
                 // Android-only branch — "Open system equalizer" is an Android feature — and this
                 // one is on both platforms: mpv's `af` chain on Desktop, an AudioProcessor in the
                 // Media3 sink on Android, driven from the same stored curve.
+                SettingItem(
+                    title = stringResource(Res.string.normalize_volume),
+                    subtitle = stringResource(Res.string.balance_media_loudness),
+                    switch = (normalizeVolume to { viewModel.setNormalizeVolume(it) }),
+                )
                 SettingItem(
                     title = stringResource(Res.string.equalizer),
                     subtitle = stringResource(Res.string.equalizer_description),

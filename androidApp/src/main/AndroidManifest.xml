@@ -35,14 +35,7 @@
         android:required="false" />
 
     <queries>
-        <intent>
-            <action android:name="android.media.action.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL" />
-        </intent>
-    </queries>
-    <queries>
         <package android:name="com.maxrave.simpmusic" />
-    </queries>
-    <queries>
         <intent>
             <action android:name="androidx.media3.session.MediaSessionService" />
         </intent>
@@ -50,7 +43,7 @@
 
     <application
         android:name=".SimpMusicApplication"
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:appCategory="audio"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
@@ -60,7 +53,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
         android:enableOnBackInvokedCallback="true"
-        android:requestLegacyExternalStorage="true"
         tools:replace="android:name"
         tools:targetApi="tiramisu">
 

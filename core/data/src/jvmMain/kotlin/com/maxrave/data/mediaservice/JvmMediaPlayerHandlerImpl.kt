@@ -607,7 +607,7 @@ class JvmMediaPlayerHandlerImpl(
                                 Regex("=w\\d+-h\\d+").replace(
                                     track?.thumbnails?.lastOrNull()?.url
                                         ?: songEntity.thumbnails
-                                        ?: "http://i.ytimg.com/vi/${songEntity.videoId}/maxresdefault.jpg",
+                                        ?: "https://i.ytimg.com/vi/${songEntity.videoId}/maxresdefault.jpg",
                                     "=w544-h544",
                                 )
                             if (songEntity.thumbnails != thumbUrl) {
@@ -636,7 +636,7 @@ class JvmMediaPlayerHandlerImpl(
                             val thumbUrl =
                                 Regex("=w\\d+-h\\d+").replace(
                                     track?.thumbnails?.lastOrNull()?.url
-                                        ?: "http://i.ytimg.com/vi/${track?.videoId}/maxresdefault.jpg",
+                                        ?: "https://i.ytimg.com/vi/${track?.videoId}/maxresdefault.jpg",
                                     "=w544-h544",
                                 )
                             val newSong =
@@ -1765,7 +1765,7 @@ class JvmMediaPlayerHandlerImpl(
             val track = listTrack[i]
             var thumbUrl =
                 track.thumbnails?.lastOrNull()?.url
-                    ?: "http://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+                    ?: "https://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
             if (thumbUrl.contains("w120")) {
                 thumbUrl = Regex("([wh])120").replace(thumbUrl, "$1544")
             }
@@ -1908,7 +1908,7 @@ class JvmMediaPlayerHandlerImpl(
                 if (track == current) continue
                 var thumbUrl =
                     track.thumbnails?.lastOrNull()?.url
-                        ?: "http://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+                        ?: "https://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
                 if (thumbUrl.contains("w120")) {
                     thumbUrl = Regex("([wh])120").replace(thumbUrl, "$1544")
                 }
@@ -2125,7 +2125,7 @@ class JvmMediaPlayerHandlerImpl(
                 .toCollection(arrayListOf())
         var thumbUrl =
             track.thumbnails?.lastOrNull()?.url
-                ?: "http://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
+                ?: "https://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
         thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
         val artistName: String = track.artists.toListName().connectArtists()
         val isSong =
@@ -2299,7 +2299,10 @@ class JvmMediaPlayerHandlerImpl(
                         temp.clear()
                         temp.addAll(_queueData.value.data.listTracks)
                         Logger.w("Check recover queue", temp.toString())
-                        songRepository.recoverQueue(temp)
+                        songRepository.recoverQueue(
+                            temp,
+                            playlistType = _queueData.value.data.playlistType?.name,
+                        )
                     }
                 }
             }
@@ -2326,77 +2329,13 @@ class JvmMediaPlayerHandlerImpl(
     }
 
     override fun mayBeNormalizeVolume() {
-//        runBlocking {
-//            normalizeVolume = dataStoreManager.normalizeVolume.first() == TRUE
-//        }
-//        if (!normalizeVolume) {
-//            // TODO: loudness enhancer
-//            volumeNormalizationJob?.cancel()
-//            player.volume = 1f
-//            return
-//        }
-//
-//        if (loudnessEnhancer == null && player.audioSessionId != PlayerConstants.AUDIO_SESSION_ID_UNSET) {
-//            try {
-//                loudnessEnhancer = LoudnessEnhancer(player.audioSessionId)
-//            } catch (e: Exception) {
-//                Logger.e(TAG, "mayBeNormalizeVolume: ${e.message}")
-//                e.printStackTrace()
-//            }
-//        }
-
-//        player.currentMediaItem?.mediaId?.let { songId ->
-//            val videoId =
-//                if (songId.contains("Video")) {
-//                    songId.removePrefix("Video")
-//                } else {
-//                    songId
-//                }
-//            volumeNormalizationJob?.cancel()
-//            volumeNormalizationJob =
-//                coroutineScope.launch(Dispatchers.Main) {
-//                    fun Float?.toMb() = ((this ?: 0f) * 100).toInt()
-//                    streamRepository
-//                        .getFormatFlow(videoId)
-//                        .cancellable()
-//                        .distinctUntilChanged()
-//                        .collectLatest { format ->
-//                            if (format != null) {
-//                                val loudnessMb =
-//                                    format.loudnessDb.toMb().let {
-//                                        if (it !in -2000..2000) {
-//                                            0
-//                                        } else {
-//                                            it
-//                                        }
-//                                    }
-//                                Logger.d(TAG, "Loudness: ${format.loudnessDb} db, $loudnessMb")
-//                                try {
-//                                    loudnessEnhancer?.setTargetGain(0f.toMb() - loudnessMb)
-//                                    loudnessEnhancer?.enabled = true
-//                                    Logger.w(
-//                                        TAG,
-//                                        "mayBeNormalizeVolume: ${loudnessEnhancer?.targetGain}",
-//                                    )
-//                                } catch (e: Exception) {
-//                                    Logger.e(TAG, "mayBeNormalizeVolume: ${e.message}")
-//                                    e.printStackTrace()
-//                                }
-//                                try {
-//                                    secondLoudnessEnhancer?.setTargetGain(0f.toMb() - loudnessMb)
-//                                    secondLoudnessEnhancer?.enabled = true
-//                                    Logger.w(
-//                                        TAG,
-//                                        "mayBeNormalizeVolume: ${secondLoudnessEnhancer?.targetGain}",
-//                                    )
-//                                } catch (e: Exception) {
-//                                    Logger.e(TAG, "mayBeNormalizeVolume: ${e.message}")
-//                                    e.printStackTrace()
-//                                }
-//                            }
-//                        }
-//                }
-//        }
+        // Desktop path: push the DataStore flag into mpv's dynaudnorm filter. Unlike Android's
+        // LoudnessEnhancer there is no per-stream loudnessDb to read — dynaudnorm compresses
+        // dynamically instead, which is the only portable option on a live radio stream.
+        runBlocking {
+            normalizeVolume = dataStoreManager.normalizeVolume.first() == TRUE
+        }
+        (player as? com.simpmusic.media_jvm.mpv.MpvPlayerAdapter)?.setNormalizeVolume(normalizeVolume)
     }
 
     override fun mayBeSavePlaybackState() {
@@ -2419,11 +2358,13 @@ class JvmMediaPlayerHandlerImpl(
                     // onMediaItemTransition -> mayBeSaveRecentSong, which rewrites the stored
                     // position before the seek below would otherwise read it.
                     val savedPosition = dataStoreManager.recentPosition.first().toLongOrNull() ?: 0L
-                    val savedTracks =
+                    val savedQueueEntity =
                         songRepository
                             .getSavedQueue()
                             .singleOrNull()
                             ?.firstOrNull()
+                    val savedTracks =
+                        savedQueueEntity
                             ?.listTrack
                             .orEmpty()
                     // The saved queue may not contain the saved track (e.g. persisted while the
@@ -2445,7 +2386,12 @@ class JvmMediaPlayerHandlerImpl(
                             firstPlayedTrack = currentPlayingTrack,
                             playlistId = LOCAL_PLAYLIST_ID_SAVED_QUEUE,
                             playlistName = dataStoreManager.playlistFromSaved.first(),
-                            playlistType = PlaylistType.PLAYLIST,
+                            playlistType =
+                                runCatching {
+                                    savedQueueEntity?.playlistType?.let {
+                                        PlaylistType.valueOf(it)
+                                    }
+                                }.getOrNull() ?: PlaylistType.PLAYLIST,
                             continuation = null,
                         ),
                     )
