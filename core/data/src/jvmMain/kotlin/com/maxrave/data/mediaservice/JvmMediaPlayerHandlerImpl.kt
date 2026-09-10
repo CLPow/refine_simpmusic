@@ -2329,13 +2329,33 @@ class JvmMediaPlayerHandlerImpl(
     }
 
     override fun mayBeNormalizeVolume() {
-        // Desktop path: push the DataStore flag into mpv's dynaudnorm filter. Unlike Android's
-        // LoudnessEnhancer there is no per-stream loudnessDb to read — dynaudnorm compresses
-        // dynamically instead, which is the only portable option on a live radio stream.
+        // Desktop: static per-track gain from the format's loudnessDb, matching Android's
+        // LoudnessEnhancer. dynaudnorm made music pump; a fixed gain does not.
         runBlocking {
             normalizeVolume = dataStoreManager.normalizeVolume.first() == TRUE
         }
-        (player as? com.simpmusic.media_jvm.mpv.MpvPlayerAdapter)?.setNormalizeVolume(normalizeVolume)
+        val adapter = player as? com.simpmusic.media_jvm.mpv.MpvPlayerAdapter ?: return
+        adapter.setNormalizeVolume(normalizeVolume)
+        if (!normalizeVolume) {
+            adapter.setLoudnessGainDbForTrack(null)
+            return
+        }
+        volumeNormalizationJob?.cancel()
+        volumeNormalizationJob =
+            coroutineScope.launch(Dispatchers.Main) {
+                val videoId =
+                    player.currentMediaItem
+                        ?.mediaId
+                        ?.substringAfter("Video")
+                        ?: return@launch
+                streamRepository
+                    .getFormatFlow(videoId)
+                    .cancellable()
+                    .distinctUntilChanged()
+                    .collectLatest { format ->
+                        adapter.setLoudnessGainDbForTrack(format?.loudnessDb?.toFloat())
+                    }
+            }
     }
 
     override fun mayBeSavePlaybackState() {

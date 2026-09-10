@@ -271,8 +271,10 @@ internal class LibraryTabCarScreen(
                 screenManager.push(MediaListCarScreen(carContext, browserProvider, item.mediaId, title))
             } else {
                 playViaBrowser(carContext, browserProvider(), item, TAG)
-                // This screen is the stack root, so the playback screen goes on top
-                screenManager.push(NowPlayingCarScreen(carContext))
+                // Stay on the player without wiping the browse stack: popToRoot used to throw
+                // the driver back to Home on every track pick. openNowPlayingOrStay reuses an
+                // existing now-playing screen or pushes one on top so BACK returns here.
+                openNowPlayingOrStay(carContext, screenManager)
             }
         }
     }

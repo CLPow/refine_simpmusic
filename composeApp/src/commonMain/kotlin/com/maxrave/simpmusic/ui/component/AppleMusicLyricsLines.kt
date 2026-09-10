@@ -82,10 +82,10 @@ internal val AppleMusicPendingWordColor = Color(0xFF8E8E8E)
 /**
  * Apple sets lyrics far larger than body copy — a line fills most of the width and wraps after a
  * few words, which is what makes the page readable at arm's length while the phone sits on a desk.
- * The app's own headlineLarge is 23sp, sized for list headers rather than for this, so the size is
- * overridden here while the weight and font family still come from the theme.
+ * Sized for glancing while the phone is mounted in a car: 32sp (+4 over the original 28sp) so a
+ * driver can read without leaning in. The app's own headlineLarge is 23sp and is not used here.
  */
-internal val AppleMusicLyricFontSize = 28.sp
+internal val AppleMusicLyricFontSize = 32.sp
 // Taken from AMLL's stylesheet (packages/core/src/styles/lyric-player.module.css) rather than
 // measured off a screenshot. Everything there is expressed in `em`, so it scales with whatever
 // font size the host picks — these are those ratios resolved against AppleMusicLyricFontSize.
@@ -95,18 +95,18 @@ internal val AppleMusicLyricFontSize = 28.sp
 //
 // Note which one is bigger: the leading INSIDE a wrapped line is tighter than the padding between
 // two lines, and that is what makes a wrapped lyric read as one thought instead of two.
-internal val AppleMusicLyricLineHeight = 34.sp
+internal val AppleMusicLyricLineHeight = 39.sp
 internal val AppleMusicLyricGap = 20.dp
 
 // Sizing from .lyricSubLine { font-size: max(0.5em, 10px); line-height: 1.5em } plus the flex
-// `gap: 0.3em` above it.
+// `gap: 0.3em` above it. Raised with the main line so the translation stays readable in a car.
 //
 // Its `opacity: 0.3` is deliberately NOT copied. That rule dresses AMLL's romanisation/ruby row —
 // a pronunciation aid you glance at — whereas this row is the TRANSLATION, which the user turned
 // on specifically to read. At 0.3 it was unreadable even on the line being sung. It follows the
 // line's own colour instead: white-ish while sung, grey with the rest.
-internal val AppleMusicSubLineFontSize = 14.sp
-internal val AppleMusicSubLineHeight = 21.sp
+internal val AppleMusicSubLineFontSize = 17.sp
+internal val AppleMusicSubLineHeight = 24.sp
 internal val AppleMusicMainToSubGap = 12.dp
 
 // .lyricLineWrapper { border-radius: 0.25em } plus its :hover / :active background. There is no

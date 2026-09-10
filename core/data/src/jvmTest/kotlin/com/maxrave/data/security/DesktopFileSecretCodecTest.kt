@@ -6,35 +6,40 @@ import kotlin.test.assertTrue
 
 /**
  * Round-trip and fail-closed behaviour for the file-key path. Windows DPAPI cannot run in a
- * portable unit test (it needs a real user profile), so the Linux/macOS AES-GCM path is the one
- * that is exercised here — and it is the one that previously had no coverage at all.
+ * portable unit test, so the Linux/macOS AES-GCM path is exercised here.
  */
 class DesktopFileSecretCodecTest {
     private val sample = "SIDCC=very-secret-session-value; other=1"
 
     @Test
     fun encodeThenDecodeRoundTrips() {
-        val encoded = DesktopFileSecretCodec.encode(sample)
+        val encoded = DesktopFileSecretCodec.encode(sample, "session")
         assertTrue(encoded.startsWith("aead:") || encoded.startsWith("kc:"), "encoded=$encoded")
-        assertEquals(sample, DesktopFileSecretCodec.decode(encoded))
+        assertEquals(sample, DesktopFileSecretCodec.decode(encoded, "session"))
     }
 
     @Test
     fun emptyStaysEmpty() {
-        assertEquals("", DesktopFileSecretCodec.encode(""))
-        assertEquals("", DesktopFileSecretCodec.decode(""))
+        assertEquals("", DesktopFileSecretCodec.encode("", "session"))
+        assertEquals("", DesktopFileSecretCodec.decode("", "session"))
     }
 
     @Test
     fun plaintextFromOlderInstallIsPassThroughOnDecode() {
-        // An install that predates encryption still has the cookie in the clear. decode() must
-        // accept it so the next write re-protects rather than invalidating the session.
-        assertEquals(sample, DesktopFileSecretCodec.decode(sample))
+        assertEquals(sample, DesktopFileSecretCodec.decode(sample, "session"))
     }
 
     @Test
     fun ciphertextIsNotThePlaintext() {
-        val encoded = DesktopFileSecretCodec.encode(sample)
+        val encoded = DesktopFileSecretCodec.encode(sample, "spotify.sp_dc")
         assertTrue(!encoded.contains(sample), "ciphertext must not contain the plaintext")
+    }
+
+    @Test
+    fun purposesDecodeIndependently() {
+        val a = DesktopFileSecretCodec.encode("cookie-a", "session")
+        val b = DesktopFileSecretCodec.encode("cookie-b", "spotify.sp_dc")
+        assertEquals("cookie-a", DesktopFileSecretCodec.decode(a, "session"))
+        assertEquals("cookie-b", DesktopFileSecretCodec.decode(b, "spotify.sp_dc"))
     }
 }

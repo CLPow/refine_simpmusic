@@ -81,7 +81,11 @@ internal class CarLyricsOverlay(
                         Logger.i(TAG, "Car attached; showing lyrics in mode $mode")
                         // A car that comes back should see lyrics saved since it last left.
                         source.clearCache()
-                        followTracks(mode)
+                        // Title carries the sung line on car: hosts typically render title
+                        // larger than the artist/subtitle row. Users asked for bigger lyrics
+                        // while driving; the host owns font size, so put the text where the
+                        // larger type already is.
+                        followTracks(AA_LYRICS_BOTH_LINES)
                     }
                 }
         }

@@ -90,9 +90,7 @@ internal class SearchCarScreen(
                 itemListBuilder.addItem(
                     carContext.mediaRow(item, artwork[item.mediaId], isPlaying) {
                         playViaBrowser(carContext, browserProvider(), item, TAG)
-                        // Land back on the playback screen, matching the classic surface
-                        screenManager.popToRoot()
-                        screenManager.push(NowPlayingCarScreen(carContext))
+                        openNowPlayingOrStay(carContext, screenManager)
                     },
                 )
             }

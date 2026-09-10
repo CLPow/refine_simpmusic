@@ -11,6 +11,7 @@ import com.maxrave.common.SELECTED_LANGUAGE
 import com.maxrave.common.SUPPORTED_LANGUAGE
 import com.maxrave.common.SponsorBlockType
 import com.maxrave.domain.data.model.network.ProxyConfiguration
+import com.maxrave.data.security.SECRET_PURPOSE_SESSION
 import com.maxrave.data.security.SecretCodec
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.manager.DataStoreManager.Values.AA_LYRICS_TITLE_AND_LYRIC
@@ -192,12 +193,29 @@ internal class DataStoreManagerImpl(
             preferences[LOGGED_IN] ?: FALSE
         }
 
+    /**
+     * Encode with SecretCodec, keeping the previously stored ciphertext when encryption fails.
+     * An empty encode of a non-empty plain value means the platform refused to protect it —
+     * overwriting the slot with "" would silently sign the user out.
+     */
+    private fun encodeSecret(
+        plain: String,
+        purpose: String,
+        previousStored: String?,
+    ): String {
+        val encoded = SecretCodec.encode(plain, purpose)
+        if (plain.isNotEmpty() && encoded.isEmpty()) {
+            return previousStored.orEmpty()
+        }
+        return encoded
+    }
+
     // Protected at rest where the platform needs it — see SecretCodec. decode() passes plain text
     // through unchanged, so an install that predates this keeps its session and is re-protected on
     // the next write.
     override val cookie: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            SecretCodec.decode(preferences[COOKIE] ?: "")
+            SecretCodec.decode(preferences[COOKIE] ?: "", SECRET_PURPOSE_SESSION)
         }
 
     override val pageId: Flow<String> =
@@ -211,7 +229,12 @@ internal class DataStoreManagerImpl(
     ) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[COOKIE] = SecretCodec.encode(cookie)
+                settings[COOKIE] =
+                    encodeSecret(
+                        cookie,
+                        SECRET_PURPOSE_SESSION,
+                        settings[COOKIE],
+                    )
                 settings[PAGE_ID] = pageId ?: ""
             }
         }
@@ -596,13 +619,13 @@ internal class DataStoreManagerImpl(
 
     override val spdc =
         settingsDataStore.data.map { preferences ->
-            SecretCodec.decode(preferences[SPDC] ?: "")
+            SecretCodec.decode(preferences[SPDC] ?: "", "spotify.sp_dc")
         }
 
     override suspend fun setSpdc(spdc: String) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[SPDC] = SecretCodec.encode(spdc)
+                settings[SPDC] = encodeSecret(spdc, "spotify.sp_dc", settings[SPDC])
             }
         }
     }
@@ -719,13 +742,14 @@ internal class DataStoreManagerImpl(
 
     override val spotifyClientToken: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            SecretCodec.decode(preferences[SPOTIFY_CLIENT_TOKEN] ?: "")
+            SecretCodec.decode(preferences[SPOTIFY_CLIENT_TOKEN] ?: "", "spotify.client_token")
         }
 
     override suspend fun setSpotifyClientToken(token: String) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[SPOTIFY_CLIENT_TOKEN] = SecretCodec.encode(token)
+                settings[SPOTIFY_CLIENT_TOKEN] =
+                    encodeSecret(token, "spotify.client_token", settings[SPOTIFY_CLIENT_TOKEN])
             }
         }
     }
@@ -761,26 +785,28 @@ internal class DataStoreManagerImpl(
 
     override val tidalClientSecret: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            SecretCodec.decode(preferences[TIDAL_CLIENT_SECRET] ?: "")
+            SecretCodec.decode(preferences[TIDAL_CLIENT_SECRET] ?: "", "tidal.client_secret")
         }
 
     override suspend fun setTidalClientSecret(value: String) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[TIDAL_CLIENT_SECRET] = SecretCodec.encode(value)
+                settings[TIDAL_CLIENT_SECRET] =
+                    encodeSecret(value, "tidal.client_secret", settings[TIDAL_CLIENT_SECRET])
             }
         }
     }
 
     override val spotifyPersonalToken: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            SecretCodec.decode(preferences[SPOTIFY_PERSONAL_TOKEN] ?: "")
+            SecretCodec.decode(preferences[SPOTIFY_PERSONAL_TOKEN] ?: "", "spotify.personal_token")
         }
 
     override suspend fun setSpotifyPersonalToken(token: String) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[SPOTIFY_PERSONAL_TOKEN] = SecretCodec.encode(token)
+                settings[SPOTIFY_PERSONAL_TOKEN] =
+                    encodeSecret(token, "spotify.personal_token", settings[SPOTIFY_PERSONAL_TOKEN])
             }
         }
     }

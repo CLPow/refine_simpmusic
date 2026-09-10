@@ -13,22 +13,21 @@ import javax.crypto.spec.SecretKeySpec
 
 private const val TAG = "DesktopFileSecretCodec"
 private const val PREFIX = "aead:"
+private const val KC_PREFIX = "kc:"
 private const val GCM_TAG_BITS = 128
-private const val SALT_BYTES = 16
 private const val IV_BYTES = 12
 private const val KEY_FILE_NAME = ".secret-key"
+private const val KEYCHAIN_SERVICE = "org.simpmusic.secret"
 
 /**
  * Non-Windows desktop protection.
  *
- * Prefer the platform store when it is usable:
- * - macOS Keychain via the `security` CLI (generic password, service `org.simpmusic.session`).
- * - Linux Secret Service is not wired here (needs libsecret + a running agent); fall through to
- *   an AES-GCM key file under the app data directory with POSIX 600.
+ * - macOS Keychain via the `security` CLI. Each [purpose] is its own generic-password account
+ *   under [KEYCHAIN_SERVICE], so the YouTube cookie and Spotify tokens never overwrite each other.
+ * - Linux / Keychain-fallback: AES-GCM with a 0600 key file under `~/.simpmusic/`. Better than
+ *   cleartext DataStore contents, weaker than a system keyring — explicit, not claimed as DPAPI.
  *
- * The file key is better than cleartext DataStore contents (backup/sync of the settings file no
- * longer exposes the cookie) and worse than a system keyring (anything that can read the key file
- * as this user can decrypt). That trade-off is explicit rather than claimed as DPAPI-equivalent.
+ * Encrypt failure returns `""` so the caller can skip the write rather than store plaintext.
  */
 internal object DesktopFileSecretCodec {
     private val isMac: Boolean
@@ -39,51 +38,60 @@ internal object DesktopFileSecretCodec {
 
     fun isAvailable(): Boolean = isMac || isLinux
 
-    fun encode(plain: String): String {
+    fun encode(
+        plain: String,
+        purpose: String,
+    ): String {
         if (plain.isEmpty()) return plain
         if (isMac) {
-            macKeychainStore(plain)?.let { return it }
-            Logger.w(TAG, "Keychain store failed; falling back to file key")
+            macKeychainStore(purpose, plain)?.let { return it }
+            Logger.w(TAG, "Keychain store failed for $purpose; falling back to file key")
         }
         return try {
             encryptWithFileKey(plain)
         } catch (e: Throwable) {
-            Logger.e(TAG, "File-key encrypt failed; refusing to store unprotected: ${e.message}")
+            Logger.e(TAG, "File-key encrypt failed ($purpose); refusing to store unprotected: ${e.message}")
             ""
         }
     }
 
-    fun decode(stored: String): String {
+    fun decode(
+        stored: String,
+        purpose: String,
+    ): String {
         if (stored.isEmpty()) return stored
-        if (stored.startsWith("kc:")) {
-            return macKeychainLoad(stored.removePrefix("kc:")) ?: ""
+        if (stored.startsWith(KC_PREFIX)) {
+            return macKeychainLoad(stored.removePrefix(KC_PREFIX)) ?: ""
         }
         if (!stored.startsWith(PREFIX)) return stored
         return try {
             decryptWithFileKey(stored.removePrefix(PREFIX))
         } catch (e: Throwable) {
-            Logger.w(TAG, "File-key decrypt failed, treating as signed out: ${e.message}")
+            Logger.w(TAG, "File-key decrypt failed ($purpose), treating as signed out: ${e.message}")
             ""
         }
     }
 
     // ---- macOS Keychain ----
 
-    private fun keychainAccount(): String = System.getProperty("user.name", "user")
-
-    private fun macKeychainStore(plain: String): String? {
+    private fun macKeychainStore(
+        purpose: String,
+        plain: String,
+    ): String? {
         return try {
             val process =
                 ProcessBuilder(
                     "security", "add-generic-password",
-                    "-U", // update if exists
-                    "-a", keychainAccount(),
-                    "-s", "org.simpmusic.session",
+                    "-U",
+                    "-a", purpose,
+                    "-s", KEYCHAIN_SERVICE,
                     "-w", plain,
                 ).redirectErrorStream(true).start()
             val out = process.inputStream.readBytes().toString(Charsets.UTF_8)
             val code = process.waitFor()
-            if (code == 0) "kc:${keychainAccount()}" else {
+            if (code == 0) {
+                KC_PREFIX + purpose
+            } else {
                 Logger.w(TAG, "security add-generic-password exit=$code $out")
                 null
             }
@@ -93,13 +101,13 @@ internal object DesktopFileSecretCodec {
         }
     }
 
-    private fun macKeychainLoad(account: String): String? {
+    private fun macKeychainLoad(purpose: String): String? {
         return try {
             val process =
                 ProcessBuilder(
                     "security", "find-generic-password",
-                    "-a", account,
-                    "-s", "org.simpmusic.session",
+                    "-a", purpose,
+                    "-s", KEYCHAIN_SERVICE,
                     "-w",
                 ).redirectErrorStream(true).start()
             val out = process.inputStream.readBytes().toString(Charsets.UTF_8).trim()
@@ -135,7 +143,7 @@ internal object DesktopFileSecretCodec {
                 setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE),
             )
         } catch (_: UnsupportedOperationException) {
-            // Non-POSIX FS (should not happen on Linux/macOS) — leave default ACLs.
+            // Non-POSIX FS.
         } catch (e: Throwable) {
             Logger.w(TAG, "Could not tighten key file permissions: ${e.message}")
         }
@@ -146,24 +154,20 @@ internal object DesktopFileSecretCodec {
 
     private fun encryptWithFileKey(plain: String): String {
         val keyMaterial = loadOrCreateKeyMaterial()
-        val salt = ByteArray(SALT_BYTES).also { SecureRandom().nextBytes(it) }
         val iv = ByteArray(IV_BYTES).also { SecureRandom().nextBytes(it) }
         val key = deriveKey(keyMaterial)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
         val ciphertext = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
-        val packed = salt + iv + ciphertext
-        return PREFIX + Base64.getEncoder().encodeToString(packed)
+        return PREFIX + Base64.getEncoder().encodeToString(iv + ciphertext)
     }
 
     private fun decryptWithFileKey(payload: String): String {
         val packed = Base64.getDecoder().decode(payload)
-        require(packed.size > SALT_BYTES + IV_BYTES) { "ciphertext too short" }
-        val salt = packed.copyOfRange(0, SALT_BYTES)
-        val iv = packed.copyOfRange(SALT_BYTES, SALT_BYTES + IV_BYTES)
-        val ciphertext = packed.copyOfRange(SALT_BYTES + IV_BYTES, packed.size)
-        val keyMaterial = loadOrCreateKeyMaterial()
-        val key = deriveKey(keyMaterial)
+        require(packed.size > IV_BYTES) { "ciphertext too short" }
+        val iv = packed.copyOfRange(0, IV_BYTES)
+        val ciphertext = packed.copyOfRange(IV_BYTES, packed.size)
+        val key = deriveKey(loadOrCreateKeyMaterial())
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(GCM_TAG_BITS, iv))
         return String(cipher.doFinal(ciphertext), Charsets.UTF_8)

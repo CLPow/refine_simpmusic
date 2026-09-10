@@ -103,7 +103,7 @@ fun typo(
                 ),
             headlineLarge =
                 TextStyle(
-                    fontSize = 23.sp,
+                    fontSize = 26.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = fontFamily,
                     color = bodyColor,

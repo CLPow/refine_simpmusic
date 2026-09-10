@@ -788,20 +788,19 @@ class MpvPlayer private constructor(
     }
 
     /**
-     * Enable or disable loudness normalization.
+     * Per-track loudness gain in dB (from the stream's `loudnessDb`), or 0 to disable.
      *
-     * Android uses Media3's `LoudnessEnhancer` driven by the stream's `loudnessDb`. mpv has no
-     * equivalent session effect; `dynaudnorm` is the portable stand-in — dynamic range
-     * compression that keeps quiet passages audible without the peak boost that `loudnorm`
-     * two-pass would need (there is no second pass on a live radio stream).
+     * Matches Android's LoudnessEnhancer target-gain path: a static gain for the whole track,
+     * not a compressor. `dynaudnorm` was rejected — aggressive frame/gain settings made music
+     * pump audibly. Positive [db] boosts a quiet master; negative attenuates a loud one.
      */
-    fun setLoudnessNormalize(enabled: Boolean): Boolean {
+    fun setLoudnessGainDb(db: Float): Boolean {
         if (isReleased) return false
         loudnormEntry =
-            if (enabled) {
-                "@$LOUDNORM_LABEL:dynaudnorm=f=75:g=3:p=0.9"
-            } else {
+            if (db == 0f || db.isNaN()) {
                 null
+            } else {
+                "@$LOUDNORM_LABEL:volume=${mpvNumber(db)}dB"
             }
         return applyAudioFilters()
     }

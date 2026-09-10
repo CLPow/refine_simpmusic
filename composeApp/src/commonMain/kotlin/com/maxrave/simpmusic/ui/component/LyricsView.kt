@@ -393,13 +393,12 @@ fun LyricsView(
             (lyricsData.lyrics.syncType == "LINE_SYNCED" || lyricsData.lyrics.syncType == "RICH_SYNCED")
         ) {
             if (appleStyle) {
-                // NEAR the top, not against it: Apple leaves exactly ONE physical row of the
-                // previous lyric visible above the line being sung. Scrolling to `index - 1`
-                // instead — which is what this did first — anchors the whole previous ITEM, and a
-                // lyric that wraps is one item spanning two or three rows, so the entire wrapped
-                // block hung above the sung line. Anchoring the sung line itself and backing off by
-                // one row's height is row-accurate no matter how the previous line wrapped.
-                listState.animateScrollAndAnchorItemTop(currentLineIndex, -exposedRowPx)
+                // Centre the sung line in the visible lyrics area rather than pinning it near
+                // the top. Driving with a mounted phone, the eye lands mid-screen; AMLL's
+                // one-row-from-top anchor leaves the active line too high to read without
+                // looking away from the road. Offset by half the line height so the sung row
+                // sits just above true centre, matching Classic's `centralizeItem`.
+                listState.animateScrollAndCentralizeItem(currentLineIndex)
             } else {
                 listState.animateScrollAndCentralizeItem(currentLineIndex)
             }

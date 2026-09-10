@@ -10,6 +10,7 @@ import com.maxrave.domain.utils.Resource
 import com.maxrave.domain.utils.toLyrics
 import com.maxrave.domain.utils.toLyricsEntity
 import com.maxrave.logger.Logger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -60,6 +61,10 @@ internal class CarLyricsSource(
      *
      * Consults the local database first: anything ever shown on the phone is already there, which
      * makes the common case free and keeps the car from waiting on the network at a track change.
+     *
+     * Failures are NOT cached. A blip on mobile data once parked a `null` for the rest of the
+     * drive, which is exactly when a user notices lyrics vanished even though the phone has them.
+     * A confirmed "no timed lyrics anywhere" is cached; a thrown error is not.
      */
     suspend fun syncedLines(song: SongEntity): List<TimedLine>? {
         val videoId = song.videoId
@@ -78,14 +83,28 @@ internal class CarLyricsSource(
                     purgedStaleCache = true
                     runCatching { lyricsCanvasRepository.purgeLyricsCacheIfStale(dataStoreManager) }
                 }
-                runCatching { resolve(song) }
-                    .onFailure { Logger.w(TAG, "Lyrics lookup failed for $videoId: ${it.message}") }
-                    .getOrNull()
+                try {
+                    resolve(song)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (e: Exception) {
+                    Logger.w(TAG, "Lyrics lookup failed for $videoId: ${e.message}")
+                    // Leave the cache miss so the next tick / track re-entry retries.
+                    return@withContext null
+                }
             }
 
+        if (resolved == null) {
+            // Distinguish "we tried and failed" (do not cache) from "no timed lyrics exist"
+            // (cache so a long drive does not hammer the network). resolve() returns null only
+            // for the latter; the catch above already returned without caching.
+            synchronized(cache) {
+                if (cache.size >= MAX_CACHED_TRACKS) cache.clear()
+                cache[videoId] = null
+            }
+            return null
+        }
         synchronized(cache) {
-            // Bounded so a long drive through a big queue cannot grow this without limit. The
-            // number is arbitrary but generous: far more tracks than one journey plays.
             if (cache.size >= MAX_CACHED_TRACKS) cache.clear()
             cache[videoId] = resolved
         }

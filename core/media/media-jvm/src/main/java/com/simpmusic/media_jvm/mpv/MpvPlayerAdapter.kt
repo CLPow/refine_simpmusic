@@ -1029,7 +1029,7 @@ class MpvPlayerAdapter(
         if (internalEqualizerBands.isNotEmpty() || internalEqualizerPreamp != 0f) {
             setEqualizer(internalEqualizerBands, internalEqualizerPreamp)
         }
-        setLoudnessNormalize(internalNormalizeVolume)
+        setLoudnessGainDb(internalLoudnessGainDb)
     }
 
     /**
@@ -1068,15 +1068,33 @@ class MpvPlayerAdapter(
 
     private var internalNormalizeVolume: Boolean = false
 
+    /** Last applied per-track loudness gain in dB (from stream `loudnessDb`). */
+    private var internalLoudnessGainDb: Float = 0f
+
     /**
-     * Volume normalization on/off. Applied through mpv `dynaudnorm` — see
-     * [MpvPlayer.setLoudnessNormalize]. Must reach every live handle because a fresh handle
-     * starts with an empty `af`.
+     * Volume normalization on/off. When on, [setLoudnessGainDbForTrack] supplies a static gain
+     * from the stream's loudness metadata (same model as Android's LoudnessEnhancer).
      */
     fun setNormalizeVolume(enabled: Boolean) {
         internalNormalizeVolume = enabled
         coroutineScope.launch {
-            forEachLiveHandle { it.setLoudnessNormalize(enabled) }
+            forEachLiveHandle { it.setLoudnessGainDb(if (enabled) internalLoudnessGainDb else 0f) }
+        }
+    }
+
+    /**
+     * Applies the stream's loudness as a fixed gain for the whole track.
+     */
+    fun setLoudnessGainDbForTrack(loudnessDb: Float?) {
+        val gain =
+            if (!internalNormalizeVolume || loudnessDb == null) {
+                0f
+            } else {
+                loudnessDb.coerceIn(-20f, 20f)
+            }
+        internalLoudnessGainDb = gain
+        coroutineScope.launch {
+            forEachLiveHandle { it.setLoudnessGainDb(gain) }
         }
     }
 

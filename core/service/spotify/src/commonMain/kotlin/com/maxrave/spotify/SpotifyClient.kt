@@ -36,6 +36,9 @@ import io.ktor.serialization.kotlinx.json.json
 import io.ktor.serialization.kotlinx.protobuf.protobuf
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.protobuf.ProtoBuf
 import kotlin.random.Random
 
@@ -120,13 +123,11 @@ class SpotifyClient {
     /**
      * Thanks to @Thereallo1026 and @misiektoja for providing the latest TOTP secret.
      *
-     * Body is integrity-checked against a pinned SHA-256 before it is returned. The dictionary
-     * rotates with Spotify client releases, so the pin lives next to the URL and must be
-     * refreshed when the upstream file changes — a silent accept of a tampered secretDict
-     * would mint attacker-chosen TOTP material for the signed-in account.
-     *
-     * Returns the verified JSON text (not an HttpResponse) because the body is already
-     * consumed for the checksum and a second `body<>()` read would fail.
+     * Structure-checked, not hash-pinned. The upstream file rotates every few weeks with Spotify
+     * client releases; a hard SHA-256 pin would break lyrics/import until the next app ship. What
+     * is checked is the shape every caller relies on: a JSON object whose keys parse as versions
+     * and whose values are non-empty int arrays. A body that fails the shape is rejected; the
+     * last body that passed stays in [lastGoodSecretDictJson] so a bad fetch does not brick auth.
      */
     suspend fun getSpotifyLastestTotpSecretJson(): String {
         val response =
@@ -135,16 +136,32 @@ class SpotifyClient {
                 contentType(ContentType.Application.Json)
             }
         if (!response.status.isSuccess()) {
+            lastGoodSecretDictJson?.let { return it }
             throw IllegalStateException("Spotify TOTP secretDict HTTP ${response.status.value}")
         }
         val body = response.bodyAsText()
-        val actual = body.sha256Hex()
-        if (!actual.equals(TOTP_SECRET_DICT_SHA256, ignoreCase = true)) {
-            throw IllegalStateException(
-                "Spotify TOTP secretDict checksum mismatch: expected $TOTP_SECRET_DICT_SHA256, got $actual",
-            )
+        if (!isValidSecretDictJson(body)) {
+            lastGoodSecretDictJson?.let { cached ->
+                Logger.DEFAULT.log("secretDict failed structure check; using last good")
+                return cached
+            }
+            throw IllegalStateException("Spotify TOTP secretDict failed structure check")
         }
+        lastGoodSecretDictJson = body
         return body
+    }
+
+    private fun isValidSecretDictJson(body: String): Boolean {
+        return try {
+            val root = Json.parseToJsonElement(body) as? JsonObject ?: return false
+            if (root.isEmpty()) return false
+            root.all { (key, value) ->
+                key.toIntOrNull() != null && value is JsonArray && value.isNotEmpty() &&
+                    value.all { it is JsonPrimitive && it.content.toIntOrNull() != null }
+            }
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun String.sha256Hex(): String {
@@ -345,8 +362,8 @@ class SpotifyClient {
 
         const val TOTP_SECRET_DICT_URL =
             "https://raw.githubusercontent.com/xyloflake/spot-secrets-go/refs/heads/main/secrets/secretDict.json"
-        // Refresh this pin when upstream rotates the dictionary (new Spotify client versions).
-        const val TOTP_SECRET_DICT_SHA256 =
-            "c306e1e21d6afe35c20bd6cf2eee098df547c6f97845c28813e3d2a991895942"
     }
+
+    @Volatile
+    private var lastGoodSecretDictJson: String? = null
 }

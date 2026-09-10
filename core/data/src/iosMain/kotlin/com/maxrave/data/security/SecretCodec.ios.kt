@@ -5,9 +5,15 @@ package com.maxrave.data.security
  * if/when iOS ships, switch this to Keychain for the cookie specifically.
  */
 internal actual object SecretCodec {
-    actual fun encode(plain: String): String = plain
+    actual fun encode(
+        plain: String,
+        purpose: String,
+    ): String = plain
 
-    actual fun decode(stored: String): String = stored
+    actual fun decode(
+        stored: String,
+        purpose: String,
+    ): String = stored
 
     actual fun isProtected(): Boolean = true
 }

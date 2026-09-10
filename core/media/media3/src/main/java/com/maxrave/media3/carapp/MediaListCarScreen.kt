@@ -110,8 +110,7 @@ internal class MediaListCarScreen(
                     Action
                         .Builder(Action.MEDIA_PLAYBACK)
                         .setOnClickListener {
-                            screenManager.popToRoot()
-                            screenManager.push(NowPlayingCarScreen(carContext))
+                            openNowPlayingOrStay(carContext, screenManager)
                         }.build(),
                 ).setHeader(
                     Header
@@ -169,8 +168,7 @@ internal class MediaListCarScreen(
                 Action
                     .Builder(Action.MEDIA_PLAYBACK)
                     .setOnClickListener {
-                        screenManager.popToRoot()
-                        screenManager.push(NowPlayingCarScreen(carContext))
+                        openNowPlayingOrStay(carContext, screenManager)
                     }.build(),
             ).addSection(section.build())
             .build()
@@ -186,9 +184,7 @@ internal class MediaListCarScreen(
             screenManager.push(MediaListCarScreen(carContext, browserProvider, item.mediaId, title))
         } else {
             playViaBrowser(carContext, browserProvider(), item, TAG)
-            // Land back on the playback screen, matching the classic surface
-            screenManager.popToRoot()
-            screenManager.push(NowPlayingCarScreen(carContext))
+            openNowPlayingOrStay(carContext, screenManager)
         }
     }
 

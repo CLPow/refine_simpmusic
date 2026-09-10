@@ -98,14 +98,14 @@ fun CreditScreen(
             fontSize = 13.sp,
         )
 
-        // Developer - clickable, opens dev blog
+        // Fork maintainer (this build). Upstream author is credited below for GPL-3.0.
         Text(
-            text = stringResource(Res.string.maxrave_dev),
+            text = stringResource(Res.string.fork_maintainer_name),
             style = typo().bodyMedium,
             textDecoration = TextDecoration.Underline,
             modifier =
                 Modifier.clickable {
-                    openUrl("https://maxrave.dev")
+                    openUrl("https://github.com/CLPow/refine_simpmusic")
                 },
         )
 
@@ -125,44 +125,10 @@ fun CreditScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-            // Website button
+            // This fork's repository — not the upstream project.
             TextButton(
                 onClick = {
-                    openUrl("https://simpmusic.org")
-                },
-                modifier =
-                    Modifier
-                        .align(Alignment.Start)
-                        .padding(horizontal = 25.dp)
-                        .defaultMinSize(minHeight = 1.dp, minWidth = 1.dp),
-            ) {
-                Text(text = stringResource(Res.string.website))
-            }
-
-            // Developer blog button
-            TextButton(
-                onClick = {
-                    openUrl("https://maxrave.dev")
-                },
-                modifier =
-                    Modifier
-                        .align(Alignment.Start)
-                        .padding(horizontal = 25.dp)
-                        .defaultMinSize(minHeight = 1.dp, minWidth = 1.dp),
-            ) {
-                Column {
-                    Text(text = stringResource(Res.string.developer_blog))
-                    Text(
-                        text = stringResource(Res.string.developer_blog_tagline),
-                        style = typo().bodySmall,
-                    )
-                }
-            }
-
-            // GitHub button
-            TextButton(
-                onClick = {
-                    openUrl("https://github.com/maxrave-dev/SimpMusic")
+                    openUrl("https://github.com/CLPow/refine_simpmusic")
                 },
                 modifier =
                     Modifier
@@ -173,10 +139,9 @@ fun CreditScreen(
                 Text(text = stringResource(Res.string.github))
             }
 
-            // Issue tracker button
             TextButton(
                 onClick = {
-                    openUrl("https://github.com/maxrave-dev/SimpMusic/issues")
+                    openUrl("https://github.com/CLPow/refine_simpmusic/issues")
                 },
                 modifier =
                     Modifier
@@ -186,25 +151,11 @@ fun CreditScreen(
             ) {
                 Text(text = stringResource(Res.string.issue_tracker))
             }
-
-            // Buy me a coffee button
-            TextButton(
-                onClick = {
-                    openUrl("https://github.com/sponsors/maxrave-dev")
-                },
-                modifier =
-                    Modifier
-                        .align(Alignment.Start)
-                        .padding(horizontal = 25.dp)
-                        .defaultMinSize(minHeight = 1.dp, minWidth = 1.dp),
-            ) {
-                Text(text = stringResource(Res.string.buy_me_a_coffee))
-            }
         }
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Copyright text
+        // Original author notice (GPL-3.0 requires it on a modified version).
         Text(
             text = stringResource(Res.string.copyright),
             style = typo().bodySmall,

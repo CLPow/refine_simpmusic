@@ -9,6 +9,7 @@ import android.graphics.RectF
 import android.text.SpannableString
 import android.text.Spanned
 import androidx.car.app.CarContext
+import androidx.car.app.ScreenManager
 import androidx.car.app.constraints.ConstraintManager
 import androidx.car.app.model.CarIcon
 import androidx.car.app.model.CarIconSpan
@@ -180,6 +181,22 @@ internal fun playViaBrowser(
             Logger.e(tag, "playItem(${item.mediaId}) failed: ${it.message}")
         }
     }, ContextCompat.getMainExecutor(carContext))
+}
+
+/**
+ * Show now-playing without wiping the browse stack.
+ *
+ * Older code always did `popToRoot()` then `push(NowPlaying)`, which threw the driver back to
+ * Home every time a track was picked from a playlist or search — the opposite of a smooth
+ * A→B transition. This leaves an already-open player alone and otherwise pushes on top so
+ * BACK returns to the list that started the song.
+ */
+internal fun openNowPlayingOrStay(
+    carContext: CarContext,
+    screenManager: ScreenManager,
+) {
+    if (screenManager.top is NowPlayingCarScreen) return
+    screenManager.push(NowPlayingCarScreen(carContext))
 }
 
 /** Loads row artwork into [artwork], invalidating via [onLoaded] per image. */
