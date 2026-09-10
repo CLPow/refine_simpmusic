@@ -53,7 +53,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.AppCompat.DayNight.NoActionBar"
         android:enableOnBackInvokedCallback="true"
-        tools:replace="android:name"
+        tools:replace="android:name,android:allowBackup"
         tools:targetApi="tiramisu">
 
         <activity
