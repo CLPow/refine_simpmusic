@@ -375,6 +375,19 @@ internal class SongRepositoryImpl(
         return filterNot { MusicVideoType.isVideoSong(it.musicVideoType) }
     }
 
+    /**
+     * Drop entries shorter than the user's skip-short threshold. Unknown duration is kept:
+     * a missing length is not a reason to hide a track.
+     */
+    private suspend fun List<SongItem>.dropShortWhenConfigured(): List<SongItem> {
+        val minSeconds = dataStoreManager.skipShortTrackSeconds.first()
+        if (minSeconds <= 0) return this
+        return filter { song ->
+            val d = song.duration
+            d == null || d <= 0 || d >= minSeconds
+        }
+    }
+
     override fun getContinueTrack(
         playlistId: String,
         continuation: String,
@@ -403,7 +416,11 @@ internal class SongRepositoryImpl(
                             // own playlistId.
                             val isRadio =
                                 playlistId.startsWith("RRDAMVM") || playlistId.isRadioQueueId()
-                            data.addAll(next.items.dropVideosWhenRadioAudioOnly(isRadio))
+                            data.addAll(
+                                next.items
+                                    .dropVideosWhenRadioAudioOnly(isRadio)
+                                    .dropShortWhenConfigured(),
+                            )
                             newContinuation = next.continuation
                             emit(Pair(data.toListTrack(), newContinuation))
                         }.onFailure { exception ->
@@ -572,7 +589,8 @@ internal class SongRepositoryImpl(
                                 .filter { it.id != videoId }
                                 .toSet()
                                 .toList()
-                                .dropVideosWhenRadioAudioOnly(isRadio = true),
+                                .dropVideosWhenRadioAudioOnly(isRadio = true)
+                                .dropShortWhenConfigured(),
                         )
                         val nextContinuation = next.continuation
                         emit(Resource.Success<Pair<List<Track>, String?>>(Pair(data.toListTrack().toList(), nextContinuation)))

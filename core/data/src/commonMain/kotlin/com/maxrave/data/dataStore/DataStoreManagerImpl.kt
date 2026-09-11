@@ -527,6 +527,97 @@ internal class DataStoreManagerImpl(
         }
     }
 
+    override val aaLyricsLeadMs: Flow<Int> =
+        settingsDataStore.data.map { preferences ->
+            preferences[AA_LYRICS_LEAD_MS] ?: 750
+        }
+
+    override suspend fun setAaLyricsLeadMs(ms: Int) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[AA_LYRICS_LEAD_MS] = ms.coerceIn(0, 3000)
+            }
+        }
+    }
+
+    override val lyricsSyncOffsetMs: Flow<Int> =
+        settingsDataStore.data.map { preferences ->
+            preferences[LYRICS_SYNC_OFFSET_MS] ?: 0
+        }
+
+    override suspend fun setLyricsSyncOffsetMs(ms: Int) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[LYRICS_SYNC_OFFSET_MS] = ms.coerceIn(-2000, 2000)
+            }
+        }
+    }
+
+    override val lyricsFontScalePercent: Flow<Int> =
+        settingsDataStore.data.map { preferences ->
+            preferences[LYRICS_FONT_SCALE_PERCENT] ?: 100
+        }
+
+    override suspend fun setLyricsFontScalePercent(percent: Int) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[LYRICS_FONT_SCALE_PERCENT] = percent.coerceIn(50, 200)
+            }
+        }
+    }
+
+    override val skipShortTrackSeconds: Flow<Int> =
+        settingsDataStore.data.map { preferences ->
+            preferences[SKIP_SHORT_TRACK_SECONDS] ?: 20
+        }
+
+    override suspend fun setSkipShortTrackSeconds(seconds: Int) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[SKIP_SHORT_TRACK_SECONDS] = seconds.coerceIn(0, 120)
+            }
+        }
+    }
+
+    override val crossfadePrepBufferMs: Flow<Int> =
+        settingsDataStore.data.map { preferences ->
+            preferences[CROSSFADE_PREP_BUFFER_MS] ?: 3000
+        }
+
+    override suspend fun setCrossfadePrepBufferMs(ms: Int) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[CROSSFADE_PREP_BUFFER_MS] = ms.coerceIn(0, 15000)
+            }
+        }
+    }
+
+    override val listenTogetherConfirmJoin: Flow<String> =
+        settingsDataStore.data.map { preferences ->
+            preferences[LISTEN_TOGETHER_CONFIRM_JOIN] ?: FALSE
+        }
+
+    override suspend fun setListenTogetherConfirmJoin(confirm: Boolean) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[LISTEN_TOGETHER_CONFIRM_JOIN] = if (confirm) TRUE else FALSE
+            }
+        }
+    }
+
+    override val checkForUpdates: Flow<String> =
+        settingsDataStore.data.map { preferences ->
+            preferences[CHECK_FOR_UPDATES] ?: TRUE
+        }
+
+    override suspend fun setCheckForUpdates(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[CHECK_FOR_UPDATES] = if (enabled) TRUE else FALSE
+            }
+        }
+    }
+
     override val translationLanguage =
         settingsDataStore.data.map { preferences ->
             val languageValue = language.first()
@@ -1740,6 +1831,13 @@ internal class DataStoreManagerImpl(
         val AUTO_DOWNLOAD_LIKED_SONGS = stringPreferencesKey("auto_download_liked_songs")
         val LYRICS_PROVIDER = stringPreferencesKey("lyrics_provider")
         val ANDROID_AUTO_LYRICS_MODE = stringPreferencesKey("android_auto_lyrics_mode")
+        val AA_LYRICS_LEAD_MS = intPreferencesKey("aa_lyrics_lead_ms")
+        val LYRICS_SYNC_OFFSET_MS = intPreferencesKey("lyrics_sync_offset_ms")
+        val LYRICS_FONT_SCALE_PERCENT = intPreferencesKey("lyrics_font_scale_percent")
+        val SKIP_SHORT_TRACK_SECONDS = intPreferencesKey("skip_short_track_seconds")
+        val CROSSFADE_PREP_BUFFER_MS = intPreferencesKey("crossfade_prep_buffer_ms")
+        val LISTEN_TOGETHER_CONFIRM_JOIN = stringPreferencesKey("listentogether_confirm_join")
+        val CHECK_FOR_UPDATES = stringPreferencesKey("check_for_updates")
         val LYRICS_CACHE_GENERATION_KEY = intPreferencesKey("lyrics_cache_generation")
         val TRANSLATION_LANGUAGE = stringPreferencesKey("translation_language")
         val USE_TRANSLATION_LANGUAGE = stringPreferencesKey("use_translation_language")

@@ -345,6 +345,11 @@ fun LyricsView(
     // carried to another device, can still hold APPLE_MUSIC on a phone that cannot draw it.
     val lyricsStyle by dataStoreManager.lyricsStyle.collectAsStateWithLifecycle(DataStoreManager.LYRICS_STYLE_CLASSIC)
     val appleStyle = lyricsStyle == DataStoreManager.LYRICS_STYLE_APPLE_MUSIC && isLyricsBlurSupported()
+    val fontScalePercent by dataStoreManager.lyricsFontScalePercent.collectAsStateWithLifecycle(100)
+    val lyricFontScale = (fontScalePercent.coerceIn(50, 200) / 100f)
+    val scaledAppleLyricSize = AppleMusicLyricFontSize * lyricFontScale
+    val scaledAppleLineHeight = AppleMusicLyricLineHeight * lyricFontScale
+    val scaledAppleSubSize = AppleMusicSubLineFontSize * lyricFontScale
 
     // Read here for the same reason the style is: all four call sites want the user's one choice,
     // so threading it through each of them would be four copies of the same lookup. The stored
@@ -358,7 +363,7 @@ fun LyricsView(
     // previous line that stays on screen above the sung one.
     val exposedRowPx =
         with(LocalDensity.current) {
-            AppleMusicLyricLineHeight.toPx() + AppleMusicLyricGap.toPx()
+            scaledAppleLineHeight.toPx() + AppleMusicLyricGap.toPx()
         }
 
     val timedLineIndexes =
@@ -475,15 +480,15 @@ fun LyricsView(
                                         romanizedWords = romanizedWords,
                                         currentTimeMs = current.current,
                                         isCurrent = index == currentLineIndex,
-                                        customFontSize = if (appleStyle) AppleMusicLyricFontSize else null,
+                                        customFontSize = if (appleStyle) scaledAppleLyricSize else null,
                                         glow = if (appleStyle && index == currentLineIndex) AppleMusicActiveLineGlow else null,
                                         pendingColorOverride = if (appleStyle) AppleMusicPendingWordColor else null,
                                         translatedColorOverride = if (appleStyle) AppleMusicTranslatedColor else null,
                                         translatedStyleOverride =
                                             if (appleStyle) {
                                                 typo().bodyMedium.copy(
-                                                    fontSize = AppleMusicSubLineFontSize,
-                                                    lineHeight = AppleMusicSubLineHeight,
+                                                    fontSize = scaledAppleSubSize,
+                                                    lineHeight = AppleMusicSubLineHeight * lyricFontScale,
                                                 )
                                             } else {
                                                 null

@@ -10,43 +10,41 @@ import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.logger.Logger
 import com.maxrave.media3.exoplayer.DelegatingForwardingPlayer
 import com.maxrave.media3.service.CarConnectionState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 
 private const val TAG = "CarLyrics"
 
-/**
- * How often the current line is recomputed. Comfortably finer than any line is short, and cheap:
- * a position read and a scan of at most a few hundred entries.
- */
-private const val TICK_MS = 250L
+/** How often the current line is recomputed. */
+private const val TICK_MS = 100L
+
+/** Default head-unit paint/transport latency compensation when the setting is unset. */
+private const val DEFAULT_LEAD_MS = 750L
+
+/** Backoff after an unexpected pipeline failure so a flaky player cannot busy-loop. */
+private const val RESTART_DELAY_MS = 1_000L
 
 /**
  * Puts the current lyric line on the car's screen.
  *
  * Android Auto draws its own now-playing screen from the media session — the app owns no pixels
  * there, only the header of its browse surface — so the two rows of text the host renders are the
- * only place a lyric can go. This rewrites those rows as the song plays, which is the same lever
- * every other player that does this pulls, for the same reason: there is no other one.
+ * only place a lyric can go. This rewrites those rows as the song plays.
  *
- * Confined to the moments a car is attached, and reverted the instant it detaches. The rewritten
- * metadata is the session's, so it is also what the phone's notification, the lock screen and any
- * Bluetooth display would show; that is acceptable in a car and would be vandalism anywhere else.
- *
- * Position comes from the player rather than being estimated from playback state and elapsed
- * wall-clock time. Companion apps that read another player's session have to guess, and drift
- * against the music; this app owns the player, so it can simply ask.
- *
- * In the Cast-enabled build the session player is a `CastPlayer` wrapping this one and derives its
- * metadata from media items rather than from the player beneath it, so the overlay does not reach
- * the head unit there. The shipped FOSS build has no such wrapper and is unaffected.
+ * The whole pipeline is crash-isolated: a single failed progress read or overlay write used to
+ * cancel `collectLatest`, leave `started == true`, and kill lyrics for the rest of the drive
+ * ("stopped after ~1.5 songs"). Failures now log, back off, and restart. [start] still runs once
+ * per process so lines are not published twice.
  */
 @UnstableApi
 internal class CarLyricsOverlay(
@@ -58,61 +56,95 @@ internal class CarLyricsOverlay(
 ) {
     private var started = false
 
-    /**
-     * Begins watching for a car, once.
-     *
-     * Called from the media service, which Android recreates freely — a second collector would
-     * publish every lyric line twice, and the two would race over what the rows say.
-     */
+    @Volatile
+    private var followJob: Job? = null
+
     fun start() {
         if (started) return
         started = true
         scope.launch {
-            combine(
-                CarConnectionState.isCarConnectedFlow,
-                dataStoreManager.androidAutoLyricsMode,
-            ) { carAttached, mode ->
-                if (carAttached) mode else AA_LYRICS_OFF
-            }.distinctUntilChanged()
-                .collectLatest { mode ->
-                    if (mode == AA_LYRICS_OFF) {
+            while (isActive) {
+                try {
+                    runPipeline()
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (e: Exception) {
+                    Logger.e(TAG, "Lyrics pipeline failed; restarting in ${RESTART_DELAY_MS}ms: ${e.message}")
+                    try {
                         player.setMetadataOverlay(null)
-                    } else {
-                        Logger.i(TAG, "Car attached; showing lyrics in mode $mode")
-                        // A car that comes back should see lyrics saved since it last left.
-                        source.clearCache()
-                        // Title carries the sung line on car: hosts typically render title
-                        // larger than the artist/subtitle row. Users asked for bigger lyrics
-                        // while driving; the host owns font size, so put the text where the
-                        // larger type already is.
-                        followTracks(AA_LYRICS_BOTH_LINES)
+                    } catch (_: Exception) {
                     }
+                    delay(RESTART_DELAY_MS)
                 }
+            }
         }
     }
 
+    /** Outer loop: car attached + mode. Never returns normally; [start] restarts on failure. */
+    private suspend fun runPipeline() {
+        combine(
+            CarConnectionState.isCarConnectedFlow,
+            dataStoreManager.androidAutoLyricsMode,
+        ) { carAttached, mode ->
+            if (carAttached) mode else AA_LYRICS_OFF
+        }.distinctUntilChanged()
+            .collect { mode ->
+                followJob?.cancel()
+                followJob = null
+                if (mode == AA_LYRICS_OFF) {
+                    safeClearOverlay()
+                    return@collect
+                }
+                Logger.i(TAG, "Car attached; showing lyrics in mode $mode")
+                source.clearCache()
+                // Title carries the sung line: hosts typically render title larger than artist.
+                followJob =
+                    scope.launch {
+                        try {
+                            followTracks(AA_LYRICS_BOTH_LINES)
+                        } catch (cancellation: CancellationException) {
+                            throw cancellation
+                        } catch (e: Exception) {
+                            Logger.e(TAG, "followTracks failed: ${e.message}")
+                        } finally {
+                            safeClearOverlay()
+                        }
+                    }
+            }
+    }
+
+    private fun safeClearOverlay() {
+        runCatching { player.setMetadataOverlay(null) }
+    }
+
     /**
-     * Follows the playing track for as long as lyrics are wanted.
-     *
-     * Never returns normally: `collectLatest` cancels it when the car detaches or the mode changes,
-     * and the overlay is cleared on the way out so the song's own name is restored.
+     * Follows the playing track. [collect] (not collectLatest) so a thrown error inside one song
+     * cannot cancel the collector itself; the per-song work is cancelled via [followJob].
      */
     private suspend fun followTracks(mode: String) {
-        try {
+        supervisorScope {
+            var songJob: Job? = null
             mediaPlayerHandler.nowPlayingState
                 .map { it.songEntity }
                 .distinctUntilChanged { old, new -> old?.videoId == new?.videoId }
-                .collectLatest { song ->
-                    // Show the real title while the lookup runs, and for any track without lyrics.
-                    player.setMetadataOverlay(null)
+                .collect { song ->
+                    songJob?.cancel()
+                    safeClearOverlay()
                     val videoId = song?.videoId
-                    if (song == null || videoId.isNullOrBlank()) return@collectLatest
-                    val lines = source.syncedLines(song)
-                    if (lines.isNullOrEmpty()) return@collectLatest
-                    followLines(mode, lines)
+                    if (song == null || videoId.isNullOrBlank()) return@collect
+                    songJob =
+                        launch {
+                            try {
+                                val lines = source.syncedLines(song)
+                                if (lines.isNullOrEmpty()) return@launch
+                                followLines(mode, lines)
+                            } catch (cancellation: CancellationException) {
+                                throw cancellation
+                            } catch (e: Exception) {
+                                Logger.e(TAG, "Lyrics for $videoId failed: ${e.message}")
+                            }
+                        }
                 }
-        } finally {
-            player.setMetadataOverlay(null)
         }
     }
 
@@ -122,25 +154,39 @@ internal class CarLyricsOverlay(
         lines: List<TimedLine>,
     ) {
         var publishedIndex = Int.MIN_VALUE
+        // Re-read occasionally so a Settings tweak applies mid-drive without restarting the service.
+        var leadMs = DEFAULT_LEAD_MS
+        var syncOffsetMs = 0L
+        var lastPrefsReadMs = 0L
         while (currentCoroutineContext().isActive) {
-            val position = mediaPlayerHandler.getProgress()
+            val now = System.currentTimeMillis()
+            if (now - lastPrefsReadMs > 2_000L) {
+                lastPrefsReadMs = now
+                runCatching {
+                    leadMs = dataStoreManager.aaLyricsLeadMs.first().toLong()
+                    syncOffsetMs = dataStoreManager.lyricsSyncOffsetMs.first().toLong()
+                }
+            }
+            val position =
+                try {
+                    mediaPlayerHandler.getProgress() + leadMs + syncOffsetMs
+                } catch (e: Exception) {
+                    Logger.w(TAG, "getProgress failed mid-lyrics: ${e.message}")
+                    0L
+                }
             val index = lines.indexOfLast { it.startMs <= position }
             if (index != publishedIndex) {
                 publishedIndex = index
-                player.setMetadataOverlay(overlayFor(mode, lines, index))
+                try {
+                    player.setMetadataOverlay(overlayFor(mode, lines, index))
+                } catch (e: Exception) {
+                    Logger.w(TAG, "setMetadataOverlay failed: ${e.message}")
+                }
             }
             delay(TICK_MS)
         }
     }
 
-    /**
-     * The metadata to publish for the line at [index], or null to show the track's own.
-     *
-     * Null before the first line and through instrumental gaps, where sources emit an empty line.
-     * Blanking the rows there would leave the driver looking at nothing, and holding the previous
-     * line would be a lie about what is playing; showing what the song is fills the silence with
-     * something true.
-     */
     private fun overlayFor(
         mode: String,
         lines: List<TimedLine>,
@@ -151,8 +197,6 @@ internal class CarLyricsOverlay(
         val builder = base.buildUpon()
         return when (mode) {
             AA_LYRICS_BOTH_LINES -> {
-                // The line after this one, skipping the blanks a gap is made of: showing an empty
-                // second row for the length of an instrumental break wastes half the screen.
                 val next =
                     lines
                         .asSequence()
@@ -168,8 +212,6 @@ internal class CarLyricsOverlay(
             }
 
             AA_LYRICS_TITLE_AND_LYRIC ->
-                // Title untouched: the driver can still tell what is playing at a glance, which is
-                // the whole reason this mode is the default.
                 builder
                     .setArtist(current)
                     .setSubtitle(current)

@@ -273,6 +273,23 @@
     <string name="author">Author</string>
     <string name="fork_maintainer">Fork maintained by</string>
     <string name="fork_maintainer_name">CLPow</string>
+    <string name="aa_lyrics_lead">Car lyrics timing (ms)</string>
+    <string name="aa_lyrics_lead_description">Show lyrics this many ms early so the head unit paints on time. Raise if late, lower if early.</string>
+    <string name="lyrics_sync_offset">Lyrics sync offset (ms)</string>
+    <string name="lyrics_sync_offset_description">Shift all lyrics earlier (+) or later (−). Applies on phone and car.</string>
+    <string name="lyrics_font_size">Lyrics size</string>
+    <string name="lyrics_font_size_description">Percent of the default lyric size (100 = stock).</string>
+    <string name="skip_short_tracks">Skip short tracks (seconds)</string>
+    <string name="skip_short_tracks_description">Ignore radio entries shorter than this. 0 = play everything.</string>
+    <string name="crossfade_prep_buffer">Crossfade prep buffer (ms)</string>
+    <string name="crossfade_prep_buffer_description">Start the fade this early when the next track is not preloaded.</string>
+    <string name="lt_confirm_join">Confirm before joining a room</string>
+    <string name="lt_confirm_join_description">Joining sends the current track and position to the public room server.</string>
+    <string name="session_protection">Session protection</string>
+    <string name="session_protection_on">Protected at rest</string>
+    <string name="session_protection_off">Not protected on this platform</string>
+    <string name="check_for_updates_setting">Check for updates</string>
+    <string name="check_for_updates_description">Look for new releases of this fork on GitHub.</string>
     <string name="fork_notice">Refine Music — a modified build of SimpMusic</string>
     <string name="other_app">Other app</string>
     <string name="database">App database</string>

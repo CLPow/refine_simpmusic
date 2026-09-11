@@ -1064,6 +1064,79 @@ class SettingsViewModel(
         }
     }
 
+    private var _aaLyricsLeadMs: MutableStateFlow<Int> = MutableStateFlow(750)
+    val aaLyricsLeadMs: StateFlow<Int> = _aaLyricsLeadMs
+
+    private var _lyricsSyncOffsetMs: MutableStateFlow<Int> = MutableStateFlow(0)
+    val lyricsSyncOffsetMs: StateFlow<Int> = _lyricsSyncOffsetMs
+
+    private var _lyricsFontScalePercent: MutableStateFlow<Int> = MutableStateFlow(100)
+    val lyricsFontScalePercent: StateFlow<Int> = _lyricsFontScalePercent
+
+    private var _skipShortTrackSeconds: MutableStateFlow<Int> = MutableStateFlow(20)
+    val skipShortTrackSeconds: StateFlow<Int> = _skipShortTrackSeconds
+
+    private var _crossfadePrepBufferMs: MutableStateFlow<Int> = MutableStateFlow(3000)
+    val crossfadePrepBufferMs: StateFlow<Int> = _crossfadePrepBufferMs
+
+    private var _listenTogetherConfirmJoin: MutableStateFlow<String?> = MutableStateFlow(null)
+    val listenTogetherConfirmJoin: StateFlow<String?> = _listenTogetherConfirmJoin
+
+    private var _checkForUpdates: MutableStateFlow<String?> = MutableStateFlow(null)
+    val checkForUpdates: StateFlow<String?> = _checkForUpdates
+
+    init {
+        viewModelScope.launch {
+            dataStoreManager.aaLyricsLeadMs.collect { _aaLyricsLeadMs.emit(it) }
+        }
+        viewModelScope.launch {
+            dataStoreManager.lyricsSyncOffsetMs.collect { _lyricsSyncOffsetMs.emit(it) }
+        }
+        viewModelScope.launch {
+            dataStoreManager.lyricsFontScalePercent.collect { _lyricsFontScalePercent.emit(it) }
+        }
+        viewModelScope.launch {
+            dataStoreManager.skipShortTrackSeconds.collect { _skipShortTrackSeconds.emit(it) }
+        }
+        viewModelScope.launch {
+            dataStoreManager.crossfadePrepBufferMs.collect { _crossfadePrepBufferMs.emit(it) }
+        }
+        viewModelScope.launch {
+            dataStoreManager.listenTogetherConfirmJoin.collect { _listenTogetherConfirmJoin.emit(it) }
+        }
+        viewModelScope.launch {
+            dataStoreManager.checkForUpdates.collect { _checkForUpdates.emit(it) }
+        }
+    }
+
+    fun setAaLyricsLeadMs(ms: Int) {
+        viewModelScope.launch { dataStoreManager.setAaLyricsLeadMs(ms) }
+    }
+
+    fun setLyricsSyncOffsetMs(ms: Int) {
+        viewModelScope.launch { dataStoreManager.setLyricsSyncOffsetMs(ms) }
+    }
+
+    fun setLyricsFontScalePercent(percent: Int) {
+        viewModelScope.launch { dataStoreManager.setLyricsFontScalePercent(percent) }
+    }
+
+    fun setSkipShortTrackSeconds(seconds: Int) {
+        viewModelScope.launch { dataStoreManager.setSkipShortTrackSeconds(seconds) }
+    }
+
+    fun setCrossfadePrepBufferMs(ms: Int) {
+        viewModelScope.launch { dataStoreManager.setCrossfadePrepBufferMs(ms) }
+    }
+
+    fun setListenTogetherConfirmJoin(confirm: Boolean) {
+        viewModelScope.launch { dataStoreManager.setListenTogetherConfirmJoin(confirm) }
+    }
+
+    fun setCheckForUpdates(enabled: Boolean) {
+        viewModelScope.launch { dataStoreManager.setCheckForUpdates(enabled) }
+    }
+
     /**
      * Fetches the Japanese romanization dictionary if this platform needs one and does not have
      * it yet. Called from the settings screen every time a saved selection includes Japanese, so

@@ -347,6 +347,23 @@ import simpmusic.composeapp.generated.resources.android_auto_lyrics_both_lines
 import simpmusic.composeapp.generated.resources.android_auto_lyrics_message
 import simpmusic.composeapp.generated.resources.android_auto_lyrics_off
 import simpmusic.composeapp.generated.resources.android_auto_lyrics_title_and_lyric
+import simpmusic.composeapp.generated.resources.aa_lyrics_lead
+import simpmusic.composeapp.generated.resources.aa_lyrics_lead_description
+import simpmusic.composeapp.generated.resources.lyrics_sync_offset
+import simpmusic.composeapp.generated.resources.lyrics_sync_offset_description
+import simpmusic.composeapp.generated.resources.lyrics_font_size
+import simpmusic.composeapp.generated.resources.lyrics_font_size_description
+import simpmusic.composeapp.generated.resources.skip_short_tracks
+import simpmusic.composeapp.generated.resources.skip_short_tracks_description
+import simpmusic.composeapp.generated.resources.crossfade_prep_buffer
+import simpmusic.composeapp.generated.resources.crossfade_prep_buffer_description
+import simpmusic.composeapp.generated.resources.lt_confirm_join
+import simpmusic.composeapp.generated.resources.lt_confirm_join_description
+import simpmusic.composeapp.generated.resources.session_protection
+import simpmusic.composeapp.generated.resources.session_protection_on
+import simpmusic.composeapp.generated.resources.session_protection_off
+import simpmusic.composeapp.generated.resources.check_for_updates_setting
+import simpmusic.composeapp.generated.resources.check_for_updates_description
 import simpmusic.composeapp.generated.resources.manage_your_youtube_accounts
 import simpmusic.composeapp.generated.resources.fork_maintainer
 import simpmusic.composeapp.generated.resources.fork_maintainer_name
@@ -544,6 +561,13 @@ fun SettingScreen(
     val killServiceOnExit by remember { viewModel.killServiceOnExit.map { it == TRUE } }.collectAsStateWithLifecycle(initialValue = true)
     val mainLyricsProvider by viewModel.mainLyricsProvider.collectAsStateWithLifecycle()
     val androidAutoLyricsMode by viewModel.androidAutoLyricsMode.collectAsStateWithLifecycle()
+    val aaLyricsLeadMs by viewModel.aaLyricsLeadMs.collectAsStateWithLifecycle()
+    val lyricsSyncOffsetMs by viewModel.lyricsSyncOffsetMs.collectAsStateWithLifecycle()
+    val lyricsFontScalePercent by viewModel.lyricsFontScalePercent.collectAsStateWithLifecycle()
+    val skipShortTrackSeconds by viewModel.skipShortTrackSeconds.collectAsStateWithLifecycle()
+    val crossfadePrepBufferMs by viewModel.crossfadePrepBufferMs.collectAsStateWithLifecycle()
+    val listenTogetherConfirmJoin by viewModel.listenTogetherConfirmJoin.collectAsStateWithLifecycle()
+    val checkForUpdatesEnabled by viewModel.checkForUpdates.collectAsStateWithLifecycle()
     val youtubeSubtitleLanguage by viewModel.youtubeSubtitleLanguage.collectAsStateWithLifecycle()
     val spotifyLoggedIn by viewModel.spotifyLogIn.collectAsStateWithLifecycle()
     val spotifyLyrics by viewModel.spotifyLyrics.collectAsStateWithLifecycle()
@@ -1638,6 +1662,93 @@ fun SettingScreen(
                     },
                 )
 
+                SettingItem(
+                    title = stringResource(Res.string.aa_lyrics_lead),
+                    subtitle = stringResource(Res.string.aa_lyrics_lead_description),
+                    onClick = {
+                        val current = aaLyricsLeadMs
+                        viewModel.setAlertData(
+                            SettingAlertState(
+                                title = runBlocking { getString(Res.string.aa_lyrics_lead) },
+                                message = runBlocking { getString(Res.string.aa_lyrics_lead_description) },
+                                selectOne =
+                                    SettingAlertState.SelectData(
+                                        listSelect =
+                                            listOf(0, 400, 750, 1000, 1500, 2000).map {
+                                                (it == current) to "${it} ms"
+                                            },
+                                    ),
+                                confirm =
+                                    runBlocking { getString(Res.string.change) } to { state ->
+                                        state.selectOne
+                                            ?.getSelected()
+                                            ?.removeSuffix(" ms")
+                                            ?.toIntOrNull()
+                                            ?.let { viewModel.setAaLyricsLeadMs(it) }
+                                    },
+                                dismiss = runBlocking { getString(Res.string.cancel) },
+                            ),
+                        )
+                    },
+                )
+                SettingItem(
+                    title = stringResource(Res.string.lyrics_sync_offset),
+                    subtitle = stringResource(Res.string.lyrics_sync_offset_description),
+                    onClick = {
+                        val current = lyricsSyncOffsetMs
+                        viewModel.setAlertData(
+                            SettingAlertState(
+                                title = runBlocking { getString(Res.string.lyrics_sync_offset) },
+                                message = runBlocking { getString(Res.string.lyrics_sync_offset_description) },
+                                selectOne =
+                                    SettingAlertState.SelectData(
+                                        listSelect =
+                                            listOf(-1000, -500, 0, 500, 1000).map {
+                                                (it == current) to "$it ms"
+                                            },
+                                    ),
+                                confirm =
+                                    runBlocking { getString(Res.string.change) } to { state ->
+                                        state.selectOne
+                                            ?.getSelected()
+                                            ?.removeSuffix(" ms")
+                                            ?.toIntOrNull()
+                                            ?.let { viewModel.setLyricsSyncOffsetMs(it) }
+                                    },
+                                dismiss = runBlocking { getString(Res.string.cancel) },
+                            ),
+                        )
+                    },
+                )
+                SettingItem(
+                    title = stringResource(Res.string.lyrics_font_size),
+                    subtitle = stringResource(Res.string.lyrics_font_size_description),
+                    onClick = {
+                        val current = lyricsFontScalePercent
+                        viewModel.setAlertData(
+                            SettingAlertState(
+                                title = runBlocking { getString(Res.string.lyrics_font_size) },
+                                message = runBlocking { getString(Res.string.lyrics_font_size_description) },
+                                selectOne =
+                                    SettingAlertState.SelectData(
+                                        listSelect =
+                                            listOf(80, 100, 120, 140, 160).map {
+                                                (it == current) to "$it%"
+                                            },
+                                    ),
+                                confirm =
+                                    runBlocking { getString(Res.string.change) } to { state ->
+                                        state.selectOne
+                                            ?.getSelected()
+                                            ?.removeSuffix("%")
+                                            ?.toIntOrNull()
+                                            ?.let { viewModel.setLyricsFontScalePercent(it) }
+                                    },
+                                dismiss = runBlocking { getString(Res.string.cancel) },
+                            ),
+                        )
+                    },
+                )
                 if (getPlatform() == Platform.Android) {
                     val androidAutoLyricsLabels =
                         listOf(
@@ -1678,6 +1789,82 @@ fun SettingScreen(
                         },
                     )
                 }
+                SettingItem(
+                    title = stringResource(Res.string.skip_short_tracks),
+                    subtitle = stringResource(Res.string.skip_short_tracks_description),
+                    onClick = {
+                        viewModel.setAlertData(
+                            SettingAlertState(
+                                title = runBlocking { getString(Res.string.skip_short_tracks) },
+                                message = runBlocking { getString(Res.string.skip_short_tracks_description) },
+                                selectOne =
+                                    SettingAlertState.SelectData(
+                                        listSelect =
+                                            listOf(0, 15, 20, 30, 45).map {
+                                                (it == skipShortTrackSeconds) to if (it == 0) "Off" else "$it s"
+                                            },
+                                    ),
+                                confirm =
+                                    runBlocking { getString(Res.string.change) } to { state ->
+                                        state.selectOne
+                                            ?.getSelected()
+                                            ?.let { label ->
+                                                if (label == "Off") 0 else label.removeSuffix(" s").toIntOrNull()
+                                            }?.let { viewModel.setSkipShortTrackSeconds(it) }
+                                    },
+                                dismiss = runBlocking { getString(Res.string.cancel) },
+                            ),
+                        )
+                    },
+                )
+                SettingItem(
+                    title = stringResource(Res.string.crossfade_prep_buffer),
+                    subtitle = stringResource(Res.string.crossfade_prep_buffer_description),
+                    onClick = {
+                        viewModel.setAlertData(
+                            SettingAlertState(
+                                title = runBlocking { getString(Res.string.crossfade_prep_buffer) },
+                                message = runBlocking { getString(Res.string.crossfade_prep_buffer_description) },
+                                selectOne =
+                                    SettingAlertState.SelectData(
+                                        listSelect =
+                                            listOf(1000, 2000, 3000, 5000, 8000).map {
+                                                (it == crossfadePrepBufferMs) to "$it ms"
+                                            },
+                                    ),
+                                confirm =
+                                    runBlocking { getString(Res.string.change) } to { state ->
+                                        state.selectOne
+                                            ?.getSelected()
+                                            ?.removeSuffix(" ms")
+                                            ?.toIntOrNull()
+                                            ?.let { viewModel.setCrossfadePrepBufferMs(it) }
+                                    },
+                                dismiss = runBlocking { getString(Res.string.cancel) },
+                            ),
+                        )
+                    },
+                )
+                SettingItem(
+                    title = stringResource(Res.string.lt_confirm_join),
+                    subtitle = stringResource(Res.string.lt_confirm_join_description),
+                    switch =
+                        ((listenTogetherConfirmJoin == TRUE) to { on: Boolean ->
+                            viewModel.setListenTogetherConfirmJoin(on)
+                        }),
+                )
+                SettingItem(
+                    title = stringResource(Res.string.check_for_updates_setting),
+                    subtitle = stringResource(Res.string.check_for_updates_description),
+                    switch =
+                        ((checkForUpdatesEnabled != "false") to { on: Boolean ->
+                            viewModel.setCheckForUpdates(on)
+                        }),
+                )
+                SettingItem(
+                    title = stringResource(Res.string.session_protection),
+                    subtitle = stringResource(Res.string.session_protection_on),
+                )
                 SettingItem(
                     title = stringResource(Res.string.translation_language),
                     subtitle = translationLanguage ?: "",

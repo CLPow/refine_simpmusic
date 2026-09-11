@@ -69,25 +69,37 @@ internal class SimpMusicCarSession : Session() {
     }
 
     override fun onCreateScreen(intent: Intent): Screen {
-        // Library tab root sits under the playback screen so BACK lands on
-        // browse, matching the classic media surface
-        carContext.getCarService(ScreenManager::class.java).push(
-            LibraryTabCarScreen(carContext, ::ensureBrowser),
-        )
+        // Library tab root sits under the playback screen so BACK lands on browse. Only seed
+        // it when the stack is empty: hosts recreate the car session on connection blips, and
+        // pushing Library again then looked like a bounce back to the media homepage.
+        val screenManager = carContext.getCarService(ScreenManager::class.java)
+        if (screenManager.top == null) {
+            screenManager.push(
+                LibraryTabCarScreen(carContext, ::ensureBrowser),
+            )
+        }
         return NowPlayingCarScreen(carContext)
     }
 
     override fun onNewIntent(intent: Intent) {
         Logger.w(TAG, "onNewIntent action=${intent.action}")
-        // System intents asking the app to surface its playback screen
+        // Hosts fire SHOW_MEDIA_PLAYBACK / MEDIA_SHOW_PLAYBACK_VIEW on track changes, not only
+        // when the user asks to see the player. popToRoot() here dumped the driver onto the
+        // browse homepage every time Song A became Song B. Stay put if already on now-playing;
+        // otherwise walk back only as far as needed, never all the way to the homepage.
         if (intent.action == ACTION_SHOW_MEDIA_PLAYBACK || intent.action == ACTION_MEDIA_SHOW_PLAYBACK_VIEW) {
             val screenManager = carContext.getCarService(ScreenManager::class.java)
-            if (screenManager.top !is NowPlayingCarScreen) {
-                // Pop first: the browse stack may already sit at the host's 5-screen cap
-                screenManager.popToRoot()
-                screenManager.push(NowPlayingCarScreen(carContext))
-            }
+            showNowPlayingWithoutWipingStack(screenManager)
         }
+    }
+
+    private fun showNowPlayingWithoutWipingStack(screenManager: ScreenManager) {
+        // Already on the player: do nothing. This is the common case on a track change —
+        // hosts fire SHOW_MEDIA_PLAYBACK every time Song A becomes Song B.
+        if (screenManager.top is NowPlayingCarScreen) return
+        // Never popToRoot(): that was dumping drivers onto the browse homepage. Push on top
+        // so BACK returns to whatever list they came from.
+        screenManager.push(NowPlayingCarScreen(carContext))
     }
 
     /**

@@ -153,6 +153,50 @@ interface DataStoreManager {
 
     suspend fun setAndroidAutoLyricsMode(mode: String)
 
+    /**
+     * Milliseconds to select lyrics AHEAD of the player clock, for Android Auto head-unit
+     * paint/transport latency. 0 = sample-time; typical Toyota hosts need ~750.
+     */
+    val aaLyricsLeadMs: Flow<Int>
+
+    suspend fun setAaLyricsLeadMs(ms: Int)
+
+    /**
+     * Global lyric sync offset in ms. Positive = show lyrics earlier (compensate late providers
+     * or slow speakers); negative = later. Applied on phone and car.
+     */
+    val lyricsSyncOffsetMs: Flow<Int>
+
+    suspend fun setLyricsSyncOffsetMs(ms: Int)
+
+    /** Lyric main-line size as a percent of the default (50–200, 100 = stock). */
+    val lyricsFontScalePercent: Flow<Int>
+
+    suspend fun setLyricsFontScalePercent(percent: Int)
+
+    /** Skip radio/queue tracks shorter than this many seconds (0 = off). */
+    val skipShortTrackSeconds: Flow<Int>
+
+    suspend fun setSkipShortTrackSeconds(seconds: Int)
+
+    /**
+     * Extra ms before the crossfade window so an un-precached next track can resolve and buffer.
+     * Default 3000; raise on slow networks, lower on fast devices with precache.
+     */
+    val crossfadePrepBufferMs: Flow<Int>
+
+    suspend fun setCrossfadePrepBufferMs(ms: Int)
+
+    /** When TRUE, Join in Listen Together asks for confirmation (track/position leave the device). */
+    val listenTogetherConfirmJoin: Flow<String>
+
+    suspend fun setListenTogetherConfirmJoin(confirm: Boolean)
+
+    /** When TRUE, app checks CLPow/refine_simpmusic releases for updates. */
+    val checkForUpdates: Flow<String>
+
+    suspend fun setCheckForUpdates(enabled: Boolean)
+
     val translationLanguage: Flow<String>
 
     suspend fun setTranslationLanguage(language: String)

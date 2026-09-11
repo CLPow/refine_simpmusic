@@ -42,6 +42,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -1044,7 +1045,19 @@ internal class CrossfadeExoPlayerAdapter(
         get() = castRemotePlayer?.isPlaying ?: (internalState == InternalState.PLAYING)
 
     override val currentPosition: Long
-        get() = castRemotePlayer?.currentPosition ?: cachedPosition
+        get() {
+            castRemotePlayer?.let { return it.currentPosition }
+            // Prefer the live ExoPlayer clock. cachedPosition is only refreshed by the 200 ms
+            // poll and is wrong whenever that job is idle (pause, buffer, just after seek) —
+            // which made Android Auto lyrics lag a second or more behind the music.
+            val live =
+                if (isCrossfading) {
+                    secondaryPlayer?.currentPosition ?: currentPlayer?.currentPosition
+                } else {
+                    currentPlayer?.currentPosition
+                }
+            return if (live != null && live >= 0) live else cachedPosition
+        }
 
     override val duration: Long
         get() {
@@ -2793,6 +2806,27 @@ internal class CrossfadeExoPlayerAdapter(
 
     // ========== Internal: Position Updates ==========
 
+    @Volatile
+    private var crossfadePrepBufferMsCached: Long = 3000L
+
+    @Volatile
+    private var crossfadePrepBufferReadAtMs: Long = 0L
+
+    private fun refreshCrossfadePrepBufferIfStale() {
+        val now = System.currentTimeMillis()
+        if (now - crossfadePrepBufferReadAtMs < 10_000L) return
+        crossfadePrepBufferReadAtMs = now
+        coroutineScope.launch {
+            runCatching {
+                crossfadePrepBufferMsCached =
+                    dataStoreManager.crossfadePrepBufferMs
+                        .first()
+                        .toLong()
+                        .coerceIn(0L, 15_000L)
+            }
+        }
+    }
+
     /**
      * Start position updates (periodic background task).
      * Also handles crossfade detection when position approaches end.
@@ -2840,12 +2874,10 @@ internal class CrossfadeExoPlayerAdapter(
                                     val timeRemaining = ((dur - pos) / speed).toLong()
                                     val nextVideoId = playlist.getOrNull(getNextMediaItemIndex())?.mediaId
                                     val isPrecached = nextVideoId != null && precachedPlayers.containsKey(nextVideoId)
-                                    // If next track is precached, trigger at exactly crossfadeDurationMs.
-                                    // If NOT precached, trigger 3s earlier to allow preparation time.
-                                    // Precached still needs a moment: the player has to be swapped in
-                                // and started, and asking for the fade at exactly the fade's own
-                                // length before the end leaves nothing for that.
-                                val preparationBufferMs = if (isPrecached) 500L else 3000L
+                                    // Cached: DataStore must not be hit on the 200 ms position poll.
+                                    refreshCrossfadePrepBufferIfStale()
+                                    val preparationBufferMs =
+                                        if (isPrecached) 500L else crossfadePrepBufferMsCached
                                     // In Auto mode, calculate beat-quantized duration for trigger threshold.
                                     val resolvedDurationMs =
                                         if (crossfadeDurationMs == DataStoreManager.CROSSFADE_DURATION_AUTO) {
