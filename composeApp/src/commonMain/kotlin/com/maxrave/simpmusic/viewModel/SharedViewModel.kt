@@ -1890,7 +1890,11 @@ class SharedViewModel(
         _reloadDestination.value = null
     }
 
-    fun shouldCheckForUpdate(): Boolean = runBlocking { dataStoreManager.autoCheckForUpdates.first() == TRUE }
+    fun shouldCheckForUpdate(): Boolean =
+        runBlocking {
+            dataStoreManager.autoCheckForUpdates.first() == TRUE &&
+                dataStoreManager.checkForUpdates.first() != DataStoreManager.Values.FALSE
+        }
 
     private var _downloadFileProgress = MutableStateFlow<DownloadProgress>(DownloadProgress.INIT)
     val downloadFileProgress: StateFlow<DownloadProgress> get() = _downloadFileProgress

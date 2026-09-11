@@ -17,12 +17,23 @@ internal class UpdateRepositoryImpl(
             youTube
                 .checkForGithubReleaseUpdate()
                 .onSuccess { response ->
+                    if (response.draft == true) {
+                        emit(Resource.Error<UpdateData>("Draft release ignored"))
+                        return@onSuccess
+                    }
+                    val apkUrl =
+                        response.assets
+                            ?.filterNotNull()
+                            ?.firstOrNull { asset ->
+                                asset.name?.endsWith(".apk", ignoreCase = true) == true
+                            }?.browserDownloadUrl
                     emit(
                         Resource.Success(
                             UpdateData(
                                 tagName = response.tagName ?: "",
                                 releaseTime = response.publishedAt ?: "",
                                 body = response.body ?: "",
+                                apkUrl = apkUrl,
                             ),
                         ),
                     )

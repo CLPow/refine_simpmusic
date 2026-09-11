@@ -363,7 +363,7 @@ fun App(viewModel: SharedViewModel = koinInject()) {
     LaunchedEffect(updateData) {
         val response = updateData ?: return@LaunchedEffect
         if (viewModel.showedUpdateDialog &&
-            response.tagName != getString(Res.string.version_format, VersionManager.getVersionName())
+            response.isNewerThan(VersionManager.getVersionName())
         ) {
             shouldShowUpdateDialog = true
         }
@@ -747,11 +747,12 @@ fun App(viewModel: SharedViewModel = koinInject()) {
                                 onClick = {
                                     shouldShowUpdateDialog = false
                                     viewModel.showedUpdateDialog = false
-                                    // This fork's own releases. The version check was repointed
-                                    // here already; sending people to the official download page
-                                    // would hand them a build with none of these changes and
-                                    // silently replace their install.
-                                    openUrl("https://github.com/CLPow/refine_simpmusic/releases/latest")
+                                    // Prefer the APK asset when the release has one; otherwise the
+                                    // release page. Always this fork — never upstream SimpMusic.
+                                    openUrl(
+                                        response.apkUrl
+                                            ?: "https://github.com/CLPow/refine_simpmusic/releases/latest",
+                                    )
                                 },
                             ) {
                                 Text(
