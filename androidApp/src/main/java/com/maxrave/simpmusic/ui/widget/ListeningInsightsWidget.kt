@@ -268,14 +268,14 @@ class ListeningInsightsWidget :
                         )
                     }
 
-                    Spacer(GlanceModifier.height(20.dp))
+                    Spacer(GlanceModifier.height(12.dp))
 
                     Row(modifier = GlanceModifier.fillMaxWidth()) {
                         StatTile(
                             value = listeningTime?.let { formatListeningTime(it) } ?: "—",
                             label = context.getString(R.string.widget_insights_time),
                         )
-                        Spacer(GlanceModifier.width(8.dp))
+                        Spacer(GlanceModifier.width(10.dp))
                         StatTile(
                             value = plays?.toString() ?: "—",
                             label = context.getString(R.string.widget_insights_plays),
@@ -284,32 +284,25 @@ class ListeningInsightsWidget :
 
                     if (topSongs.isNotEmpty()) {
                         SectionLabel(context.getString(R.string.widget_insights_top_songs))
-                        // Shrink-only: five fixed squares plus the container's 24.dp of padding
-                        // can outgrow a narrow cell (5 × 58 = 290.dp against a 250.dp widget),
-                        // which used to push the fifth tile past the edge. Growing stays the
-                        // spacers' job, so wide cells keep square tiles with wider gaps.
                         val songSide = minOf(SONG_TILE_SIZE, (LocalSize.current.width - 36.dp) / 5)
-                        // Weighted spacers between fixed-size tiles, never weighted tiles: in
-                        // Glance defaultWeight() takes its width from the row while the height
-                        // stays as declared, which turns a square cover into a rectangle.
                         Row(modifier = GlanceModifier.fillMaxWidth()) {
                             topSongs.forEachIndexed { index, tile ->
                                 if (index > 0) Spacer(GlanceModifier.defaultWeight())
                                 Box(contentAlignment = Alignment.BottomStart) {
-                                    Cover(tile.artwork, tile.title, songSide, 8.dp)
+                                    Cover(tile.artwork, tile.title, songSide, 10.dp)
                                     Text(
                                         text = "${index + 1}",
                                         style =
                                             TextStyle(
                                                 color = ColorProvider(Color.White),
                                                 fontSize = 10.sp,
-                                                fontWeight = FontWeight.Medium,
+                                                fontWeight = FontWeight.Bold,
                                             ),
                                         modifier =
                                             GlanceModifier
-                                                .padding(3.dp)
-                                                .background(ImageProvider(R.drawable.widget_rank_badge))
-                                                .padding(horizontal = 5.dp, vertical = 1.dp),
+                                                .padding(4.dp)
+                                                .background(ImageProvider(R.drawable.widget_chip_bg))
+                                                .padding(horizontal = 6.dp, vertical = 1.dp),
                                     )
                                 }
                             }
@@ -323,9 +316,6 @@ class ListeningInsightsWidget :
                             topArtists.forEachIndexed { index, tile ->
                                 if (index > 0) Spacer(GlanceModifier.defaultWeight())
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    // Half the side rounds the square into a circle. Glance only
-                                    // applies cornerRadius from API 31; below that it stays square,
-                                    // which is the same trade-off the other widgets already make.
                                     Cover(
                                         artwork = tile.artwork,
                                         description = tile.name,
@@ -333,7 +323,7 @@ class ListeningInsightsWidget :
                                         radius = artistSide / 2,
                                         fallbackInitial = tile.name.firstOrNull()?.uppercase(),
                                     )
-                                    Spacer(GlanceModifier.height(3.dp))
+                                    Spacer(GlanceModifier.height(4.dp))
                                     Text(
                                         text = tile.name,
                                         maxLines = 1,
@@ -349,7 +339,6 @@ class ListeningInsightsWidget :
                             }
                         }
                     }
-
                 }
             }
         }
@@ -366,16 +355,16 @@ class ListeningInsightsWidget :
 @SuppressLint("RestrictedApi")
 @Composable
 private fun SectionLabel(text: String) {
-    Spacer(GlanceModifier.height(34.dp))
+    Spacer(GlanceModifier.height(14.dp))
     Text(
         text = text,
         style =
             TextStyle(
                 color = ColorProvider(Color.White),
                 fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.Bold,
             ),
-        modifier = GlanceModifier.padding(bottom = 7.dp),
+        modifier = GlanceModifier.padding(bottom = 6.dp),
     )
 }
 

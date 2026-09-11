@@ -14,6 +14,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -30,13 +31,19 @@ import androidx.glance.appwidget.provideContent
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
+import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
 import androidx.glance.layout.fillMaxSize
+import androidx.glance.layout.fillMaxWidth
+import androidx.glance.layout.height
 import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
+import androidx.glance.text.FontWeight
+import androidx.glance.text.Text
+import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
 import coil3.ImageLoader
 import coil3.request.CachePolicy
@@ -156,9 +163,8 @@ class TurntableWidget :
                         GlanceModifier
                             .fillMaxSize()
                             .background(ColorProvider(bgColor))
-                            .padding(8.dp)
+                            .padding(6.dp)
                             .clickable(actionStartActivity<MainActivity>(), rippleOverride = R.drawable.no_ripple),
-                    contentAlignment = Alignment.BottomCenter,
                 ) {
                     artwork?.let {
                         Image(
@@ -168,48 +174,60 @@ class TurntableWidget :
                             modifier =
                                 GlanceModifier
                                     .fillMaxSize()
-                                    // The launcher rounds the widget itself by this system dimen,
-                                    // so the artwork uses the same one instead of a number picked
-                                    // by eye — the two curves then match on every launcher, which
-                                    // a fixed dp cannot do since each one rounds differently.
                                     .cornerRadius(android.R.dimen.system_app_widget_background_radius),
                         )
                     }
-                    // The pill is a drawable background rather than a shape drawn into the
-                    // bitmap. A drawable keeps its alpha through RemoteViews, and because it
-                    // lives in the layout it stretches with the row — the painted version was
-                    // tied to the artwork's scale and tore away from the buttons on resize.
-                    // The gap has to come from an outer Box, not from padding on the Row: in
-                    // Glance a background lands on the View's background, and a View's background
-                    // is painted underneath its padding — so padding on the same element only
-                    // stretches the pill instead of moving it.
-                    Box(modifier = GlanceModifier.padding(bottom = 16.dp)) {
+                    // Bottom stack: scrim + text + transport. Scrim keeps type legible on light covers.
+                    Column(
+                        modifier =
+                            GlanceModifier
+                                .fillMaxWidth()
+                                .background(ImageProvider(R.drawable.widget_scrim_bottom))
+                                .padding(start = 12.dp, end = 12.dp, top = 28.dp, bottom = 10.dp),
+                    ) {
+                        Text(
+                            text = screenDataState.nowPlayingTitle.ifBlank { "—" },
+                            maxLines = 1,
+                            style =
+                                TextStyle(
+                                    color = ColorProvider(Color.White),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                ),
+                        )
+                        Text(
+                            text = screenDataState.artistName.ifBlank { " " },
+                            maxLines = 1,
+                            style =
+                                TextStyle(
+                                    color = ColorProvider(Color.White.copy(alpha = 0.75f)),
+                                    fontSize = 11.sp,
+                                ),
+                        )
+                        Spacer(GlanceModifier.height(8.dp))
                         Row(
-                            modifier =
-                                GlanceModifier
-                                    .background(ImageProvider(R.drawable.widget_control_pill))
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = GlanceModifier.fillMaxWidth(),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Image(
-                                provider = ImageProvider(R.drawable.rounded_fast_rewind_24),
+                                provider = ImageProvider(R.drawable.rounded_skip_previous_24),
                                 contentDescription = "Previous",
                                 colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
                                 modifier =
                                     GlanceModifier
-                                        .size(34.dp)
-                                        .padding(5.dp)
+                                        .size(30.dp)
+                                        .padding(3.dp)
                                         .clickable(rippleOverride = R.drawable.no_ripple) {
                                             sharedViewModel.onUIEvent(UIEvent.Previous)
                                         },
                             )
-                            Spacer(GlanceModifier.width(8.dp))
+                            Spacer(GlanceModifier.width(14.dp))
                             Box(
                                 modifier =
                                     GlanceModifier
-                                        .size(42.dp)
-                                        .background(ImageProvider(R.drawable.widget_play_disc)),
+                                        .size(40.dp)
+                                        .background(ImageProvider(R.drawable.widget_media_fab)),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Image(
@@ -220,24 +238,24 @@ class TurntableWidget :
                                             ImageProvider(R.drawable.rounded_play_arrow_24)
                                         },
                                     contentDescription = if (controllerState.isPlaying) "Pause" else "Play",
-                                    colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
+                                    colorFilter = ColorFilter.tint(ColorProvider(Color.Black)),
                                     modifier =
                                         GlanceModifier
-                                            .size(24.dp)
+                                            .size(22.dp)
                                             .clickable(rippleOverride = R.drawable.no_ripple) {
                                                 sharedViewModel.onUIEvent(UIEvent.PlayPause)
                                             },
                                 )
                             }
-                            Spacer(GlanceModifier.width(8.dp))
+                            Spacer(GlanceModifier.width(14.dp))
                             Image(
-                                provider = ImageProvider(R.drawable.rounded_fast_forward_24),
+                                provider = ImageProvider(R.drawable.rounded_skip_next_24),
                                 contentDescription = "Next",
                                 colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
                                 modifier =
                                     GlanceModifier
-                                        .size(34.dp)
-                                        .padding(5.dp)
+                                        .size(30.dp)
+                                        .padding(3.dp)
                                         .clickable(rippleOverride = R.drawable.no_ripple) {
                                             sharedViewModel.onUIEvent(UIEvent.Next)
                                         },

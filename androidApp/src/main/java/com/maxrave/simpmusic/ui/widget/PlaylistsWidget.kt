@@ -314,17 +314,11 @@ class PlaylistsWidget :
                             style =
                                 TextStyle(
                                     color = ColorProvider(Color.White),
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
                                 ),
-                            modifier = GlanceModifier.padding(bottom = 6.dp),
+                            modifier = GlanceModifier.padding(bottom = 10.dp),
                         )
-                        // The gaps stretch, not the tiles. Glance has no aspectRatio, so a tile
-                        // given defaultWeight() takes its width from the row and keeps its fixed
-                        // height — which is how these came out rectangular before. Weighted
-                        // spacers spread the row instead, leaving every cover square at any width.
-                        // Shrink-only, same arithmetic as the insights rows: five 64.dp
-                        // squares need 320.dp, more than the 250.dp a 4-cell widget may get.
                         val tileSide = minOf(PLAYLIST_TILE_SIZE, (LocalSize.current.width - 36.dp) / 5)
                         Row(modifier = GlanceModifier.fillMaxWidth()) {
                             tiles.forEachIndexed { index, tile ->
@@ -337,6 +331,19 @@ class PlaylistsWidget :
                                 }
                             }
                         }
+                        Spacer(GlanceModifier.height(6.dp))
+                        // One-line caption under the shelf: first tile title or count hint.
+                        Text(
+                            text =
+                                tiles.firstOrNull()?.title
+                                    ?: context.getString(R.string.widget_recently_added),
+                            maxLines = 1,
+                            style =
+                                TextStyle(
+                                    color = ColorProvider(Color.White.copy(alpha = 0.65f)),
+                                    fontSize = 10.sp,
+                                ),
+                        )
                     }
                 }
             }

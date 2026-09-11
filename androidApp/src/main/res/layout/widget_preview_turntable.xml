@@ -3,7 +3,7 @@
     android:layout_width="140dp"
     android:layout_height="140dp"
     android:background="@drawable/widget_preview_surface"
-    android:padding="8dp">
+    android:padding="6dp">
 
     <ImageView
         android:layout_width="match_parent"
@@ -12,35 +12,65 @@
         android:background="@drawable/widget_preview_art" />
 
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="14dp"
-        android:background="@drawable/widget_control_pill"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="10dp"
-        android:paddingVertical="6dp">
+        android:layout_gravity="bottom"
+        android:background="@drawable/widget_scrim_bottom"
+        android:orientation="vertical"
+        android:paddingStart="10dp"
+        android:paddingEnd="10dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="8dp">
 
-        <ImageView
-            android:layout_width="22dp"
-            android:layout_height="22dp"
-            android:contentDescription="@null"
-            android:src="@drawable/rounded_fast_rewind_24" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="Bloom"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
-        <ImageView
-            android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:layout_marginHorizontal="8dp"
-            android:background="@drawable/widget_play_disc"
-            android:contentDescription="@null"
-            android:padding="6dp"
-            android:src="@drawable/rounded_play_arrow_24" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="RESCENE"
+            android:textColor="#BBFFFFFF"
+            android:textSize="10sp" />
 
-        <ImageView
-            android:layout_width="22dp"
-            android:layout_height="22dp"
-            android:contentDescription="@null"
-            android:src="@drawable/rounded_fast_forward_24" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:contentDescription="@null"
+                android:src="@drawable/rounded_skip_previous_24"
+                android:tint="#FFFFFF" />
+
+            <ImageView
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:layout_marginHorizontal="12dp"
+                android:background="@drawable/widget_media_fab"
+                android:contentDescription="@null"
+                android:padding="8dp"
+                android:src="@drawable/rounded_pause_24"
+                android:tint="#000000" />
+
+            <ImageView
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:contentDescription="@null"
+                android:src="@drawable/rounded_skip_next_24"
+                android:tint="#FFFFFF" />
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>
