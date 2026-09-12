@@ -439,8 +439,14 @@ fun App(viewModel: SharedViewModel = koinInject()) {
         // each other: the window takes the extreme (pure black / pure white) and the panel steps
         // one shade back towards the middle, so the panels read as raised either way.
         val desktopWindow = if (isLightScheme) desktopWindowLight else desktopWindowDark
+        val isBoomingTheme = themeMode == DataStoreManager.THEME_MODE_BOOMING
         val desktopPanel =
-            if (isLightScheme) MaterialTheme.colorScheme.surfaceContainer else desktopPanelDark
+            when {
+                isLightScheme -> MaterialTheme.colorScheme.surfaceContainer
+                // Booming keeps the indigo-blue surface instead of the pure-black desktop panel.
+                isBoomingTheme -> MaterialTheme.colorScheme.background
+                else -> desktopPanelDark
+            }
         Scaffold(
             containerColor =
                 if (isDesktopShell) desktopWindow else MaterialTheme.colorScheme.background,

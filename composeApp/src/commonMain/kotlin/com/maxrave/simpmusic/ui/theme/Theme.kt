@@ -101,6 +101,9 @@ val LocalAppColors = staticCompositionLocalOf { DarkAppColors }
 /** True in dark theme. Provided by [AppTheme] so platform glass (blur/tint) can adapt reliably. */
 val LocalIsDarkTheme = staticCompositionLocalOf { true }
 
+/** True when the Booming Music–influenced theme is active (fixed indigo scheme, no seed). */
+val LocalIsBoomingTheme = staticCompositionLocalOf { false }
+
 /**
  * Whether liquid-glass surfaces may actually draw glass.
  *
@@ -222,6 +225,7 @@ fun AppTheme(
                 LocalContentColor provides colorScheme.onSurfaceVariant,
                 LocalAppColors provides if (isDark) DarkAppColors else LightAppColors,
                 LocalIsDarkTheme provides isDark,
+                LocalIsBoomingTheme provides booming,
                 LocalForcedDarkColorScheme provides forcedDarkScheme,
                 LocalLiquidGlassEnabled provides liquidGlassEnabled,
                 content = content,

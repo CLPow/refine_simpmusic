@@ -138,6 +138,7 @@ import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.login.LoginDestination
 import com.maxrave.simpmusic.ui.screen.library.LibraryDynamicPlaylistType
+import com.maxrave.simpmusic.ui.theme.LocalIsBoomingTheme
 import com.maxrave.simpmusic.ui.theme.desktopPanelDark
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.HomeViewModel
@@ -256,14 +257,15 @@ fun HomeScreen(
 
     val backgroundColor = MaterialTheme.colorScheme.background
     val isLightTheme = backgroundColor.luminance() > 0.5f
-    // What is ACTUALLY painted behind this screen. The desktop shell wraps content in a rounded
-    // panel (App.kt: surfaceContainer on light, desktopPanelDark on dark) — deliberately not
-    // colorScheme.background — so a gradient tail aimed at colorScheme.background ends on the
-    // wrong colour and draws a seam where the first item stops. Same light check as App.kt's
-    // isLightScheme.
+    // Booming Music theme: keep the page on the fixed indigo surface. The usual Home treatment
+    // pulls the first shelf's artwork colour over the top bar, which buried the #121318 look
+    // under a random tint and made the theme look like plain AMOLED black.
+    val isBoomingTheme = LocalIsBoomingTheme.current
     val pageBackground =
         if (getPlatform() == Platform.Desktop) {
-            if (isLightTheme) MaterialTheme.colorScheme.surfaceContainer else desktopPanelDark
+            if (isLightTheme) MaterialTheme.colorScheme.surfaceContainer
+            else if (isBoomingTheme) MaterialTheme.colorScheme.background
+            else desktopPanelDark
         } else {
             backgroundColor
         }
@@ -280,17 +282,25 @@ fun HomeScreen(
             loader = networkLoader,
         )
 
-    LaunchedEffect(mainHomeThumbnail) {
-        mainHomeThumbnail?.let {
-            dominantColorState.updateFrom(Url(it))
+    LaunchedEffect(mainHomeThumbnail, isBoomingTheme) {
+        if (isBoomingTheme) {
+            topHeaderColor = backgroundColor
+        } else {
+            mainHomeThumbnail?.let {
+                dominantColorState.updateFrom(Url(it))
+            }
         }
     }
 
-    LaunchedEffect(dominantColorState, isLightTheme) {
+    LaunchedEffect(dominantColorState, isLightTheme, isBoomingTheme) {
         snapshotFlow { dominantColorState.color }.collect {
-            // Light theme: pull the artwork color toward white for a soft pastel header;
-            // dark theme keeps the original darkened tone.
-            topHeaderColor = if (isLightTheme) lerp(it, Color.White, 0.85f) else it.rgbFactor(0.3f)
+            if (isBoomingTheme) {
+                topHeaderColor = backgroundColor
+            } else {
+                // Light theme: pull the artwork color toward white for a soft pastel header;
+                // dark theme keeps the original darkened tone.
+                topHeaderColor = if (isLightTheme) lerp(it, Color.White, 0.85f) else it.rgbFactor(0.3f)
+            }
         }
     }
 
@@ -849,10 +859,17 @@ fun HomeTopAppBar(navController: NavController) {
             ),
         title = {
             Column {
+                val boomingAccent = LocalIsBoomingTheme.current
                 Text(
                     text = stringResource(Res.string.app_name),
                     style = typo().titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
+                    color =
+                        if (boomingAccent) {
+                            // Indigo wordmark, matching Booming Music's "Booming Music" title.
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onBackground
+                        },
                     modifier = Modifier.padding(bottom = 4.dp),
                 )
                 Text(
@@ -875,6 +892,7 @@ fun HomeTopAppBar(navController: NavController) {
                             }
                         },
                     style = typo().bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         },
