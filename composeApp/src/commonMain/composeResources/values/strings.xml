@@ -403,6 +403,10 @@
     <string name="theme_mode_dark">Dark</string>
     <string name="theme_mode_light">Light</string>
     <string name="theme_mode_booming">Booming Music</string>
+    <string name="booming_for_you">For you</string>
+    <string name="booming_shuffle_your_music">Shuffle your music</string>
+    <string name="booming_listen_now">Listen now</string>
+    <string name="booming_recommended_artists">Recommended artists</string>
     <string name="now_playing_style">Now Playing style</string>
     <string name="now_playing_style_spotify">Classic</string>
     <string name="now_playing_style_m3_expressive" translatable="false">Material 3 Expressive</string>

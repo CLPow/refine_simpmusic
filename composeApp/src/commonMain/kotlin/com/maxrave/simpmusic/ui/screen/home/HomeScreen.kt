@@ -450,6 +450,16 @@ fun HomeScreen(
     }
 
     Box {
+        // Booming Music theme replaces the whole home chrome, not just colours.
+        if (LocalIsBoomingTheme.current) {
+            BoomingHomeScreen(
+                homeData = homeData,
+                newRelease = newRelease,
+                sharedViewModel = sharedViewModel,
+                navController = navController,
+            )
+            return@Box
+        }
         PullToRefreshBox(
             modifier =
                 Modifier
