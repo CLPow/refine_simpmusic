@@ -359,6 +359,11 @@ import simpmusic.composeapp.generated.resources.crossfade_prep_buffer
 import simpmusic.composeapp.generated.resources.crossfade_prep_buffer_description
 import simpmusic.composeapp.generated.resources.lt_confirm_join
 import simpmusic.composeapp.generated.resources.lt_confirm_join_description
+import simpmusic.composeapp.generated.resources.https_only
+import simpmusic.composeapp.generated.resources.https_only_description
+import simpmusic.composeapp.generated.resources.lyrics_source_order
+import simpmusic.composeapp.generated.resources.lyrics_source_order_default
+import simpmusic.composeapp.generated.resources.lyrics_source_order_description
 import simpmusic.composeapp.generated.resources.session_protection
 import simpmusic.composeapp.generated.resources.session_protection_on
 import simpmusic.composeapp.generated.resources.session_protection_off
@@ -569,6 +574,8 @@ fun SettingScreen(
     val crossfadePrepBufferMs by viewModel.crossfadePrepBufferMs.collectAsStateWithLifecycle()
     val listenTogetherConfirmJoin by viewModel.listenTogetherConfirmJoin.collectAsStateWithLifecycle()
     val checkForUpdatesEnabled by viewModel.checkForUpdates.collectAsStateWithLifecycle()
+    val lyricsSourceOrderCsv by viewModel.lyricsSourceOrderCsv.collectAsStateWithLifecycle()
+    val httpsOnlyEnabled by viewModel.httpsOnly.collectAsStateWithLifecycle()
     val youtubeSubtitleLanguage by viewModel.youtubeSubtitleLanguage.collectAsStateWithLifecycle()
     val spotifyLoggedIn by viewModel.spotifyLogIn.collectAsStateWithLifecycle()
     val spotifyLyrics by viewModel.spotifyLyrics.collectAsStateWithLifecycle()
@@ -1854,6 +1861,51 @@ fun SettingScreen(
                         ((listenTogetherConfirmJoin == TRUE) to { on: Boolean ->
                             viewModel.setListenTogetherConfirmJoin(on)
                         }),
+                )
+                SettingItem(
+                    title = stringResource(Res.string.https_only),
+                    subtitle = stringResource(Res.string.https_only_description),
+                    switch =
+                        ((httpsOnlyEnabled) to { on: Boolean ->
+                            viewModel.setHttpsOnly(on)
+                        }),
+                )
+                SettingItem(
+                    title = stringResource(Res.string.lyrics_source_order),
+                    subtitle = lyricsSourceOrderCsv.ifBlank { stringResource(Res.string.lyrics_source_order_default) },
+                    onClick = {
+                        viewModel.setAlertData(
+                            SettingAlertState(
+                                title = runBlocking { getString(Res.string.lyrics_source_order) },
+                                message = runBlocking { getString(Res.string.lyrics_source_order_description) },
+                                selectOne =
+                                    SettingAlertState.SelectData(
+                                        listSelect =
+                                            listOf(
+                                                "simpmusic,spotify,lrclib,better,youtube" to "SimpMusic first",
+                                                "lrclib,spotify,simpmusic,better,youtube" to "LRCLIB first",
+                                                "spotify,simpmusic,lrclib,better,youtube" to "Spotify first",
+                                                "youtube,simpmusic,spotify,lrclib,better" to "YouTube first",
+                                            ).map { (csv, label) ->
+                                                (lyricsSourceOrderCsv.startsWith(csv.take(8))) to label
+                                            },
+                                    ),
+                                confirm =
+                                    runBlocking { getString(Res.string.change) } to { state ->
+                                        val label = state.selectOne?.getSelected() ?: return@to
+                                        val map =
+                                            mapOf(
+                                                "SimpMusic first" to "simpmusic,spotify,lrclib,better,youtube",
+                                                "LRCLIB first" to "lrclib,spotify,simpmusic,better,youtube",
+                                                "Spotify first" to "spotify,simpmusic,lrclib,better,youtube",
+                                                "YouTube first" to "youtube,simpmusic,spotify,lrclib,better",
+                                            )
+                                        map[label]?.let { viewModel.setLyricsSourceOrder(it) }
+                                    },
+                                dismiss = runBlocking { getString(Res.string.cancel) },
+                            ),
+                        )
+                    },
                 )
                 SettingItem(
                     title = stringResource(Res.string.check_for_updates_setting),

@@ -290,6 +290,11 @@
     <string name="session_protection_off">Not protected on this platform</string>
     <string name="check_for_updates_setting">Check for updates</string>
     <string name="check_for_updates_description">Look for new releases of this fork on GitHub.</string>
+    <string name="https_only">HTTPS only</string>
+    <string name="https_only_description">Upgrade known http:// artwork and search hosts to https://</string>
+    <string name="lyrics_source_order">Lyrics provider order</string>
+    <string name="lyrics_source_order_description">Which source to try first when fetching lyrics.</string>
+    <string name="lyrics_source_order_default">Default (SimpMusic → Spotify → LRCLIB…)</string>
     <string name="fork_notice">Refine Music — a modified build of SimpMusic</string>
     <string name="other_app">Other app</string>
     <string name="database">App database</string>

@@ -44,6 +44,7 @@ import com.maxrave.simpmusic.ui.mini_player.MiniPlayerWindow
 import com.maxrave.simpmusic.ui.theme.isDarkTheme
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.SharedViewModel
+import com.maxrave.simpmusic.viewModel.UIEvent
 import com.maxrave.simpmusic.viewModel.changeLanguageNative
 import io.sentry.Sentry
 import io.sentry.SentryLevel
@@ -283,6 +284,12 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                 if (nowPlayingArtist.isNotBlank()) {
                     Item(trayLabel(nowPlayingArtist), isEnabled = false)
                 }
+                Divider()
+                Item("Pause/Play") {
+                    sharedViewModel.onUIEvent(UIEvent.PlayPause)
+                }
+                Item("Next") { sharedViewModel.onUIEvent(UIEvent.Next) }
+                Item("Previous") { sharedViewModel.onUIEvent(UIEvent.Previous) }
                 Divider()
             }
             if (!isVisible) {

@@ -1085,6 +1085,12 @@ class SettingsViewModel(
     private var _checkForUpdates: MutableStateFlow<String?> = MutableStateFlow(null)
     val checkForUpdates: StateFlow<String?> = _checkForUpdates
 
+    private var _lyricsSourceOrderCsv: MutableStateFlow<String> = MutableStateFlow("")
+    val lyricsSourceOrderCsv: StateFlow<String> = _lyricsSourceOrderCsv
+
+    private var _httpsOnly: MutableStateFlow<Boolean> = MutableStateFlow(false)
+    val httpsOnly: StateFlow<Boolean> = _httpsOnly
+
     init {
         viewModelScope.launch {
             dataStoreManager.aaLyricsLeadMs.collect { _aaLyricsLeadMs.emit(it) }
@@ -1106,6 +1112,12 @@ class SettingsViewModel(
         }
         viewModelScope.launch {
             dataStoreManager.checkForUpdates.collect { _checkForUpdates.emit(it) }
+        }
+        viewModelScope.launch {
+            dataStoreManager.lyricsSourceOrder.collect { _lyricsSourceOrderCsv.emit(it) }
+        }
+        viewModelScope.launch {
+            dataStoreManager.httpsOnly.collect { _httpsOnly.emit(it == DataStoreManager.Values.TRUE) }
         }
     }
 
@@ -1135,6 +1147,14 @@ class SettingsViewModel(
 
     fun setCheckForUpdates(enabled: Boolean) {
         viewModelScope.launch { dataStoreManager.setCheckForUpdates(enabled) }
+    }
+
+    fun setLyricsSourceOrder(csv: String) {
+        viewModelScope.launch { dataStoreManager.setLyricsSourceOrder(csv) }
+    }
+
+    fun setHttpsOnly(enabled: Boolean) {
+        viewModelScope.launch { dataStoreManager.setHttpsOnly(enabled) }
     }
 
     /**

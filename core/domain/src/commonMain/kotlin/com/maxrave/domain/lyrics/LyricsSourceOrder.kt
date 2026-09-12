@@ -35,4 +35,26 @@ object LyricsSourceOrder {
             DataStoreManager.BETTER_LYRICS,
             DataStoreManager.YOUTUBE,
         )
+
+    /**
+     * Parse a user-ordered CSV (e.g. `lrclib,simpmusic,...`) into a usable chain.
+     *
+     * Unknown tokens are dropped; sources missing from the stored list are appended in [DEFAULT]
+     * order so a partial preference still tries everything once.
+     */
+    fun fromStored(csv: String?): List<String> {
+        if (csv.isNullOrBlank()) return DEFAULT
+        val requested =
+            csv
+                .split(',')
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+        val known = DEFAULT.toSet()
+        val head = requested.filter { it in known }
+        val tail = DEFAULT.filterNot { it in head.toSet() }
+        return head + tail
+    }
+
+    /** Serialize [order] for DataStore; always one chain, never empty. */
+    fun toCsv(order: List<String>): String = fromStored(order.joinToString(",")).joinToString(",")
 }

@@ -605,6 +605,32 @@ internal class DataStoreManagerImpl(
         }
     }
 
+    override val lyricsSourceOrder: Flow<String> =
+        settingsDataStore.data.map { preferences ->
+            preferences[LYRICS_SOURCE_ORDER] ?: ""
+        }
+
+    override suspend fun setLyricsSourceOrder(csv: String) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[LYRICS_SOURCE_ORDER] = csv
+            }
+        }
+    }
+
+    override val httpsOnly: Flow<String> =
+        settingsDataStore.data.map { preferences ->
+            preferences[HTTPS_ONLY] ?: FALSE
+        }
+
+    override suspend fun setHttpsOnly(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[HTTPS_ONLY] = if (enabled) TRUE else FALSE
+            }
+        }
+    }
+
     override val checkForUpdates: Flow<String> =
         settingsDataStore.data.map { preferences ->
             preferences[CHECK_FOR_UPDATES] ?: TRUE
@@ -1837,6 +1863,8 @@ internal class DataStoreManagerImpl(
         val SKIP_SHORT_TRACK_SECONDS = intPreferencesKey("skip_short_track_seconds")
         val CROSSFADE_PREP_BUFFER_MS = intPreferencesKey("crossfade_prep_buffer_ms")
         val LISTEN_TOGETHER_CONFIRM_JOIN = stringPreferencesKey("listentogether_confirm_join")
+        val LYRICS_SOURCE_ORDER = stringPreferencesKey("lyrics_source_order")
+        val HTTPS_ONLY = stringPreferencesKey("https_only")
         val CHECK_FOR_UPDATES = stringPreferencesKey("check_for_updates")
         val LYRICS_CACHE_GENERATION_KEY = intPreferencesKey("lyrics_cache_generation")
         val TRANSLATION_LANGUAGE = stringPreferencesKey("translation_language")

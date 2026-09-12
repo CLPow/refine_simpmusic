@@ -192,7 +192,19 @@ interface DataStoreManager {
 
     suspend fun setListenTogetherConfirmJoin(confirm: Boolean)
 
-    /** When TRUE, app checks CLPow/refine_simpmusic releases for updates. */
+    /**
+     * Comma-separated lyrics source order. Empty = [com.maxrave.domain.lyrics.LyricsSourceOrder.DEFAULT].
+     */
+    val lyricsSourceOrder: Flow<String>
+
+    suspend fun setLyricsSourceOrder(csv: String)
+
+    /** When TRUE, http:// URLs are upgraded to https:// before load. */
+    val httpsOnly: Flow<String>
+
+    suspend fun setHttpsOnly(enabled: Boolean)
+
+    /** When TRUE, App checks CLPow/refine_simpmusic releases for updates. */
     val checkForUpdates: Flow<String>
 
     suspend fun setCheckForUpdates(enabled: Boolean)

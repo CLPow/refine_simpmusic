@@ -131,7 +131,7 @@ internal class CarLyricsSource(
         val artist = song.artistName?.firstOrNull().orEmpty()
         val duration = song.durationSeconds.takeIf { it > 0 }
 
-        for (source in LyricsSourceOrder.DEFAULT) {
+        for (source in sourceOrder()) {
             val lyrics = fetch(source, song, artist, duration) ?: continue
             val lines = lyrics.toTimedLines() ?: continue
             Logger.d(TAG, "Found timed lyrics for $videoId from $source")
@@ -184,6 +184,9 @@ internal class CarLyricsSource(
     private companion object {
         const val MAX_CACHED_TRACKS = 200
     }
+
+    private suspend fun sourceOrder(): List<String> =
+        LyricsSourceOrder.fromStored(dataStoreManager.lyricsSourceOrder.firstOrNull())
 }
 
 /**
