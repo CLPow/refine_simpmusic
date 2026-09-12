@@ -6,6 +6,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalRippleConfiguration
@@ -20,6 +21,49 @@ import com.materialkolor.rememberDynamicColorScheme
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.simpmusic.expect.ui.SystemBarAppearanceEffect
 import com.maxrave.simpmusic.expect.ui.platformDynamicColorScheme
+
+/**
+ * Booming Music–influenced Material 3 dark scheme (tokens from mardous/BoomingMusic Color.kt).
+ * Cool indigo primary on a blue-black surface — the look of their Expressive player screenshots.
+ */
+private fun boomingColorScheme(): ColorScheme =
+    darkColorScheme(
+        primary = Color(0xFFB6C4FF),
+        onPrimary = Color(0xFF1D2D61),
+        primaryContainer = Color(0xFF354479),
+        onPrimaryContainer = Color(0xFFDCE1FF),
+        secondary = Color(0xFFC2C5DD),
+        onSecondary = Color(0xFF2B3042),
+        secondaryContainer = Color(0xFF424659),
+        onSecondaryContainer = Color(0xFFDEE1F9),
+        tertiary = Color(0xFFE3BADA),
+        onTertiary = Color(0xFF432740),
+        tertiaryContainer = Color(0xFF5B3D57),
+        onTertiaryContainer = Color(0xFFFFD7F5),
+        error = Color(0xFFFFB4AB),
+        onError = Color(0xFF690005),
+        errorContainer = Color(0xFF93000A),
+        onErrorContainer = Color(0xFFFFDAD6),
+        background = Color(0xFF121318),
+        onBackground = Color(0xFFE3E1E9),
+        surface = Color(0xFF121318),
+        onSurface = Color(0xFFE3E1E9),
+        surfaceVariant = Color(0xFF45464F),
+        onSurfaceVariant = Color(0xFFC6C5D0),
+        outline = Color(0xFF90909A),
+        outlineVariant = Color(0xFF45464F),
+        scrim = Color(0xFF000000),
+        inverseSurface = Color(0xFFE3E1E9),
+        inverseOnSurface = Color(0xFF2F3036),
+        inversePrimary = Color(0xFF4D5C92),
+        surfaceBright = Color(0xFF38393F),
+        surfaceDim = Color(0xFF121318),
+        surfaceContainerLowest = Color(0xFF0D0E13),
+        surfaceContainerLow = Color(0xFF1A1B21),
+        surfaceContainer = Color(0xFF1E1F25),
+        surfaceContainerHigh = Color(0xFF292A2F),
+        surfaceContainerHighest = Color(0xFF34343A),
+    )
 
 /**
  * Semantic colors that sit outside the Material 3 ColorScheme.
@@ -127,29 +171,35 @@ fun AppTheme(
         () -> Unit,
 ) {
     val isDark = isDarkTheme(themeMode)
+    val booming = themeMode == DataStoreManager.THEME_MODE_BOOMING
     val wallpaperScheme =
-        if (themeColorSource == DataStoreManager.THEME_COLOR_WALLPAPER) {
+        if (themeColorSource == DataStoreManager.THEME_COLOR_WALLPAPER && !booming) {
             platformDynamicColorScheme(isDark)
         } else {
             null
         }
     val seedColor =
-        if (themeColorSource == DataStoreManager.THEME_COLOR_CUSTOM) {
+        if (themeColorSource == DataStoreManager.THEME_COLOR_CUSTOM && !booming) {
             customThemeColor ?: seed
         } else {
             seed
         }
     // Symmetric base: dark pins background/surface to pure black via isAmoled; light pins them to
     // pure white with a neutral-grey ramp (the seed otherwise tints the light neutrals warm/cream).
+    // BOOMING ignores the seed and wallpaper: it is a fixed Material 3 look from Booming Music.
     val colorScheme =
-        wallpaperScheme
-            ?: rememberDynamicColorScheme(
-                seedColor = seedColor,
-                isDark = isDark,
-                isAmoled = isDark,
-                style = PaletteStyle.TonalSpot,
-                modifyColorScheme = { cs -> if (isDark) cs else cs.withNeutralLightSurfaces() },
-            )
+        when {
+            booming -> boomingColorScheme()
+            wallpaperScheme != null -> wallpaperScheme
+            else ->
+                rememberDynamicColorScheme(
+                    seedColor = seedColor,
+                    isDark = isDark,
+                    isAmoled = isDark,
+                    style = PaletteStyle.TonalSpot,
+                    modifyColorScheme = { cs -> if (isDark) cs else cs.withNeutralLightSurfaces() },
+                )
+        }
     // Immersive screens stay dark even at light theme (see [ForceDarkContent]). Resolve their scheme
     // once here instead of letting every such subtree build a palette of its own.
     val forcedDarkScheme =
@@ -259,5 +309,6 @@ fun isDarkTheme(themeMode: String): Boolean =
     when (themeMode) {
         DataStoreManager.THEME_MODE_LIGHT -> false
         DataStoreManager.THEME_MODE_SYSTEM -> isSystemInDarkTheme()
+        DataStoreManager.THEME_MODE_BOOMING -> true
         else -> true
     }

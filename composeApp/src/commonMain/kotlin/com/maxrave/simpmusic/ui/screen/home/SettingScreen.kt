@@ -438,6 +438,7 @@ import simpmusic.composeapp.generated.resources.theme_color_default
 import simpmusic.composeapp.generated.resources.theme_color_wallpaper
 import simpmusic.composeapp.generated.resources.theme_mode_dark
 import simpmusic.composeapp.generated.resources.theme_mode_light
+import simpmusic.composeapp.generated.resources.theme_mode_booming
 import simpmusic.composeapp.generated.resources.theme_mode_system
 import simpmusic.composeapp.generated.resources.third_party_libraries
 import simpmusic.composeapp.generated.resources.thumbnail_cache
@@ -716,6 +717,7 @@ fun SettingScreen(
                         DataStoreManager.THEME_MODE_SYSTEM to stringResource(Res.string.theme_mode_system),
                         DataStoreManager.THEME_MODE_DARK to stringResource(Res.string.theme_mode_dark),
                         DataStoreManager.THEME_MODE_LIGHT to stringResource(Res.string.theme_mode_light),
+                        DataStoreManager.THEME_MODE_BOOMING to stringResource(Res.string.theme_mode_booming),
                     )
                 SettingItem(
                     title = stringResource(Res.string.theme),

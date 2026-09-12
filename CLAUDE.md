@@ -751,6 +751,8 @@ if (getPlatform() == Platform.Android) {
   - `ExternalUrlsXXX` renamed to `ExternalUrls`. `*.log` gitignored (none are tracked).
   - Android Auto release builds already used the sample host allowlist (only debug is `ALLOW_ALL`).
 
+- **Booming Music theme (2026-09-11)**: Settings → Theme adds **Booming Music** beside System/Dark/Light. Uses Material 3 tokens from [mardous/BoomingMusic](https://github.com/mardous/BoomingMusic) `Color.kt` (indigo primary `#B6C4FF` on surface `#121318`). Selecting it also sets **Now Playing style → Material 3 Expressive** and **Lyrics style → Apple Music** so the look matches their expressive/immersive players. Always dark; ignores wallpaper/custom seed.
+
 ## 🔄 CLAUDE.md Auto-Update Rule (MANDATORY)
 
 After completing any of the following types of changes, the AI agent **MUST** update this CLAUDE.md file:

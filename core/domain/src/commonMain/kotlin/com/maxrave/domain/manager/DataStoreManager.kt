@@ -615,6 +615,13 @@ interface DataStoreManager {
         const val THEME_MODE_DARK = "DARK"
         const val THEME_MODE_LIGHT = "LIGHT"
 
+        /**
+         * Material 3 scheme inspired by Booming Music (mardous/BoomingMusic): cool indigo
+         * primary (#B6C4FF / #4D5C92) on a blue-black surface. Always dark — the mode is a
+         * look, not a light/dark switch.
+         */
+        const val THEME_MODE_BOOMING = "BOOMING"
+
         const val THEME_COLOR_DEFAULT = "DEFAULT"
         const val THEME_COLOR_WALLPAPER = "WALLPAPER"
         const val THEME_COLOR_CUSTOM = "CUSTOM"

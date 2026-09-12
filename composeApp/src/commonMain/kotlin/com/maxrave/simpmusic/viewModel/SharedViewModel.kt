@@ -1841,6 +1841,13 @@ class SharedViewModel(
     fun setThemeMode(mode: String) {
         viewModelScope.launch {
             dataStoreManager.setThemeMode(mode)
+            // Booming look is a package: indigo M3 surfaces + expressive player + immersive
+            // lyrics. Selecting the theme therefore sets those styles so the UI does not
+            // stay on Spotify/Classic and look like the old theme with new colours.
+            if (mode == DataStoreManager.THEME_MODE_BOOMING) {
+                dataStoreManager.setNowPlayingStyle(DataStoreManager.NOW_PLAYING_STYLE_M3_EXPRESSIVE)
+                dataStoreManager.setLyricsStyle(DataStoreManager.LYRICS_STYLE_APPLE_MUSIC)
+            }
         }
     }
 
