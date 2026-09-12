@@ -30,7 +30,6 @@ import coil3.request.CachePolicy
 import coil3.request.crossfade
 import com.kdroid.composetray.tray.api.Tray
 import com.kdroid.composetray.utils.SingleInstanceManager
-import com.maxrave.common.AppIdentity
 import com.maxrave.data.di.loader.loadAllModules
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
@@ -180,13 +179,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
 
     // Initialize Koin ONCE before application starts
     startKoin {
-        loadAllModules(
-            AppIdentity(
-                applicationId = "com.maxrave.simpmusic",
-                versionName = BuildKonfig.versionName,
-                platform = "${System.getProperty("os.name")} ${System.getProperty("os.version")}",
-            ),
-        )
+        loadAllModules()
         loadKoinModules(viewModelModule)
     }
 
