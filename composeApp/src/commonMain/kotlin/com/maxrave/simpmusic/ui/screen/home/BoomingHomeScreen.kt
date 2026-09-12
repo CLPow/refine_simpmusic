@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -41,6 +42,7 @@ import coil3.compose.AsyncImage
 import com.maxrave.common.Config
 import com.maxrave.domain.data.model.home.Content
 import com.maxrave.domain.data.model.home.HomeItem
+import com.maxrave.domain.data.model.home.chart.Chart
 import com.maxrave.domain.extension.now
 import com.maxrave.domain.utils.toTrack
 import com.maxrave.simpmusic.ui.icon.History
@@ -55,7 +57,6 @@ import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
-import com.maxrave.domain.data.model.home.chart.Chart
 import com.maxrave.simpmusic.ui.navigation.destination.search.SearchDestination
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.SharedViewModel
@@ -64,12 +65,8 @@ import org.jetbrains.compose.resources.stringResource
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.app_name
 import simpmusic.composeapp.generated.resources.booming_for_you
-import simpmusic.composeapp.generated.resources.booming_listen_now
-import simpmusic.composeapp.generated.resources.booming_new_releases
-import simpmusic.composeapp.generated.resources.booming_quick_picks
 import simpmusic.composeapp.generated.resources.booming_recommended_artists
 import simpmusic.composeapp.generated.resources.booming_shuffle_your_music
-import simpmusic.composeapp.generated.resources.chart
 import simpmusic.composeapp.generated.resources.good_afternoon
 import simpmusic.composeapp.generated.resources.good_evening
 import simpmusic.composeapp.generated.resources.good_morning
@@ -77,9 +74,10 @@ import simpmusic.composeapp.generated.resources.good_night
 import simpmusic.composeapp.generated.resources.settings
 
 /**
- * Booming Music–style home: wordmark, settings, circular actions, Shuffle + mosaic,
- * and the same shelf content Refine Music always shows (new releases, listen now,
- * artists, quick picks) so nothing is lost when the theme is on.
+ * Booming Music–style chrome on the **same YouTube Music shelves** as classic Home.
+ *
+ * The feed is rendered once, in order, under each shelf's real title (On repeat, Listen again,
+ * Quick picks, Recaps, …). No second pass that re-slices the same contents into invented rows.
  */
 @Composable
 fun BoomingHomeScreen(
@@ -97,21 +95,22 @@ fun BoomingHomeScreen(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val hour = now().time.hour
 
-    val allContents = homeData.flatMap { it.contents.filterNotNull() }
-    val mosaic = allContents.filter { it.thumbnails.isNotEmpty() }.take(9)
-    val listenCards = allContents.filter { it.title.isNotBlank() }.take(16)
-    val newReleaseCards = newRelease.flatMap { it.contents.filterNotNull() }.filter { it.title.isNotBlank() }
+    // Mosaic art only for the Shuffle card’s side — not a second list of the same tracks.
+    val mosaic =
+        homeData
+            .flatMap { it.contents.filterNotNull() }
+            .filter { it.thumbnails.isNotEmpty() }
+            .take(4)
 
-    // Real artist photos: channel shelves (UC…) and chart artists carry artwork.
-    val shelfArtists =
-        allContents
-            .filter { it.browseId?.startsWith("UC") == true && it.thumbnails.isNotEmpty() }
-            .distinctBy { it.browseId }
-            .take(12)
-    val chartArtists = chart?.artists?.itemArtists?.take(12).orEmpty()
-    val quickPicks = allContents.filter { it.videoId != null }.take(20)
-    // Chart songs if the chart payload carries any
-    val chartSongs: List<Content> = emptyList()
+    val chartArtists = chart?.artists?.itemArtists?.take(10).orEmpty()
+
+    // Drop a New-releases shelf that only repeats what homeData already carries.
+    val homeTitles = homeData.map { it.title.trim() }.toSet()
+    val extraNewRelease =
+        newRelease.filter { shelf ->
+            shelf.contents.filterNotNull().isNotEmpty() &&
+                shelf.title.trim() !in homeTitles
+        }
 
     LazyColumn(
         modifier =
@@ -121,14 +120,12 @@ fun BoomingHomeScreen(
                 .statusBarsPadding(),
         contentPadding = PaddingValues(bottom = 120.dp),
     ) {
-        // Header: app name + settings (always reachable so the theme can be switched back)
-        item {
+        item(key = "booming-header") {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
-                    // Single wordmark only — no trailing “Music”.
                     Text(
                         text = stringResource(Res.string.app_name),
                         style = typo().headlineSmall.copy(fontWeight = FontWeight.Bold, fontSize = 28.sp),
@@ -155,7 +152,7 @@ fun BoomingHomeScreen(
                 }
             }
             Row(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 QuickAction(SimpIcons.Search, onSurface) { navController.navigate(SearchDestination) }
@@ -164,8 +161,8 @@ fun BoomingHomeScreen(
             }
         }
 
-        // For you
-        item {
+        // Shuffle + small mosaic (Booming “For you” card) — chrome only, not a duplicate feed
+        item(key = "booming-shuffle") {
             SectionTitle(stringResource(Res.string.booming_for_you))
             Row(
                 modifier = Modifier.padding(horizontal = 20.dp),
@@ -175,7 +172,7 @@ fun BoomingHomeScreen(
                     modifier =
                         Modifier
                             .weight(1.05f)
-                            .height(210.dp)
+                            .height(180.dp)
                             .clip(RoundedCornerShape(22.dp))
                             .background(
                                 Brush.verticalGradient(
@@ -202,7 +199,7 @@ fun BoomingHomeScreen(
                     }
                 }
                 Column(
-                    modifier = Modifier.weight(1f).height(210.dp),
+                    modifier = Modifier.weight(1f).height(180.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     repeat(2) { row ->
@@ -239,39 +236,37 @@ fun BoomingHomeScreen(
             }
         }
 
-        // New releases
-        if (newReleaseCards.isNotEmpty()) {
-            item {
-                SectionTitle(stringResource(Res.string.booming_new_releases))
-                ContentRow(newReleaseCards) { openHomeContent(it, navController, sharedViewModel) }
-            }
+        // Every YouTube Music shelf, once, in feed order, under its real title
+        items(
+            items = homeData,
+            key = { shelf -> "home-" + (shelf.title + shelf.hashCode()) },
+        ) { shelf ->
+            val rows = shelf.contents.filterNotNull()
+            if (rows.isEmpty()) return@items
+            SectionTitle(shelf.title.ifBlank { stringResource(Res.string.booming_for_you) })
+            ContentRow(rows) { openHomeContent(it, navController, sharedViewModel) }
         }
 
-        // Listen now
-        item {
-            SectionTitle(stringResource(Res.string.booming_listen_now))
-            ContentRow(listenCards) { openHomeContent(it, navController, sharedViewModel) }
+        // New-releases shelves not already present under another title
+        items(
+            items = extraNewRelease,
+            key = { shelf -> "new-" + shelf.title + shelf.hashCode() },
+        ) { shelf ->
+            val rows = shelf.contents.filterNotNull()
+            if (rows.isEmpty()) return@items
+            SectionTitle(shelf.title)
+            ContentRow(rows) { openHomeContent(it, navController, sharedViewModel) }
         }
 
-        // Quick picks (playable tracks from the feed)
-        if (quickPicks.isNotEmpty()) {
-            item {
-                SectionTitle(stringResource(Res.string.booming_quick_picks))
-                ContentRow(quickPicks) { openHomeContent(it, navController, sharedViewModel) }
-            }
-        }
-
-        // Artists with real photos
-        if (shelfArtists.isNotEmpty() || chartArtists.isNotEmpty()) {
-            item {
+        // Chart artists (photos from the chart payload)
+        if (chartArtists.isNotEmpty()) {
+            item(key = "booming-artists") {
                 SectionTitle(stringResource(Res.string.booming_recommended_artists))
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    // Chart artists first (have photos), then channel shelves
-                    items(chartArtists.size) { index ->
-                        val artist = chartArtists[index]
+                    items(chartArtists) { artist ->
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier =
@@ -290,76 +285,8 @@ fun BoomingHomeScreen(
                             Text(artist.title, style = typo().bodySmall, color = muted, maxLines = 1)
                         }
                     }
-                    items(shelfArtists) { content ->
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier =
-                                Modifier
-                                    .width(88.dp)
-                                    .clickable {
-                                        content.browseId?.let {
-                                            navController.navigate(ArtistDestination(channelId = it))
-                                        }
-                                    },
-                        ) {
-                            ArtistAvatar(
-                                url = content.thumbnails.lastOrNull()?.url,
-                                name = content.title,
-                                fallbackColor = MaterialTheme.colorScheme.primaryContainer,
-                            )
-                            Spacer(Modifier.height(6.dp))
-                            Text(content.title, style = typo().bodySmall, color = muted, maxLines = 1)
-                        }
-                    }
                 }
             }
-        }
-
-        // Chart songs
-        if (chartSongs.isNotEmpty()) {
-            item {
-                SectionTitle(stringResource(Res.string.chart))
-                ContentRow(chartSongs) { openHomeContent(it, navController, sharedViewModel) }
-            }
-        }
-
-        // Remaining home shelves — every title from the classic feed
-        items(homeData) { shelf ->
-            val rows = shelf.contents.filterNotNull()
-            if (rows.isEmpty()) return@items
-            SectionTitle(shelf.title.ifBlank { stringResource(Res.string.booming_listen_now) })
-            ContentRow(rows) { openHomeContent(it, navController, sharedViewModel) }
-        }
-    }
-}
-
-@Composable
-private fun ArtistAvatar(
-    url: String?,
-    name: String,
-    fallbackColor: androidx.compose.ui.graphics.Color,
-) {
-    Box(
-        modifier =
-            Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(fallbackColor),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (url != null) {
-            AsyncImage(
-                model = url,
-                contentDescription = name,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
-        } else {
-            Text(
-                text = name.firstOrNull()?.uppercase() ?: "?",
-                style = typo().titleLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
         }
     }
 }
@@ -412,7 +339,7 @@ private fun SectionTitle(text: String) {
 @Composable
 private fun QuickAction(
     icon: ImageVector,
-    tint: androidx.compose.ui.graphics.Color,
+    tint: Color,
     onClick: () -> Unit,
 ) {
     Box(
@@ -425,6 +352,37 @@ private fun QuickAction(
         contentAlignment = Alignment.Center,
     ) {
         Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(28.dp))
+    }
+}
+
+@Composable
+private fun ArtistAvatar(
+    url: String?,
+    name: String,
+    fallbackColor: Color,
+) {
+    Box(
+        modifier =
+            Modifier
+                .size(80.dp)
+                .clip(CircleShape)
+                .background(fallbackColor),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(
+                text = name.firstOrNull()?.uppercase() ?: "?",
+                style = typo().titleLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
     }
 }
 
