@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,16 +41,17 @@ import coil3.compose.AsyncImage
 import com.maxrave.common.Config
 import com.maxrave.domain.data.model.home.Content
 import com.maxrave.domain.data.model.home.HomeItem
-import com.maxrave.domain.utils.toTrack
 import com.maxrave.domain.extension.now
+import com.maxrave.domain.utils.toTrack
 import com.maxrave.simpmusic.ui.icon.History
-import com.maxrave.simpmusic.ui.icon.LibraryMusic
 import com.maxrave.simpmusic.ui.icon.PlayArrow
 import com.maxrave.simpmusic.ui.icon.Search
+import com.maxrave.simpmusic.ui.icon.Settings
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.icon.TrendingUp
 import com.maxrave.simpmusic.ui.navigation.destination.home.AnalyticsDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.RecentlySongsDestination
+import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
@@ -62,19 +64,20 @@ import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.app_name
 import simpmusic.composeapp.generated.resources.booming_for_you
 import simpmusic.composeapp.generated.resources.booming_listen_now
+import simpmusic.composeapp.generated.resources.booming_new_releases
+import simpmusic.composeapp.generated.resources.booming_quick_picks
 import simpmusic.composeapp.generated.resources.booming_recommended_artists
 import simpmusic.composeapp.generated.resources.booming_shuffle_your_music
 import simpmusic.composeapp.generated.resources.good_afternoon
 import simpmusic.composeapp.generated.resources.good_evening
 import simpmusic.composeapp.generated.resources.good_morning
 import simpmusic.composeapp.generated.resources.good_night
+import simpmusic.composeapp.generated.resources.settings
 
 /**
- * Booming Music–style home (mardous/BoomingMusic screenshot):
- * bold wordmark with indigo accent, circular quick actions, Shuffle card + cover mosaic,
- * Listen now carousel, Recommended artists row.
- *
- * Data is the existing home shelves — layout and chrome are the change.
+ * Booming Music–style home: wordmark, settings, circular actions, Shuffle + mosaic,
+ * and the same shelf content Refine Music always shows (new releases, listen now,
+ * artists, quick picks) so nothing is lost when the theme is on.
  */
 @Composable
 fun BoomingHomeScreen(
@@ -91,11 +94,12 @@ fun BoomingHomeScreen(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val hour = now().time.hour
 
-    val mosaic: List<Content> =
-        homeData
-            .flatMap { it.contents.filterNotNull() }
-            .filter { it.thumbnails.isNotEmpty() }
-            .take(9)
+    val allContents = homeData.flatMap { it.contents.filterNotNull() }
+    val mosaic = allContents.filter { it.thumbnails.isNotEmpty() }.take(9)
+    val listenCards = allContents.filter { it.title.isNotBlank() }.take(16)
+    val newReleaseCards = newRelease.flatMap { it.contents.filterNotNull() }.filter { it.title.isNotBlank() }
+    val artists = allContents.flatMap { it.artists.orEmpty() }.distinctBy { it.id }.take(12)
+    val quickPicks = allContents.filter { it.videoId != null }.take(20)
 
     LazyColumn(
         modifier =
@@ -105,43 +109,50 @@ fun BoomingHomeScreen(
                 .statusBarsPadding(),
         contentPadding = PaddingValues(bottom = 120.dp),
     ) {
+        // Header: app name + settings (always reachable so the theme can be switched back)
         item {
-            Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                    // Single wordmark only — no trailing “Music”.
                     Text(
                         text = stringResource(Res.string.app_name),
                         style = typo().headlineSmall.copy(fontWeight = FontWeight.Bold, fontSize = 28.sp),
-                        color = onSurface,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = "Music",
-                        style = typo().headlineSmall.copy(fontWeight = FontWeight.Bold, fontSize = 28.sp),
                         color = primary,
                     )
+                    Text(
+                        text =
+                            when (hour) {
+                                in 6..12 -> stringResource(Res.string.good_morning)
+                                in 13..17 -> stringResource(Res.string.good_afternoon)
+                                in 18..23 -> stringResource(Res.string.good_evening)
+                                else -> stringResource(Res.string.good_night)
+                            },
+                        style = typo().bodyMedium,
+                        color = muted,
+                    )
                 }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text =
-                        when (hour) {
-                            in 6..12 -> stringResource(Res.string.good_morning)
-                            in 13..17 -> stringResource(Res.string.good_afternoon)
-                            in 18..23 -> stringResource(Res.string.good_evening)
-                            else -> stringResource(Res.string.good_night)
-                        },
-                    style = typo().bodyMedium,
-                    color = muted,
-                )
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    QuickAction(SimpIcons.Search, onSurface) { navController.navigate(SearchDestination) }
-                    QuickAction(SimpIcons.TrendingUp, onSurface) { navController.navigate(AnalyticsDestination) }
-                    QuickAction(SimpIcons.History, onSurface) { navController.navigate(RecentlySongsDestination) }
-                    QuickAction(SimpIcons.LibraryMusic, onSurface) { navController.navigate(RecentlySongsDestination) }
+                IconButton(onClick = { navController.navigate(SettingsDestination) }) {
+                    Icon(
+                        imageVector = SimpIcons.Settings,
+                        contentDescription = stringResource(Res.string.settings),
+                        tint = onSurface,
+                    )
                 }
+            }
+            Row(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                QuickAction(SimpIcons.Search, onSurface) { navController.navigate(SearchDestination) }
+                QuickAction(SimpIcons.TrendingUp, onSurface) { navController.navigate(AnalyticsDestination) }
+                QuickAction(SimpIcons.History, onSurface) { navController.navigate(RecentlySongsDestination) }
             }
         }
 
+        // For you
         item {
             SectionTitle(stringResource(Res.string.booming_for_you))
             Row(
@@ -154,8 +165,11 @@ fun BoomingHomeScreen(
                             .weight(1.05f)
                             .height(210.dp)
                             .clip(RoundedCornerShape(22.dp))
-                            .background(Brush.verticalGradient(listOf(primary, MaterialTheme.colorScheme.primaryContainer)))
-                            .clickable { sharedViewModel.onUIEvent(UIEvent.Shuffle) },
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(primary, MaterialTheme.colorScheme.primaryContainer),
+                                ),
+                            ).clickable { sharedViewModel.onUIEvent(UIEvent.Shuffle) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -213,58 +227,88 @@ fun BoomingHomeScreen(
             }
         }
 
+        // New releases
+        if (newReleaseCards.isNotEmpty()) {
+            item {
+                SectionTitle(stringResource(Res.string.booming_new_releases))
+                ContentRow(newReleaseCards) { openHomeContent(it, navController, sharedViewModel) }
+            }
+        }
+
+        // Listen now
         item {
             SectionTitle(stringResource(Res.string.booming_listen_now))
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                val cards = (newRelease + homeData).flatMap { it.contents.filterNotNull() }.filter { it.title.isNotBlank() }
-                items(cards) { content ->
-                    ListenNowCard(content = content, onClick = { openHomeContent(it, navController, sharedViewModel) })
+            ContentRow(listenCards) { openHomeContent(it, navController, sharedViewModel) }
+        }
+
+        // Quick picks (playable tracks from the feed)
+        if (quickPicks.isNotEmpty()) {
+            item {
+                SectionTitle(stringResource(Res.string.booming_quick_picks))
+                ContentRow(quickPicks) { openHomeContent(it, navController, sharedViewModel) }
+            }
+        }
+
+        // Artists
+        if (artists.isNotEmpty()) {
+            item {
+                SectionTitle(stringResource(Res.string.booming_recommended_artists))
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    items(artists) { artist ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier =
+                                Modifier
+                                    .width(88.dp)
+                                    .clickable {
+                                        artist.id?.let { navController.navigate(ArtistDestination(channelId = it)) }
+                                    },
+                        ) {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .size(80.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primaryContainer),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = artist.name.firstOrNull()?.uppercase() ?: "?",
+                                    style = typo().titleLarge,
+                                    color = primary,
+                                )
+                            }
+                            Spacer(Modifier.height(6.dp))
+                            Text(artist.name, style = typo().bodySmall, color = muted, maxLines = 1)
+                        }
+                    }
                 }
             }
         }
 
-        item {
-            SectionTitle(stringResource(Res.string.booming_recommended_artists))
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                val artists =
-                    homeData
-                        .flatMap { it.contents.filterNotNull() }
-                        .flatMap { it.artists.orEmpty() }
-                        .distinctBy { it.id }
-                        .take(12)
-                items(artists) { artist ->
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier =
-                            Modifier
-                                .width(88.dp)
-                                .clickable { artist.id?.let { navController.navigate(ArtistDestination(channelId = it)) } },
-                    ) {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .size(80.dp)
-                                    .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = artist.name.firstOrNull()?.uppercase() ?: "?",
-                                style = typo().titleLarge,
-                                color = primary,
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Text(artist.name, style = typo().bodySmall, color = muted, maxLines = 1)
-                    }
-                }
-            }
+        // Remaining home shelves, same data as classic Home so nothing is empty
+        items(homeData) { shelf ->
+            if (shelf.contents.filterNotNull().isEmpty()) return@items
+            SectionTitle(shelf.title.ifBlank { stringResource(Res.string.booming_listen_now) })
+            ContentRow(shelf.contents.filterNotNull()) { openHomeContent(it, navController, sharedViewModel) }
+        }
+    }
+}
+
+@Composable
+private fun ContentRow(
+    contents: List<Content>,
+    onClick: (Content) -> Unit,
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(contents) { content ->
+            ListenNowCard(content = content, onClick = onClick)
         }
     }
 }
@@ -285,9 +329,7 @@ private fun openHomeContent(
         browseId != null && browseId.startsWith("MPRE") ->
             navController.navigate(AlbumDestination(browseId))
         playlistId != null || browseId != null ->
-            navController.navigate(
-                PlaylistDestination(playlistId = browseId ?: playlistId!!),
-            )
+            navController.navigate(PlaylistDestination(playlistId = browseId ?: playlistId!!))
     }
 }
 
@@ -297,7 +339,7 @@ private fun SectionTitle(text: String) {
         text = text,
         style = typo().titleMedium.copy(fontWeight = FontWeight.Bold),
         color = MaterialTheme.colorScheme.onSurface,
-        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 12.dp),
+        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 10.dp),
     )
 }
 
@@ -328,12 +370,12 @@ private fun ListenNowCard(
     Column(
         modifier =
             Modifier
-                .width(220.dp)
+                .width(160.dp)
                 .clip(RoundedCornerShape(18.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainer)
                 .clickable { onClick(content) },
     ) {
-        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1.1f)) {
+        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
             val url = content.thumbnails.lastOrNull()?.url
             if (url != null) {
                 AsyncImage(
@@ -351,7 +393,7 @@ private fun ListenNowCard(
                 )
             }
         }
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(10.dp)) {
             Text(
                 text = content.title,
                 style = typo().titleSmall.copy(fontWeight = FontWeight.Bold),
