@@ -56,6 +56,10 @@ class ListenTogetherViewModel(
     private val _roomCodeInput = MutableStateFlow("")
     val roomCodeInput: StateFlow<String> = _roomCodeInput.asStateFlow()
 
+    /** Join confirmation dialog when Settings → Confirm before joining is on. */
+    private val _showJoinConfirm = MutableStateFlow(false)
+    val showJoinConfirm: StateFlow<Boolean> = _showJoinConfirm.asStateFlow()
+
     fun onDisplayNameChange(value: String) {
         // metroserver caps usernames at 50; trimming here means the server never has to reject it.
         _displayName.value = value.take(MAX_USERNAME_LENGTH)
@@ -75,7 +79,22 @@ class ListenTogetherViewModel(
     }
 
     fun joinRoom() {
+        viewModelScope.launch {
+            if (dataStore.listenTogetherConfirmJoin.first() == DataStoreManager.Values.TRUE) {
+                _showJoinConfirm.value = true
+            } else {
+                repository.joinRoom(_roomCodeInput.value, _displayName.value)
+            }
+        }
+    }
+
+    fun confirmJoinRoom() {
+        _showJoinConfirm.value = false
         repository.joinRoom(_roomCodeInput.value, _displayName.value)
+    }
+
+    fun dismissJoinConfirm() {
+        _showJoinConfirm.value = false
     }
 
     fun leaveRoom() {

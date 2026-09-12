@@ -36,6 +36,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -107,6 +108,7 @@ import simpmusic.composeapp.generated.resources.lt_background_warning
 import simpmusic.composeapp.generated.resources.lt_block
 import simpmusic.composeapp.generated.resources.lt_block_desc
 import simpmusic.composeapp.generated.resources.lt_cancel_join
+import simpmusic.composeapp.generated.resources.lt_confirm_join_description
 import simpmusic.composeapp.generated.resources.lt_connect
 import simpmusic.composeapp.generated.resources.lt_connected
 import simpmusic.composeapp.generated.resources.lt_connecting
@@ -184,8 +186,33 @@ fun ListenTogetherScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val displayName by viewModel.displayName.collectAsStateWithLifecycle()
     val codeInput by viewModel.roomCodeInput.collectAsStateWithLifecycle()
+    val showJoinConfirm by viewModel.showJoinConfirm.collectAsStateWithLifecycle()
     val clipboard = LocalClipboardManager.current
     var managing by remember { mutableStateOf<RoomMember?>(null) }
+
+    if (showJoinConfirm) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissJoinConfirm,
+            title = { Text(stringResource(Res.string.lt_join_room)) },
+            text = { Text(stringResource(Res.string.lt_confirm_join_description)) },
+            confirmButton = {
+                FilledTonalButton(onClick = viewModel::confirmJoinRoom) {
+                    Text(stringResource(Res.string.lt_join_room))
+                }
+            },
+            dismissButton = {
+                FilledTonalButton(
+                    onClick = viewModel::dismissJoinConfirm,
+                    colors =
+                        ButtonDefaults.filledTonalButtonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ),
+                ) {
+                    Text(stringResource(Res.string.lt_cancel_join))
+                }
+            },
+        )
+    }
 
     // The back button refracts whatever the page has drawn, so the CONTENT is the backdrop source
     // and the button is its SIBLING — the same arrangement Album/Playlist/Analytics use. Nesting the
