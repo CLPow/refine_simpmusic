@@ -55,6 +55,7 @@ import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
+import com.maxrave.domain.data.model.home.chart.Chart
 import com.maxrave.simpmusic.ui.navigation.destination.search.SearchDestination
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.SharedViewModel
@@ -68,6 +69,7 @@ import simpmusic.composeapp.generated.resources.booming_new_releases
 import simpmusic.composeapp.generated.resources.booming_quick_picks
 import simpmusic.composeapp.generated.resources.booming_recommended_artists
 import simpmusic.composeapp.generated.resources.booming_shuffle_your_music
+import simpmusic.composeapp.generated.resources.chart
 import simpmusic.composeapp.generated.resources.good_afternoon
 import simpmusic.composeapp.generated.resources.good_evening
 import simpmusic.composeapp.generated.resources.good_morning
@@ -83,6 +85,7 @@ import simpmusic.composeapp.generated.resources.settings
 fun BoomingHomeScreen(
     homeData: List<HomeItem>,
     newRelease: List<HomeItem>,
+    chart: Chart?,
     sharedViewModel: SharedViewModel,
     navController: NavController,
     modifier: Modifier = Modifier,
@@ -98,8 +101,17 @@ fun BoomingHomeScreen(
     val mosaic = allContents.filter { it.thumbnails.isNotEmpty() }.take(9)
     val listenCards = allContents.filter { it.title.isNotBlank() }.take(16)
     val newReleaseCards = newRelease.flatMap { it.contents.filterNotNull() }.filter { it.title.isNotBlank() }
-    val artists = allContents.flatMap { it.artists.orEmpty() }.distinctBy { it.id }.take(12)
+
+    // Real artist photos: channel shelves (UC…) and chart artists carry artwork.
+    val shelfArtists =
+        allContents
+            .filter { it.browseId?.startsWith("UC") == true && it.thumbnails.isNotEmpty() }
+            .distinctBy { it.browseId }
+            .take(12)
+    val chartArtists = chart?.artists?.itemArtists?.take(12).orEmpty()
     val quickPicks = allContents.filter { it.videoId != null }.take(20)
+    // Chart songs if the chart payload carries any
+    val chartSongs: List<Content> = emptyList()
 
     LazyColumn(
         modifier =
@@ -249,51 +261,105 @@ fun BoomingHomeScreen(
             }
         }
 
-        // Artists
-        if (artists.isNotEmpty()) {
+        // Artists with real photos
+        if (shelfArtists.isNotEmpty() || chartArtists.isNotEmpty()) {
             item {
                 SectionTitle(stringResource(Res.string.booming_recommended_artists))
                 LazyRow(
                     contentPadding = PaddingValues(horizontal = 20.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    items(artists) { artist ->
+                    // Chart artists first (have photos), then channel shelves
+                    items(chartArtists.size) { index ->
+                        val artist = chartArtists[index]
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier =
                                 Modifier
                                     .width(88.dp)
                                     .clickable {
-                                        artist.id?.let { navController.navigate(ArtistDestination(channelId = it)) }
+                                        navController.navigate(ArtistDestination(channelId = artist.browseId))
                                     },
                         ) {
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .size(80.dp)
-                                        .clip(CircleShape)
-                                        .background(MaterialTheme.colorScheme.primaryContainer),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = artist.name.firstOrNull()?.uppercase() ?: "?",
-                                    style = typo().titleLarge,
-                                    color = primary,
-                                )
-                            }
+                            ArtistAvatar(
+                                url = artist.thumbnails?.lastOrNull()?.url,
+                                name = artist.title,
+                                fallbackColor = MaterialTheme.colorScheme.primaryContainer,
+                            )
                             Spacer(Modifier.height(6.dp))
-                            Text(artist.name, style = typo().bodySmall, color = muted, maxLines = 1)
+                            Text(artist.title, style = typo().bodySmall, color = muted, maxLines = 1)
+                        }
+                    }
+                    items(shelfArtists) { content ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier =
+                                Modifier
+                                    .width(88.dp)
+                                    .clickable {
+                                        content.browseId?.let {
+                                            navController.navigate(ArtistDestination(channelId = it))
+                                        }
+                                    },
+                        ) {
+                            ArtistAvatar(
+                                url = content.thumbnails.lastOrNull()?.url,
+                                name = content.title,
+                                fallbackColor = MaterialTheme.colorScheme.primaryContainer,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(content.title, style = typo().bodySmall, color = muted, maxLines = 1)
                         }
                     }
                 }
             }
         }
 
-        // Remaining home shelves, same data as classic Home so nothing is empty
+        // Chart songs
+        if (chartSongs.isNotEmpty()) {
+            item {
+                SectionTitle(stringResource(Res.string.chart))
+                ContentRow(chartSongs) { openHomeContent(it, navController, sharedViewModel) }
+            }
+        }
+
+        // Remaining home shelves — every title from the classic feed
         items(homeData) { shelf ->
-            if (shelf.contents.filterNotNull().isEmpty()) return@items
+            val rows = shelf.contents.filterNotNull()
+            if (rows.isEmpty()) return@items
             SectionTitle(shelf.title.ifBlank { stringResource(Res.string.booming_listen_now) })
-            ContentRow(shelf.contents.filterNotNull()) { openHomeContent(it, navController, sharedViewModel) }
+            ContentRow(rows) { openHomeContent(it, navController, sharedViewModel) }
+        }
+    }
+}
+
+@Composable
+private fun ArtistAvatar(
+    url: String?,
+    name: String,
+    fallbackColor: androidx.compose.ui.graphics.Color,
+) {
+    Box(
+        modifier =
+            Modifier
+                .size(80.dp)
+                .clip(CircleShape)
+                .background(fallbackColor),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Text(
+                text = name.firstOrNull()?.uppercase() ?: "?",
+                style = typo().titleLarge,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

@@ -455,6 +455,7 @@ fun HomeScreen(
             BoomingHomeScreen(
                 homeData = homeData,
                 newRelease = newRelease,
+                chart = chart,
                 sharedViewModel = sharedViewModel,
                 navController = navController,
             )
