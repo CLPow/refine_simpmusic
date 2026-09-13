@@ -189,7 +189,9 @@ fun BoomingHomeScreen(
             val rows = shelf.contents.filterNotNull()
             if (rows.isEmpty()) return@items
             SectionTitle(shelf.title.ifBlank { stringResource(Res.string.booming_for_you) })
-            ContentRow(rows, tileWidth) { openHomeContent(it, navController, sharedViewModel) }
+            ContentRow(rows, tileWidth) { c ->
+                openHomeContent(c, navController, sharedViewModel)
+            }
         }
 
         // New-releases shelves not already present under another title
@@ -200,7 +202,9 @@ fun BoomingHomeScreen(
             val rows = shelf.contents.filterNotNull()
             if (rows.isEmpty()) return@items
             SectionTitle(shelf.title)
-            ContentRow(rows, tileWidth) { openHomeContent(it, navController, sharedViewModel) }
+            ContentRow(rows, tileWidth) { c ->
+                openHomeContent(c, navController, sharedViewModel)
+            }
         }
 
         // Chart artists (photos from the chart payload)
@@ -255,57 +259,107 @@ private fun ForYouGrid(
     val wide = maxWidth >= 720.dp
     val shuffleSide = if (wide) 200.dp else 180.dp
     val gap = 8.dp
-    // Fill the window: size tiles from available width so the row never leaves a blank panel.
-    val usable = maxWidth - 40.dp // horizontal padding
-    val cols =
-        if (wide) {
-            // shuffle + N covers
-            ((usable - shuffleSide) / 200.dp).toInt().coerceAtLeast(2)
-        } else {
-            2
-        }
-    val coverSide =
-        if (wide) {
-            ((usable - shuffleSide - gap * cols) / cols).coerceAtMost(240.dp)
-        } else {
-            0.dp
-        }
 
     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(shuffleSide)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(
-                            Brush.verticalGradient(listOf(primary, MaterialTheme.colorScheme.primaryContainer)),
-                        ).clickable(onClick = onShuffle),
-                contentAlignment = Alignment.Center,
+        if (wide) {
+            // Weighted covers always fill remaining width — no empty right panel.
+            // Cell count from width so each cell stays roughly square (~shuffleSide).
+            val usable = maxWidth - 40.dp
+            val cellsPerRow = ((usable - shuffleSide) / (shuffleSide * 0.9f)).toInt().coerceAtLeast(2)
+            // Row 0: shuffle + covers filling rest of width
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(gap),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        imageVector = SimpIcons.PlayArrow,
-                        contentDescription = null,
-                        tint = onPrimary,
-                        modifier = Modifier.size(36.dp),
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(Res.string.booming_shuffle_your_music),
-                        style = typo().titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = onPrimary,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
+                Box(
+                    modifier =
+                        Modifier
+                            .size(shuffleSide)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(primary, MaterialTheme.colorScheme.primaryContainer),
+                                ),
+                            ).clickable(onClick = onShuffle),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ShuffleLabel(onPrimary)
+                }
+                repeat(cellsPerRow) { i ->
+                    val content = mosaic.getOrNull(i)
+                    Box(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .height(shuffleSide)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                .clickable(enabled = content != null) {
+                                    content?.let { onTileClick(it) }
+                                },
+                    ) {
+                        content?.thumbnails?.lastOrNull()?.url?.let { url ->
+                            AsyncImage(
+                                model = url,
+                                contentDescription = content.title,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
                 }
             }
-            if (wide) {
-                repeat(cols) { i ->
-                    val content = mosaic.getOrNull(i)
-                    MosaicTile(content, coverSide, onTileClick)
+            // Remaining covers: full-width weighted rows
+            var idx = cellsPerRow
+            while (idx < mosaic.size) {
+                Spacer(Modifier.height(gap))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    repeat(cellsPerRow) {
+                        val content = mosaic.getOrNull(idx)
+                        idx++
+                        Box(
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .height(shuffleSide)
+                                    .clip(RoundedCornerShape(14.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                                    .clickable(enabled = content != null) {
+                                        content?.let { onTileClick(it) }
+                                    },
+                        ) {
+                            content?.thumbnails?.lastOrNull()?.url?.let { url ->
+                                AsyncImage(
+                                    model = url,
+                                    contentDescription = content.title,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+                    }
                 }
-            } else {
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(shuffleSide)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(primary, MaterialTheme.colorScheme.primaryContainer),
+                                ),
+                            ).clickable(onClick = onShuffle),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ShuffleLabel(onPrimary)
+                }
                 Column(
                     modifier = Modifier.height(shuffleSide).weight(1f),
                     verticalArrangement = Arrangement.spacedBy(gap),
@@ -327,49 +381,41 @@ private fun ForYouGrid(
                 }
             }
         }
-        if (wide && mosaic.size > cols) {
-            Spacer(Modifier.height(gap))
-            // Second (and third) row: more covers, same cell size — fills the empty panel.
-            val remaining = mosaic.drop(cols)
-            val rowsNeeded = (remaining.size + cols - 1) / cols
-            repeat(rowsNeeded) { r ->
-                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    repeat(cols) { i ->
-                        val content = remaining.getOrNull(r * cols + i)
-                        if (content != null) {
-                            MosaicTile(content, coverSide, onTileClick)
-                        } else {
-                            Spacer(Modifier.width(coverSide))
-                        }
-                    }
-                }
-                if (r < rowsNeeded - 1) Spacer(Modifier.height(gap))
-            }
-        }
     }
 }
 
 @Composable
-private fun MosaicTile(
-    content: Content?,
-    side: Dp,
+private fun ShuffleLabel(onPrimary: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Icon(
+            imageVector = SimpIcons.PlayArrow,
+            contentDescription = null,
+            tint = onPrimary,
+            modifier = Modifier.size(36.dp),
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(Res.string.booming_shuffle_your_music),
+            style = typo().titleSmall.copy(fontWeight = FontWeight.Bold),
+            color = onPrimary,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun ContentRow(
+    contents: List<Content>,
+    tileWidth: Dp,
     onClick: (Content) -> Unit,
 ) {
-    Box(
-        modifier =
-            Modifier
-                .size(side)
-                .clip(RoundedCornerShape(14.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .clickable(enabled = content != null) { content?.let { onClick(it) } },
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        content?.thumbnails?.lastOrNull()?.url?.let { url ->
-            AsyncImage(
-                model = url,
-                contentDescription = content.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize(),
-            )
+        items(contents) { content ->
+            ListenNowCard(content = content, width = tileWidth, onClick = onClick)
         }
     }
 }
@@ -395,22 +441,6 @@ private fun androidx.compose.foundation.layout.RowScope.FlexTile(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-        }
-    }
-}
-
-@Composable
-private fun ContentRow(
-    contents: List<Content>,
-    tileWidth: Dp,
-    onClick: (Content) -> Unit,
-) {
-    LazyRow(
-        contentPadding = PaddingValues(horizontal = 20.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        items(contents) { content ->
-            ListenNowCard(content = content, width = tileWidth, onClick = onClick)
         }
     }
 }
