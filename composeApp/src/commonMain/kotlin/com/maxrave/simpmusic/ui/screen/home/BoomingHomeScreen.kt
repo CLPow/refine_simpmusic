@@ -106,7 +106,7 @@ fun BoomingHomeScreen(
             .flatMap { it.contents.filterNotNull() }
             .filter { it.thumbnails.isNotEmpty() }
             .distinctBy { it.videoId ?: it.browseId ?: it.title }
-            .take(20)
+            .take(24)
 
     val chartArtists = chart?.artists?.itemArtists?.take(10).orEmpty()
 
@@ -255,7 +255,21 @@ private fun ForYouGrid(
     val wide = maxWidth >= 720.dp
     val shuffleSide = if (wide) 200.dp else 180.dp
     val gap = 8.dp
-    val cols = if (wide) 5 else 2
+    // Fill the window: size tiles from available width so the row never leaves a blank panel.
+    val usable = maxWidth - 40.dp // horizontal padding
+    val cols =
+        if (wide) {
+            // shuffle + N covers
+            ((usable - shuffleSide) / 200.dp).toInt().coerceAtLeast(2)
+        } else {
+            2
+        }
+    val coverSide =
+        if (wide) {
+            ((usable - shuffleSide - gap * cols) / cols).coerceAtMost(240.dp)
+        } else {
+            0.dp
+        }
 
     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
@@ -287,9 +301,9 @@ private fun ForYouGrid(
                 }
             }
             if (wide) {
-                repeat(cols - 1) { i ->
+                repeat(cols) { i ->
                     val content = mosaic.getOrNull(i)
-                    MosaicTile(content, shuffleSide, onTileClick)
+                    MosaicTile(content, coverSide, onTileClick)
                 }
             } else {
                 Column(
@@ -313,13 +327,23 @@ private fun ForYouGrid(
                 }
             }
         }
-        if (wide && mosaic.size > 4) {
+        if (wide && mosaic.size > cols) {
             Spacer(Modifier.height(gap))
-            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                repeat(cols) { i ->
-                    val content = mosaic.getOrNull(cols - 1 + i)
-                    MosaicTile(content, shuffleSide, onTileClick)
+            // Second (and third) row: more covers, same cell size — fills the empty panel.
+            val remaining = mosaic.drop(cols)
+            val rowsNeeded = (remaining.size + cols - 1) / cols
+            repeat(rowsNeeded) { r ->
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    repeat(cols) { i ->
+                        val content = remaining.getOrNull(r * cols + i)
+                        if (content != null) {
+                            MosaicTile(content, coverSide, onTileClick)
+                        } else {
+                            Spacer(Modifier.width(coverSide))
+                        }
+                    }
                 }
+                if (r < rowsNeeded - 1) Spacer(Modifier.height(gap))
             }
         }
     }
