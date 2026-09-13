@@ -197,13 +197,21 @@ fun GenericCommandButton.toCommandButton(context: Context): CommandButton =
                     // Resource fallback for hosts that don't map the media3 icon
                     // constants (AA templated surface renders a gear otherwise)
                 ).setCustomIconResId(R.drawable.baseline_shuffle_24)
-                .setDisplayName(context.getString(R.string.shuffle))
-                .setSessionCommand(
-                    SessionCommand(
-                        MEDIA_CUSTOM_COMMAND.SHUFFLE,
-                        Bundle(),
-                    ),
-                ).build()
+                .setDisplayName(
+                    if (this.isShuffled) {
+                        "Shuffle on"
+                    } else {
+                        "Shuffle off"
+                    },
+                ).setSessionCommand(SessionCommand(MEDIA_CUSTOM_COMMAND.SHUFFLE, Bundle()))
+                .build()
+        }
+        GenericCommandButton.Share -> {
+            CommandButton
+                .Builder(CommandButton.ICON_SHARE)
+                .setDisplayName("Share")
+                .setSessionCommand(SessionCommand(MEDIA_CUSTOM_COMMAND.SHARE, Bundle()))
+                .build()
         }
     }
 

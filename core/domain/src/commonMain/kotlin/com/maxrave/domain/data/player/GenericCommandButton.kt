@@ -16,4 +16,6 @@ sealed class GenericCommandButton {
     ) : GenericCommandButton()
 
     data object Radio : GenericCommandButton()
+
+    data object Share : GenericCommandButton()
 }

@@ -12,6 +12,8 @@ import androidx.media3.common.Player
 import androidx.media3.common.Player.COMMAND_GET_TIMELINE
 import androidx.media3.common.Player.COMMAND_SEEK_TO_NEXT
 import androidx.media3.common.Player.COMMAND_SEEK_TO_PREVIOUS
+import androidx.media3.common.Player.COMMAND_SET_REPEAT_MODE
+import androidx.media3.common.Player.COMMAND_SET_SHUFFLE_MODE
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.LibraryResult
@@ -105,6 +107,7 @@ internal class SimpleMediaSessionCallback(
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.REPEAT, Bundle()))
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.RADIO, Bundle()))
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.SHUFFLE, Bundle()))
+                .add(SessionCommand(MEDIA_CUSTOM_COMMAND.SHARE, Bundle()))
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.GET_PLATFORM_TOKEN, Bundle()))
                 .build()
         return MediaSession.ConnectionResult
@@ -140,6 +143,19 @@ internal class SimpleMediaSessionCallback(
                 }
                 COMMAND_SEEK_TO_PREVIOUS -> {
                     mediaPlayerHandler.onPlayerEvent(PlayerEvent.Previous)
+                }
+                COMMAND_SET_SHUFFLE_MODE -> {
+                    // AA / Bluetooth hosts toggle shuffle via the player API, not our
+                    // custom SHUFFLE session command.
+                    mediaPlayerHandler.onPlayerEvent(PlayerEvent.Shuffle)
+                }
+                COMMAND_SET_REPEAT_MODE -> {
+                    session.player.repeatMode =
+                        when (session.player.repeatMode) {
+                            ExoPlayer.REPEAT_MODE_OFF -> ExoPlayer.REPEAT_MODE_ONE
+                            ExoPlayer.REPEAT_MODE_ONE -> ExoPlayer.REPEAT_MODE_ALL
+                            else -> ExoPlayer.REPEAT_MODE_OFF
+                        }
                 }
                 COMMAND_GET_TIMELINE -> {
                 }
@@ -178,6 +194,13 @@ internal class SimpleMediaSessionCallback(
                 scope.launch {
                     mediaPlayerHandler.onPlayerEvent(PlayerEvent.Shuffle)
                 }
+            }
+
+            MEDIA_CUSTOM_COMMAND.SHARE -> {
+                // Hosts (AA / notification) ask us to share the current track. The session
+                // itself cannot start a chooser; return success so the UI path can pick it up
+                // if a share sheet is wired later.
+                Logger.i(TAG, "Share requested for current track")
             }
 
             MEDIA_CUSTOM_COMMAND.GET_PLATFORM_TOKEN -> {

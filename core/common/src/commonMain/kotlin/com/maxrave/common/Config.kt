@@ -573,7 +573,6 @@ object CHART_SUPPORTED_COUNTRY {
             "Hong Kong",
             "Hungary",
             "Iceland",
-            "India",
             "Indonesia",
             "Ireland",
             "Israel",
@@ -623,6 +622,7 @@ object MEDIA_CUSTOM_COMMAND {
     const val REPEAT = "repeat"
     const val RADIO = "radio"
     const val SHUFFLE = "shuffle"
+    const val SHARE = "share"
 
     // Android Auto (Car App Library): asks the session for its platform token
     const val GET_PLATFORM_TOKEN = "get_platform_token"
