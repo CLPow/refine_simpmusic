@@ -444,15 +444,15 @@ fun AlbumScreen(
                                                         },
                                                         modifier =
                                                             Modifier
-                                                                .size(280.dp)
-                                                                .clip(RoundedCornerShape(8.dp)),
+                                                                .size(320.dp)
+                                                                .clip(RoundedCornerShape(12.dp)),
                                                     )
                                                     Column(
                                                         modifier = Modifier.weight(1f),
                                                     ) {
                                                         Text(
                                                             text = uiState.title,
-                                                            style = typo().headlineSmall,
+                                                            style = typo().headlineLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
                                                             color = Color.White,
                                                             maxLines = 2,
                                                         )

@@ -542,7 +542,9 @@ internal class DataStoreManagerImpl(
 
     override val lyricsSyncOffsetMs: Flow<Int> =
         settingsDataStore.data.map { preferences ->
-            preferences[LYRICS_SYNC_OFFSET_MS] ?: 0
+            // Default +1000ms: lyrics should appear ~1s early so phone and AA hosts
+            // paint on time with the singer (see CarLyricsOverlay LEAD / this offset).
+            preferences[LYRICS_SYNC_OFFSET_MS] ?: 1000
         }
 
     override suspend fun setLyricsSyncOffsetMs(ms: Int) {

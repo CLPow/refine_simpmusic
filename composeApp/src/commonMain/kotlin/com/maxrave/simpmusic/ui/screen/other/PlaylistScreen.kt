@@ -612,7 +612,7 @@ fun PlaylistScreen(
                                                             },
                                                             modifier =
                                                                 Modifier
-                                                                    .size(280.dp)
+                                                                    .size(320.dp)
                                                                     .clip(RoundedCornerShape(8.dp)),
                                                         )
                                                         Column(
@@ -620,7 +620,7 @@ fun PlaylistScreen(
                                                         ) {
                                                             Text(
                                                                 text = data.title,
-                                                                style = typo().headlineSmall,
+                                                                style = typo().headlineLarge.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
                                                                 color = Color.White,
                                                                 maxLines = 2,
                                                             )

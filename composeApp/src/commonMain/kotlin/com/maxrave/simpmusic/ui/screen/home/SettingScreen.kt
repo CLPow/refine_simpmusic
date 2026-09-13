@@ -1705,7 +1705,7 @@ fun SettingScreen(
                                 selectOne =
                                     SettingAlertState.SelectData(
                                         listSelect =
-                                            listOf(-1000, -500, 0, 500, 1000).map {
+                                            listOf(-1000, -500, 0, 500, 1000, 1500).map {
                                                 (it == current) to "$it ms"
                                             },
                                     ),

@@ -1076,7 +1076,7 @@ class SettingsViewModel(
     private var _aaLyricsLeadMs: MutableStateFlow<Int> = MutableStateFlow(750)
     val aaLyricsLeadMs: StateFlow<Int> = _aaLyricsLeadMs
 
-    private var _lyricsSyncOffsetMs: MutableStateFlow<Int> = MutableStateFlow(0)
+    private var _lyricsSyncOffsetMs: MutableStateFlow<Int> = MutableStateFlow(1000)
     val lyricsSyncOffsetMs: StateFlow<Int> = _lyricsSyncOffsetMs
 
     private var _lyricsFontScalePercent: MutableStateFlow<Int> = MutableStateFlow(100)
