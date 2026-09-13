@@ -100,12 +100,13 @@ fun BoomingHomeScreen(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val hour = now().time.hour
 
-    // Mosaic art only for the Shuffle card’s side — not a second list of the same tracks.
+    // Mosaic art for the For you grid — tiles only, never stretched to fill a wide window.
     val mosaic =
         homeData
             .flatMap { it.contents.filterNotNull() }
             .filter { it.thumbnails.isNotEmpty() }
-            .take(4)
+            .distinctBy { it.videoId ?: it.browseId ?: it.title }
+            .take(20)
 
     val chartArtists = chart?.artists?.itemArtists?.take(10).orEmpty()
 
@@ -120,7 +121,6 @@ fun BoomingHomeScreen(
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(surface).statusBarsPadding()) {
         // Phone: ~160dp tiles. Wide desktop: ~220dp so shelves don't look like a thin ribbon.
         val tileWidth = if (maxWidth >= 720.dp) 220.dp else 160.dp
-        val shuffleHeight = if (maxWidth >= 720.dp) 240.dp else 180.dp
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -167,79 +167,18 @@ fun BoomingHomeScreen(
             }
         }
 
-        // Shuffle + small mosaic (Booming “For you” card) — chrome only, not a duplicate feed
+        // Shuffle + track mosaic. On desktop the shuffle tile stays a fixed square so the
+        // remaining width fills with more covers instead of one stretched purple bar.
         item(key = "booming-shuffle") {
             SectionTitle(stringResource(Res.string.booming_for_you))
-            Row(
-                modifier = Modifier.padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .weight(1.05f)
-                            .height(shuffleHeight)
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(
-                                Brush.verticalGradient(
-                                    listOf(primary, MaterialTheme.colorScheme.primaryContainer),
-                                ),
-                            ).clickable { sharedViewModel.onUIEvent(UIEvent.Shuffle) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = SimpIcons.PlayArrow,
-                            contentDescription = null,
-                            tint = onPrimary,
-                            modifier = Modifier.size(36.dp),
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        Text(
-                            text = stringResource(Res.string.booming_shuffle_your_music),
-                            style = typo().titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = onPrimary,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 10.dp),
-                        )
-                    }
-                }
-                Column(
-                    modifier = Modifier.weight(1f).height(shuffleHeight),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    repeat(2) { row ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth().weight(1f),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            repeat(2) { col ->
-                                val content = mosaic.getOrNull(row * 2 + col)
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .weight(1f)
-                                            .fillMaxSize()
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                                            .clickable {
-                                                content?.let { openHomeContent(it, navController, sharedViewModel) }
-                                            },
-                                ) {
-                                    content?.thumbnails?.lastOrNull()?.url?.let { url ->
-                                        AsyncImage(
-                                            model = url,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier.fillMaxSize(),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            ForYouGrid(
+                mosaic = mosaic,
+                maxWidth = maxWidth,
+                primary = primary,
+                onPrimary = onPrimary,
+                onShuffle = { sharedViewModel.onUIEvent(UIEvent.Shuffle) },
+                onTileClick = { openHomeContent(it, navController, sharedViewModel) },
+            )
         }
 
         // Every YouTube Music shelf, once, in feed order, under its real title
@@ -295,6 +234,144 @@ fun BoomingHomeScreen(
             }
         }
         } // close BoxWithConstraints
+    }
+}
+
+/**
+ * For you: fixed-size Shuffle tile + as many square covers as fit.
+ *
+ * Phone: shuffle + 2×2 mosaic. Wide/desktop: shuffle stays ~200dp square; the rest of the
+ * width fills with a second row of covers so the section is not one stretched gradient bar.
+ */
+@Composable
+private fun ForYouGrid(
+    mosaic: List<Content>,
+    maxWidth: Dp,
+    primary: Color,
+    onPrimary: Color,
+    onShuffle: () -> Unit,
+    onTileClick: (Content) -> Unit,
+) {
+    val wide = maxWidth >= 720.dp
+    val shuffleSide = if (wide) 200.dp else 180.dp
+    val gap = 8.dp
+    val cols = if (wide) 5 else 2
+
+    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+            Box(
+                modifier =
+                    Modifier
+                        .size(shuffleSide)
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(
+                            Brush.verticalGradient(listOf(primary, MaterialTheme.colorScheme.primaryContainer)),
+                        ).clickable(onClick = onShuffle),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = SimpIcons.PlayArrow,
+                        contentDescription = null,
+                        tint = onPrimary,
+                        modifier = Modifier.size(36.dp),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = stringResource(Res.string.booming_shuffle_your_music),
+                        style = typo().titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = onPrimary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                }
+            }
+            if (wide) {
+                repeat(cols - 1) { i ->
+                    val content = mosaic.getOrNull(i)
+                    MosaicTile(content, shuffleSide, onTileClick)
+                }
+            } else {
+                Column(
+                    modifier = Modifier.height(shuffleSide).weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(gap),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(gap),
+                    ) {
+                        mosaic.getOrNull(0)?.let { FlexTile(it, onTileClick) }
+                        mosaic.getOrNull(1)?.let { FlexTile(it, onTileClick) }
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(gap),
+                    ) {
+                        mosaic.getOrNull(2)?.let { FlexTile(it, onTileClick) }
+                        mosaic.getOrNull(3)?.let { FlexTile(it, onTileClick) }
+                    }
+                }
+            }
+        }
+        if (wide && mosaic.size > 4) {
+            Spacer(Modifier.height(gap))
+            Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                repeat(cols) { i ->
+                    val content = mosaic.getOrNull(cols - 1 + i)
+                    MosaicTile(content, shuffleSide, onTileClick)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MosaicTile(
+    content: Content?,
+    side: Dp,
+    onClick: (Content) -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .size(side)
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .clickable(enabled = content != null) { content?.let { onClick(it) } },
+    ) {
+        content?.thumbnails?.lastOrNull()?.url?.let { url ->
+            AsyncImage(
+                model = url,
+                contentDescription = content.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.FlexTile(
+    content: Content,
+    onClick: (Content) -> Unit,
+) {
+    Box(
+        modifier =
+            Modifier
+                .weight(1f)
+                .fillMaxSize()
+                .clip(RoundedCornerShape(14.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .clickable { onClick(content) },
+    ) {
+        content.thumbnails.lastOrNull()?.url?.let { url ->
+            AsyncImage(
+                model = url,
+                contentDescription = content.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }
 
