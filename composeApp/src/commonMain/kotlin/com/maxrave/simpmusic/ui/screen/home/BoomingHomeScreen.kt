@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,10 +34,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maxrave.simpmusic.getPlatform
+import com.maxrave.simpmusic.Platform
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import com.maxrave.common.Config
@@ -112,14 +117,15 @@ fun BoomingHomeScreen(
                 shelf.title.trim() !in homeTitles
         }
 
-    LazyColumn(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .background(surface)
-                .statusBarsPadding(),
-        contentPadding = PaddingValues(bottom = 120.dp),
-    ) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().background(surface).statusBarsPadding()) {
+        // Phone: ~160dp tiles. Wide desktop: ~220dp so shelves don't look like a thin ribbon.
+        val tileWidth = if (maxWidth >= 720.dp) 220.dp else 160.dp
+        val shuffleHeight = if (maxWidth >= 720.dp) 240.dp else 180.dp
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 120.dp),
+        ) {
         item(key = "booming-header") {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -172,7 +178,7 @@ fun BoomingHomeScreen(
                     modifier =
                         Modifier
                             .weight(1.05f)
-                            .height(180.dp)
+                            .height(shuffleHeight)
                             .clip(RoundedCornerShape(22.dp))
                             .background(
                                 Brush.verticalGradient(
@@ -199,7 +205,7 @@ fun BoomingHomeScreen(
                     }
                 }
                 Column(
-                    modifier = Modifier.weight(1f).height(180.dp),
+                    modifier = Modifier.weight(1f).height(shuffleHeight),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     repeat(2) { row ->
@@ -244,7 +250,7 @@ fun BoomingHomeScreen(
             val rows = shelf.contents.filterNotNull()
             if (rows.isEmpty()) return@items
             SectionTitle(shelf.title.ifBlank { stringResource(Res.string.booming_for_you) })
-            ContentRow(rows) { openHomeContent(it, navController, sharedViewModel) }
+            ContentRow(rows, tileWidth) { openHomeContent(it, navController, sharedViewModel) }
         }
 
         // New-releases shelves not already present under another title
@@ -255,7 +261,7 @@ fun BoomingHomeScreen(
             val rows = shelf.contents.filterNotNull()
             if (rows.isEmpty()) return@items
             SectionTitle(shelf.title)
-            ContentRow(rows) { openHomeContent(it, navController, sharedViewModel) }
+            ContentRow(rows, tileWidth) { openHomeContent(it, navController, sharedViewModel) }
         }
 
         // Chart artists (photos from the chart payload)
@@ -288,12 +294,14 @@ fun BoomingHomeScreen(
                 }
             }
         }
+        } // close BoxWithConstraints
     }
 }
 
 @Composable
 private fun ContentRow(
     contents: List<Content>,
+    tileWidth: Dp,
     onClick: (Content) -> Unit,
 ) {
     LazyRow(
@@ -301,7 +309,7 @@ private fun ContentRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(contents) { content ->
-            ListenNowCard(content = content, onClick = onClick)
+            ListenNowCard(content = content, width = tileWidth, onClick = onClick)
         }
     }
 }
@@ -389,12 +397,13 @@ private fun ArtistAvatar(
 @Composable
 private fun ListenNowCard(
     content: Content,
+    width: Dp,
     onClick: (Content) -> Unit,
 ) {
     Column(
         modifier =
             Modifier
-                .width(160.dp)
+                .width(width)
                 .clip(RoundedCornerShape(18.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainer)
                 .clickable { onClick(content) },

@@ -149,6 +149,7 @@ class MainActivity : AppCompatActivity() {
                 if (SUPPORTED_LOCATION.items.contains(Locale.getDefault().country)) {
                     putString("location", Locale.getDefault().country)
                 } else {
+                    // Never default to IN: this fork opts out of India-region recommendations.
                     putString("location", "US")
                 }
             } else {

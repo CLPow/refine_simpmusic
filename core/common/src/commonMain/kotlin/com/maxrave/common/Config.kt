@@ -38,6 +38,7 @@ object Config {
  *
  */
 object SUPPORTED_LOCATION {
+    // India ("IN") removed deliberately: this fork does not want IN-region recommendation bias.
     val items: Array<CharSequence> =
         arrayOf(
             "AE",
@@ -82,7 +83,6 @@ object SUPPORTED_LOCATION {
             "ID",
             "IE",
             "IL",
-            "IN",
             "IQ",
             "IS",
             "IT",
@@ -502,7 +502,6 @@ object CHART_SUPPORTED_COUNTRY {
             "HK",
             "HU",
             "IS",
-            "IN",
             "ID",
             "IE",
             "IL",
