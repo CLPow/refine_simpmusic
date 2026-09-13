@@ -1073,7 +1073,7 @@ class SettingsViewModel(
         }
     }
 
-    private var _aaLyricsLeadMs: MutableStateFlow<Int> = MutableStateFlow(750)
+    private var _aaLyricsLeadMs: MutableStateFlow<Int> = MutableStateFlow(1000)
     val aaLyricsLeadMs: StateFlow<Int> = _aaLyricsLeadMs
 
     private var _lyricsSyncOffsetMs: MutableStateFlow<Int> = MutableStateFlow(1000)

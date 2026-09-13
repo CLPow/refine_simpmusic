@@ -529,7 +529,8 @@ internal class DataStoreManagerImpl(
 
     override val aaLyricsLeadMs: Flow<Int> =
         settingsDataStore.data.map { preferences ->
-            preferences[AA_LYRICS_LEAD_MS] ?: 750
+            // Default 1000ms: head units paint lyrics late; user asked for car to lead by 1s.
+            preferences[AA_LYRICS_LEAD_MS] ?: 1000
         }
 
     override suspend fun setAaLyricsLeadMs(ms: Int) {

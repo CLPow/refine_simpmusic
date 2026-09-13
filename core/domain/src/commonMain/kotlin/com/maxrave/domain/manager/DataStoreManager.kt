@@ -155,7 +155,7 @@ interface DataStoreManager {
 
     /**
      * Milliseconds to select lyrics AHEAD of the player clock, for Android Auto head-unit
-     * paint/transport latency. 0 = sample-time; typical Toyota hosts need ~750.
+     * paint/transport latency. 0 = sample-time; default 1000 for Toyota-class hosts.
      */
     val aaLyricsLeadMs: Flow<Int>
 

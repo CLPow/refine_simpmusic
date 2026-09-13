@@ -29,7 +29,7 @@ private const val TAG = "CarLyrics"
 private const val TICK_MS = 100L
 
 /** Default head-unit paint/transport latency compensation when the setting is unset. */
-private const val DEFAULT_LEAD_MS = 750L
+private const val DEFAULT_LEAD_MS = 1000L
 
 /** Backoff after an unexpected pipeline failure so a flaky player cannot busy-loop. */
 private const val RESTART_DELAY_MS = 1_000L
