@@ -15,6 +15,7 @@ import com.maxrave.domain.utils.Resource
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -209,23 +210,20 @@ class HomeViewModel(
         homeJob?.cancel()
         homeJob =
             viewModelScope.launch {
-                // Instant: local shelves so the screen is never empty while YT answers.
+                // Instant local shelves + last successful feed so the page is never blank
+                // while YouTube answers. Do not wait for chart/mood/new-release.
                 val localShelves =
-                    homeRepository
-                        .getLocalShelves(
-                            onRepeatTitle = getString(Res.string.shelf_on_repeat),
-                            buriedTitle = getString(Res.string.shelf_buried_favourites),
-                        ).firstOrNull()
-                        .orEmpty()
-                // Keep the previous successful feed on screen while the next one loads —
-                // missing shelves were the symptom of replacing a full list with nothing
-                // while combine() waited for every source.
+                    runCatching {
+                        homeRepository
+                            .getLocalShelves(
+                                onRepeatTitle = getString(Res.string.shelf_on_repeat),
+                                buriedTitle = getString(Res.string.shelf_buried_favourites),
+                            ).firstOrNull()
+                            .orEmpty()
+                    }.getOrDefault(emptyList())
                 val previous = _homeItemList.value
-                if (previous.isNotEmpty()) {
-                    _homeItemList.value = localShelves + previous.filterNot { it in localShelves }
-                } else {
-                    _homeItemList.value = localShelves
-                }
+                _homeItemList.value =
+                    localShelves + previous.filterNot { p -> localShelves.any { it == p } }
 
                 var homeDone = false
                 launch {
@@ -240,47 +238,53 @@ class HomeViewModel(
                     }
                 }
 
-                // Side channels — never block the home shelves.
+                // Side channels — isolated so a failure cannot cancel the home feed.
                 launch {
-                    runCatching {
+                    try {
                         homeRepository.getMoodAndMomentsData().collect { mood ->
-                            when (mood) {
-                                is Resource.Success -> _exploreMoodItem.value = mood.data
-                                else -> {}
-                            }
+                            if (mood is Resource.Success) _exploreMoodItem.value = mood.data
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logger.w("HomeViewModel", "Mood load failed: ${e.message}")
                     }
                 }
                 launch {
-                    runCatching {
+                    try {
                         homeRepository.getChartData(dataStoreManager.chartKey.first()).collect { chart ->
-                            when (chart) {
-                                is Resource.Success -> {
-                                    _chart.value = chart.data
-                                    regionCodeChart.value = dataStoreManager.chartKey.first()
-                                }
-                                else -> _chart.value = null
+                            if (chart is Resource.Success) {
+                                _chart.value = chart.data
+                                regionCodeChart.value = dataStoreManager.chartKey.first()
                             }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logger.w("HomeViewModel", "Chart load failed: ${e.message}")
                     }
                 }
                 launch {
-                    runCatching {
+                    try {
                         homeRepository
                             .getNewRelease(
                                 getString(Res.string.new_release),
                                 getString(Res.string.music_video),
                             ).collect { newRelease ->
-                                when (newRelease) {
-                                    is Resource.Success -> _newRelease.value = newRelease.data ?: arrayListOf()
-                                    else -> {}
+                                if (newRelease is Resource.Success) {
+                                    _newRelease.value = newRelease.data ?: arrayListOf()
                                 }
                             }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Logger.w("HomeViewModel", "New release load failed: ${e.message}")
                     }
                 }
 
-                // Primary feed: emit as soon as it arrives.
-                runCatching {
+                // Primary YouTube home feed. Must not use runCatching: it swallows
+                // CancellationException and would mark a cancelled refresh as a failed load.
+                try {
                     homeRepository
                         .getHomeData(
                             params,
@@ -288,34 +292,38 @@ class HomeViewModel(
                             getString(Res.string.song),
                         ).collect { home ->
                             homeDone = true
-                            when (home) {
-                                is Resource.Success if !home.data?.second.isNullOrEmpty() -> {
+                            when {
+                                home is Resource.Success && !home.data?.second.isNullOrEmpty() -> {
                                     _recommendationsFailed.value = false
                                     _continuation.value = home.data?.first
                                     _homeItemList.value = localShelves + (home.data?.second ?: listOf())
                                 }
 
-                                is Resource.Success -> {
+                                home is Resource.Success -> {
                                     Logger.w("HomeViewModel", "Home returned no shelves; treating as a failed load")
                                     _recommendationsFailed.value = true
                                     _continuation.value = null
-                                    _homeItemList.value = localShelves + previous.filterNot { it in localShelves }
+                                    _homeItemList.value =
+                                        localShelves + previous.filterNot { p -> localShelves.any { it == p } }
                                 }
 
                                 else -> {
                                     Logger.e("HomeViewModel", "Home load failed: ${home.message}")
                                     _recommendationsFailed.value = true
                                     _continuation.value = null
-                                    _homeItemList.value = localShelves + previous.filterNot { it in localShelves }
+                                    _homeItemList.value =
+                                        localShelves + previous.filterNot { p -> localShelves.any { it == p } }
                                 }
                             }
-                            if (continuation.value.isNullOrEmpty()) {
-                                _homeListState.value = ListState.PAGINATION_EXHAUST
-                            } else {
-                                _homeListState.value = ListState.IDLE
-                            }
-                            dataStoreManager.cookie.first().let { c ->
-                                if (c.isNotEmpty()) {
+                            _homeListState.value =
+                                if (continuation.value.isNullOrEmpty()) {
+                                    ListState.PAGINATION_EXHAUST
+                                } else {
+                                    ListState.IDLE
+                                }
+                            runCatching {
+                                val cookie = dataStoreManager.cookie.first()
+                                if (cookie.isNotEmpty()) {
                                     _accountInfo.emit(
                                         Pair(
                                             dataStoreManager.getString("AccountName").first(),
@@ -329,8 +337,10 @@ class HomeViewModel(
                             }
                             loading.value = false
                         }
-                }.onFailure {
-                    Logger.e("HomeViewModel", "Home collect failed: ${it.message}")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Logger.e("HomeViewModel", "Home collect failed: ${e.message}")
                     homeDone = true
                     loading.value = false
                     _recommendationsFailed.value = true
