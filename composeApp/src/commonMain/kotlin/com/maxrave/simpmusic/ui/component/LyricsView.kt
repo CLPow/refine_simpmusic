@@ -338,6 +338,10 @@ fun LyricsView(
     val isDragging by listState.interactionSource.collectIsDraggedAsState()
     val current by timeLine.collectAsStateWithLifecycle()
 
+    // YouTube Music–style tabs: what extra row sits under each original line.
+    // Original is always drawn (it drives the sung-line index).
+    var lyricsTab by rememberSaveable { mutableStateOf("all") }
+
     // Read here rather than taken as a parameter: all four call sites (the fullscreen sheet and
     // the three player styles) want the user's one choice, so making them each thread it through
     // would be four copies of the same lookup. Re-checked against isLyricsBlurSupported() even
@@ -418,6 +422,11 @@ fun LyricsView(
                 thresholdMs = 1000L,
             )
         }
+
+    // Tabs gate the secondary rows only; the original line always stays (sync + readability).
+    val showTranslation = lyricsTab == "all" || lyricsTab == "translation"
+    val showRomanization = lyricsTab == "all" || lyricsTab == "romanization"
+
     LaunchedEffect(currentLineIndex, lyricsData.lyrics.syncType, appleStyle) {
         if (currentLineIndex > -1 &&
             (lyricsData.lyrics.syncType == "LINE_SYNCED" || lyricsData.lyrics.syncType == "RICH_SYNCED")
@@ -441,16 +450,23 @@ fun LyricsView(
         // list simply runs out of content and the closing lines pile up against the bottom edge,
         // so the final third of every song reads bottom-anchored instead of top-anchored.
         val tailPadding = if (appleStyle) maxHeight * 0.72f else 0.dp
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = tailPadding),
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            LyricsTabBar(
+                selected = lyricsTab,
+                onSelect = { lyricsTab = it },
+            )
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = tailPadding),
+            ) {
             items(lyricsData.lyrics.lines?.size ?: 0) { index ->
                 val line = lyricsData.lyrics.lines?.getOrNull(index)
                 // Translated lyrics: synced -> precomputed map by line index, unsynced -> by index.
                 val translatedWords =
-                    if (lyricsData.lyrics.syncType == "LINE_SYNCED" || lyricsData.lyrics.syncType == "RICH_SYNCED") {
+                    if (!showTranslation) {
+                        null
+                    } else if (lyricsData.lyrics.syncType == "LINE_SYNCED" || lyricsData.lyrics.syncType == "RICH_SYNCED") {
                         syncedTranslatedWordsByLineIndex[index]
                     } else {
                         lyricsData.translatedLyrics
@@ -474,7 +490,7 @@ fun LyricsView(
                     // while this row is plain static text. It only has to have the markers STRIPPED
                     // before romanizing, or the timestamps themselves would be transliterated.
                     val romanizedWords =
-                        if (romanizationLanguages.isEmpty()) {
+                        if (romanizationLanguages.isEmpty() || !showRomanization) {
                             null
                         } else {
                             remember(words, romanizationLanguages) {
@@ -674,6 +690,55 @@ fun LyricsView(
                         footer()
                     }
                 }
+            }
+        } // LazyColumn
+        } // Column: tabs + LazyColumn
+    } // BoxWithConstraints
+} // LyricsView
+
+/**
+ * YouTube Music–style lyrics mode tabs: All / Original / Translation / Romanization.
+ * Sticky above the lyric list so the reader can switch without hunting Settings.
+ */
+@Composable
+private fun LyricsTabBar(
+    selected: String,
+    onSelect: (String) -> Unit,
+) {
+    val tabs =
+        listOf(
+            "all" to "All",
+            "original" to "Original",
+            "translation" to "Translation",
+            "romanization" to "Romanized",
+        )
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        tabs.forEach { (id, label) ->
+            val isSelected = id == selected
+            Box(
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(
+                            if (isSelected) {
+                                Color.White.copy(alpha = 0.18f)
+                            } else {
+                                Color.Transparent
+                            },
+                        ).clickable { onSelect(id) }
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = typo().labelMedium,
+                    color = if (isSelected) Color.White else Color.White.copy(alpha = 0.55f),
+                )
             }
         }
     }

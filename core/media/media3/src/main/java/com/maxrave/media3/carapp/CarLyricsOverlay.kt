@@ -103,11 +103,13 @@ internal class CarLyricsOverlay(
                 }
                 Logger.i(TAG, "Car attached; showing lyrics in mode $mode")
                 source.clearCache()
-                // Title carries the sung line: hosts typically render title larger than artist.
+                // Keep the real title; put the sung line in the artist/subtitle row.
+                // Overwriting title (BOTH_LINES) made AA look like lyrics-only with no
+                // track identity. Full lyric body stays on the phone Fullscreen player.
                 followJob =
                     scope.launch {
                         try {
-                            followTracks(AA_LYRICS_BOTH_LINES)
+                            followTracks(AA_LYRICS_TITLE_AND_LYRIC)
                         } catch (cancellation: CancellationException) {
                             throw cancellation
                         } catch (e: Exception) {
