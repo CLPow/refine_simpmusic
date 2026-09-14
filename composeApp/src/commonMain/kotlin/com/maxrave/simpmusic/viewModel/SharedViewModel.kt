@@ -15,6 +15,7 @@ import com.maxrave.domain.data.entities.AlbumEntity
 import com.maxrave.domain.data.entities.DownloadState
 import com.maxrave.domain.data.entities.LocalPlaylistEntity
 import com.maxrave.domain.data.entities.LyricsEntity
+import com.maxrave.domain.data.model.metadata.Line
 import com.maxrave.domain.data.entities.NewFormatEntity
 import com.maxrave.domain.data.entities.PlaylistEntity
 import com.maxrave.domain.data.entities.SongEntity
@@ -724,6 +725,40 @@ class SharedViewModel(
     fun insertLyrics(lyrics: LyricsEntity) {
         viewModelScope.launch {
             lyricsCanvasRepository.insertLyrics(lyrics)
+        }
+    }
+
+    /**
+     * Import lyrics from a pasted text file (one line per lyric, no timestamps).
+     * Saves as UNSYNCED for the track that is playing right now and reloads the UI.
+     */
+    fun importTextLyrics(text: String) {
+        val lines =
+            text
+                .lineSequence()
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .map { words -> Line("0", "0", null, words) }
+                .toList()
+        if (lines.isEmpty()) return
+        viewModelScope.launch {
+            val videoId = mediaPlayerHandler.nowPlaying.first()?.mediaId ?: return@launch
+            val entity =
+                LyricsEntity(
+                    videoId = videoId,
+                    error = false,
+                    lines = lines,
+                    syncType = "UNSYNCED",
+                )
+            lyricsCanvasRepository.insertLyrics(entity)
+            val lyrics = entity.toLyrics()
+            updateLyrics(
+                videoId = videoId,
+                duration = 0,
+                inputLyrics = lyrics,
+                isTranslatedLyrics = false,
+                lyricsProvider = LyricsProvider.OFFLINE,
+            )
         }
     }
 

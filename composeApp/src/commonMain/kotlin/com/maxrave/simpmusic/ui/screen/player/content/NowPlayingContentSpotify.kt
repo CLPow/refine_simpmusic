@@ -54,6 +54,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
@@ -140,6 +142,7 @@ import com.maxrave.simpmusic.ui.icon.PlaylistAdd
 import com.maxrave.simpmusic.ui.icon.QueueMusic
 import com.maxrave.simpmusic.ui.icon.Replay5
 import com.maxrave.simpmusic.ui.icon.Share
+import com.maxrave.simpmusic.ui.icon.DownloadForOffline
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.icon.Subtitles
 import com.maxrave.simpmusic.ui.icon.SubtitlesOff
@@ -161,6 +164,10 @@ import simpmusic.composeapp.generated.resources.crossfading
 import simpmusic.composeapp.generated.resources.description
 import simpmusic.composeapp.generated.resources.like_and_dislike
 import simpmusic.composeapp.generated.resources.line_synced
+import simpmusic.composeapp.generated.resources.cancel
+import simpmusic.composeapp.generated.resources.import_lyrics
+import simpmusic.composeapp.generated.resources.import_lyrics_hint
+import simpmusic.composeapp.generated.resources.import_lyrics_placeholder
 import simpmusic.composeapp.generated.resources.lyrics
 import simpmusic.composeapp.generated.resources.lyrics_provider_betterlyrics
 import simpmusic.composeapp.generated.resources.lyrics_provider_lrc
@@ -200,6 +207,9 @@ fun NowPlayingContentSpotify(
     val isRepeatOne = state.controllerState.repeatState is RepeatState.One
 
     var showShareLyricsSheet by rememberSaveable { mutableStateOf(false) }
+    var showImportLyrics by rememberSaveable { mutableStateOf(false) }
+    var importLyricsText by rememberSaveable { mutableStateOf("") }
+    val sharedVm = org.koin.compose.koinInject<com.maxrave.simpmusic.viewModel.SharedViewModel>()
 
     // Height
     var topAppBarHeightDp by rememberSaveable {
@@ -1433,6 +1443,18 @@ fun NowPlayingContentSpotify(
                                             AIBadge()
                                         }
                                         Spacer(modifier = Modifier.weight(1f))
+                                        // Import from a pasted text file (one line per lyric).
+                                        IconButton(
+                                            onClick = { showImportLyrics = true },
+                                        ) {
+                                            Icon(
+                                                imageVector = SimpIcons.DownloadForOffline,
+                                                contentDescription = stringResource(Res.string.import_lyrics),
+                                                tint = Color.White,
+                                                modifier = Modifier.size(16.dp),
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
                                         // Vote button — only when the lyrics or the translation came from
                                         // SimpMusic Lyrics. The rule itself lives on the shared contract
                                         // (canVote), so a style cannot ship without it the way the Apple
@@ -1867,7 +1889,50 @@ fun NowPlayingContentSpotify(
     }
 
     state.screenData.lyricsData?.let { lyricsData ->
-        if (showShareLyricsSheet) {
+        if (showImportLyrics) {
+        AlertDialog(
+            onDismissRequest = { showImportLyrics = false },
+            title = { Text(stringResource(Res.string.import_lyrics)) },
+            text = {
+                Column {
+                    Text(
+                        text = stringResource(Res.string.import_lyrics_hint),
+                        style = typo().bodySmall,
+                        color = Color.White.copy(alpha = 0.7f),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = importLyricsText,
+                        onValueChange = { importLyricsText = it },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height(200.dp),
+                        placeholder = { Text(stringResource(Res.string.import_lyrics_placeholder)) },
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        sharedVm.importTextLyrics(importLyricsText)
+                        importLyricsText = ""
+                        showImportLyrics = false
+                    },
+                    enabled = importLyricsText.isNotBlank(),
+                ) {
+                    Text(stringResource(Res.string.import_lyrics))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportLyrics = false }) {
+                    Text(stringResource(Res.string.cancel))
+                }
+            },
+        )
+    }
+
+    if (showShareLyricsSheet) {
             ShareLyricsSheet(
                 lines = lyricsData.toShareLyricsLines(),
                 songTitle = state.screenData.nowPlayingTitle,

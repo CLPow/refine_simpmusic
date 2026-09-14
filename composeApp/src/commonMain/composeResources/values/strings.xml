@@ -295,6 +295,9 @@
     <string name="lyrics_source_order">Lyrics provider order</string>
     <string name="lyrics_source_order_description">Which source to try first when fetching lyrics.</string>
     <string name="lyrics_source_order_default">Default (SimpMusic → Spotify → LRCLIB…)</string>
+    <string name="import_lyrics">Import lyrics</string>
+    <string name="import_lyrics_hint">Paste one lyric per line. Saved as unsynced lyrics for this track.</string>
+    <string name="import_lyrics_placeholder">Line one\nLine two\n…</string>
     <string name="fork_notice">Refine Music — a modified build of SimpMusic</string>
     <string name="other_app">Other app</string>
     <string name="database">App database</string>
