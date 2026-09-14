@@ -82,6 +82,7 @@ internal class CarLyricsOverlay(
 
     /** Outer loop: car attached + mode. Never returns normally; [start] restarts on failure. */
     private suspend fun runPipeline() {
+        var lastMode: String? = null
         combine(
             CarConnectionState.isCarConnectedFlow,
             dataStoreManager.androidAutoLyricsMode,
@@ -89,6 +90,11 @@ internal class CarLyricsOverlay(
             if (carAttached) mode else AA_LYRICS_OFF
         }.distinctUntilChanged()
             .collect { mode ->
+                // Only restart when the mode actually changes. DataStore can re-emit
+                // on unrelated preference writes; cancelling mid-song then wiping the
+                // cache is why lyrics died after ~1.5 tracks on a long drive.
+                if (mode == lastMode) return@collect
+                lastMode = mode
                 followJob?.cancel()
                 followJob = null
                 if (mode == AA_LYRICS_OFF) {

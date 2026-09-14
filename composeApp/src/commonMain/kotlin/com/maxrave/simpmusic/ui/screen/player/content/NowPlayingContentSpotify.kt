@@ -926,20 +926,8 @@ fun NowPlayingContentSpotify(
                                         inlineLyrics.syncType != "UNSYNCED" &&
                                         inlineLyrics.lines != null
                                 // Canvas mode has its own subtitle overlay — never show both.
-                                val currentLyricLineText =
-                                    if (!hasSyncedLyrics ||
-                                        state.screenData.canvasData != null ||
-                                        state.currentLyricLineIndex < 0
-                                    ) {
-                                        ""
-                                    } else {
-                                        inlineLyrics
-                                            ?.lines
-                                            ?.getOrNull(state.currentLyricLineIndex)
-                                            ?.words
-                                            ?.stripRichSyncTimestamps()
-                                            .orEmpty()
-                                    }
+                                // Normal Now Playing stays title + artist; lyrics live in Fullscreen only.
+                                val currentLyricLineText = ""
                                 Crossfade(
                                     targetState = currentLyricLineText,
                                     animationSpec = tween(durationMillis = 300),
@@ -1407,9 +1395,10 @@ fun NowPlayingContentSpotify(
                         // sibling clickable.
                     }
                     Column(Modifier.padding(horizontal = 20.dp)) {
-                        // Lyrics Layout
+                        // Lyrics Layout — hidden in the compact player. The normal view stays
+                        // title + artist; the Fullscreen sheet owns the lyric body.
                         AnimatedVisibility(
-                            visible = state.screenData.lyricsData != null,
+                            visible = false,
                             modifier = Modifier.padding(top = 10.dp),
                         ) {
                             ElevatedCard(

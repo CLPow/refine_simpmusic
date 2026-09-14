@@ -3329,144 +3329,149 @@ fun SettingScreen(
                 )
             },
             text = {
-                if (alertState.message != null) {
-                    Column {
+                // Message + select lists can appear together. An if/else here used to hide
+                // every radio list whenever a subtitle was present, so users saw Change
+                // with nothing to pick.
+                Column {
+                    if (alertState.message != null) {
                         Text(text = alertState.message)
-                        if (alertState.textField != null) {
-                            val verify =
-                                alertState.textField.verifyCodeBlock?.invoke(
-                                    alertState.textField.value,
-                                ) ?: (true to null)
-                            TextField(
-                                value = alertState.textField.value,
-                                onValueChange = {
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    if (alertState.textField != null) {
+                        val verify =
+                            alertState.textField.verifyCodeBlock?.invoke(
+                                alertState.textField.value,
+                            ) ?: (true to null)
+                        TextField(
+                            value = alertState.textField.value,
+                            onValueChange = {
+                                viewModel.setAlertData(
+                                    alertState.copy(
+                                        textField =
+                                            alertState.textField.copy(
+                                                value = it,
+                                            ),
+                                    ),
+                                )
+                            },
+                            isError = !verify.first,
+                            label = { Text(text = alertState.textField.label) },
+                            supportingText = {
+                                if (!verify.first) {
+                                    Text(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        text = verify.second ?: "",
+                                        color = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            },
+                            trailingIcon = {
+                                if (!verify.first) {
+                                    SimpIcons.Error
+                                }
+                            },
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        vertical = 6.dp,
+                                    ),
+                        )
+                    }
+                    if (alertState.selectOne != null) {
+                        LazyColumn(
+                            Modifier
+                                .padding(vertical = 6.dp)
+                                .heightIn(0.dp, 500.dp),
+                        ) {
+                            items(alertState.selectOne.listSelect) { item ->
+                                val onSelect = {
                                     viewModel.setAlertData(
                                         alertState.copy(
-                                            textField =
-                                                alertState.textField.copy(
-                                                    value = it,
+                                            selectOne =
+                                                alertState.selectOne.copy(
+                                                    listSelect =
+                                                        alertState.selectOne.listSelect.toMutableList().map {
+                                                            if (it == item) {
+                                                                true to it.second
+                                                            } else {
+                                                                false to it.second
+                                                            }
+                                                        },
                                                 ),
                                         ),
                                     )
-                                },
-                                isError = !verify.first,
-                                label = { Text(text = alertState.textField.label) },
-                                supportingText = {
-                                    if (!verify.first) {
-                                        Text(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            text = verify.second ?: "",
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    }
-                                },
-                                trailingIcon = {
-                                    if (!verify.first) {
-                                        SimpIcons.Error
-                                    }
-                                },
-                                modifier =
+                                }
+                                Row(
                                     Modifier
-                                        .fillMaxWidth()
-                                        .padding(
-                                            vertical = 6.dp,
+                                        .padding(vertical = 4.dp)
+                                        .clickable {
+                                            onSelect.invoke()
+                                        }.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    RadioButton(
+                                        selected = item.first,
+                                        onClick = {
+                                            onSelect.invoke()
+                                        },
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        text = item.second,
+                                        style = typo().bodyMedium,
+                                        maxLines = 1,
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .wrapContentHeight(align = Alignment.CenterVertically)
+                                                .basicMarquee(
+                                                    iterations = Int.MAX_VALUE,
+                                                    animationMode = MarqueeAnimationMode.Immediately,
+                                                ).focusable(),
+                                    )
+                                }
+                            }
+                        }
+                    } else if (alertState.multipleSelect != null) {
+                        LazyColumn(
+                            Modifier.padding(vertical = 6.dp),
+                        ) {
+                            items(alertState.multipleSelect.listSelect) { item ->
+                                val onCheck = {
+                                    viewModel.setAlertData(
+                                        alertState.copy(
+                                            multipleSelect =
+                                                alertState.multipleSelect.copy(
+                                                    listSelect =
+                                                        alertState.multipleSelect.listSelect.toMutableList().map {
+                                                            if (it == item) {
+                                                                !it.first to it.second
+                                                            } else {
+                                                                it
+                                                            }
+                                                        },
+                                                ),
                                         ),
-                            )
-                        }
-                    }
-                } else if (alertState.selectOne != null) {
-                    LazyColumn(
-                        Modifier
-                            .padding(vertical = 6.dp)
-                            .heightIn(0.dp, 500.dp),
-                    ) {
-                        items(alertState.selectOne.listSelect) { item ->
-                            val onSelect = {
-                                viewModel.setAlertData(
-                                    alertState.copy(
-                                        selectOne =
-                                            alertState.selectOne.copy(
-                                                listSelect =
-                                                    alertState.selectOne.listSelect.toMutableList().map {
-                                                        if (it == item) {
-                                                            true to it.second
-                                                        } else {
-                                                            false to it.second
-                                                        }
-                                                    },
-                                            ),
-                                    ),
-                                )
-                            }
-                            Row(
-                                Modifier
-                                    .padding(vertical = 4.dp)
-                                    .clickable {
-                                        onSelect.invoke()
-                                    }.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                RadioButton(
-                                    selected = item.first,
-                                    onClick = {
-                                        onSelect.invoke()
-                                    },
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    text = item.second,
-                                    style = typo().bodyMedium,
-                                    maxLines = 1,
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .wrapContentHeight(align = Alignment.CenterVertically)
-                                            .basicMarquee(
-                                                iterations = Int.MAX_VALUE,
-                                                animationMode = MarqueeAnimationMode.Immediately,
-                                            ).focusable(),
-                                )
-                            }
-                        }
-                    }
-                } else if (alertState.multipleSelect != null) {
-                    LazyColumn(
-                        Modifier.padding(vertical = 6.dp),
-                    ) {
-                        items(alertState.multipleSelect.listSelect) { item ->
-                            val onCheck = {
-                                viewModel.setAlertData(
-                                    alertState.copy(
-                                        multipleSelect =
-                                            alertState.multipleSelect.copy(
-                                                listSelect =
-                                                    alertState.multipleSelect.listSelect.toMutableList().map {
-                                                        if (it == item) {
-                                                            !it.first to it.second
-                                                        } else {
-                                                            it
-                                                        }
-                                                    },
-                                            ),
-                                    ),
-                                )
-                            }
-                            Row(
-                                Modifier
-                                    .padding(vertical = 4.dp)
-                                    .clickable {
-                                        onCheck.invoke()
-                                    }.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Checkbox(
-                                    checked = item.first,
-                                    onCheckedChange = {
-                                        onCheck.invoke()
-                                    },
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(text = item.second, style = typo().bodyMedium, maxLines = 1)
+                                    )
+                                }
+                                Row(
+                                    Modifier
+                                        .padding(vertical = 4.dp)
+                                        .clickable {
+                                            onCheck.invoke()
+                                        }.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Checkbox(
+                                        checked = item.first,
+                                        onCheckedChange = {
+                                            onCheck.invoke()
+                                        },
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(text = item.second, style = typo().bodyMedium, maxLines = 1)
+                                }
                             }
                         }
                     }
