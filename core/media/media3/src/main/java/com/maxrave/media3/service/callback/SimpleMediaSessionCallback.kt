@@ -144,19 +144,10 @@ internal class SimpleMediaSessionCallback(
                 COMMAND_SEEK_TO_PREVIOUS -> {
                     mediaPlayerHandler.onPlayerEvent(PlayerEvent.Previous)
                 }
-                COMMAND_SET_SHUFFLE_MODE -> {
-                    // AA / Bluetooth hosts toggle shuffle via the player API, not our
-                    // custom SHUFFLE session command.
-                    mediaPlayerHandler.onPlayerEvent(PlayerEvent.Shuffle)
-                }
-                COMMAND_SET_REPEAT_MODE -> {
-                    session.player.repeatMode =
-                        when (session.player.repeatMode) {
-                            ExoPlayer.REPEAT_MODE_OFF -> ExoPlayer.REPEAT_MODE_ONE
-                            ExoPlayer.REPEAT_MODE_ONE -> ExoPlayer.REPEAT_MODE_ALL
-                            else -> ExoPlayer.REPEAT_MODE_OFF
-                        }
-                }
+                // Do NOT intercept COMMAND_SET_SHUFFLE_MODE / COMMAND_SET_REPEAT_MODE.
+                // The session applies the host's requested mode onto player.shuffleModeEnabled /
+                // player.repeatMode (forwarding adapter). Toggling here raced that write and
+                // left the car UI's shuffle/repeat icons stuck.
                 COMMAND_GET_TIMELINE -> {
                 }
             }
@@ -177,11 +168,12 @@ internal class SimpleMediaSessionCallback(
             }
 
             MEDIA_CUSTOM_COMMAND.REPEAT -> {
-                session.player.repeatMode =
-                    when (session.player.repeatMode) {
+                // Toggle through the adapter so listeners fire and the host refreshes the icon.
+                val player = session.player
+                player.repeatMode =
+                    when (player.repeatMode) {
                         ExoPlayer.REPEAT_MODE_OFF -> ExoPlayer.REPEAT_MODE_ONE
                         ExoPlayer.REPEAT_MODE_ONE -> ExoPlayer.REPEAT_MODE_ALL
-                        ExoPlayer.REPEAT_MODE_ALL -> ExoPlayer.REPEAT_MODE_OFF
                         else -> ExoPlayer.REPEAT_MODE_OFF
                     }
             }
