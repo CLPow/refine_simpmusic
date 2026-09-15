@@ -189,6 +189,12 @@ class YouTube {
             ytMusic.pageId = value
         }
 
+    var authUser: Int
+        get() = ytMusic.authUser
+        set(value) {
+            ytMusic.authUser = value
+        }
+
     /**
      * TIDAL credentials, backed by [Ytmusic]. Set by the data layer from cached remote config.
      */

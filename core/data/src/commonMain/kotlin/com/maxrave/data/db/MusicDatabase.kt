@@ -43,7 +43,7 @@ import com.maxrave.domain.data.entities.sync.SyncTombstoneEntity
         YourYouTubePlaylistList::class, PlaybackEventEntity::class, EventArtistEntity::class,
         AutoEqEntryEntity::class, AutoEqIndexMetaEntity::class, AutoEqCurveEntity::class
     ],
-    version = 29,
+    version = 30,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 2, to = 3), AutoMigration(
@@ -93,6 +93,9 @@ import com.maxrave.domain.data.entities.sync.SyncTombstoneEntity
         AutoMigration(28, 29),
         AutoMigration(23, 25),
         AutoMigration(22, 25),
+        // 30 adds GoogleAccountEntity.authUser (NOT NULL, SQL default 0), nothing else
+        // (upstream's 26; this fork's 26-29 were already taken).
+        AutoMigration(29, 30),
     ],
 )
 @TypeConverters(Converters::class)
