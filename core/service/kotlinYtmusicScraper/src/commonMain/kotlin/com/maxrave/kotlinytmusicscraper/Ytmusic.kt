@@ -145,6 +145,7 @@ class Ytmusic {
 
     var proxy: ProxyConfig? = null
         set(value) {
+            if (field == value) return
             field = value
             httpClient.close()
             httpClient = createClient()

@@ -114,7 +114,7 @@ internal class CommonRepositoryImpl(
                         dataStoreManager.proxyPassword,
                     ) { (enabled, baseData), username, password ->
                         enabled to baseData.copy(username = username, password = password)
-                    }.collectLatest { (usingProxy, data) ->
+                    }.distinctUntilChanged().collectLatest { (usingProxy, data) ->
                         if (usingProxy) {
                             withContext(Dispatchers.IO) {
                                 // Set SOCKS proxy authenticator if credentials are provided
