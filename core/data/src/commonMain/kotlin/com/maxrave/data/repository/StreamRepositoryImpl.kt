@@ -199,7 +199,11 @@ internal class StreamRepositoryImpl(
                     ITAG.MUXED_360P
                 }
             youTube
-                .player(videoId, noLogIn = muxed)
+                .player(
+                    videoId,
+                    noLogIn = muxed,
+                    preferredAudioLanguage = dataStoreManager.preferredAudioLanguage.first(),
+                )
                 .onSuccess { data ->
                     val response = data.second
                     if (data.third == MediaType.Song) {

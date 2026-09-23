@@ -1557,6 +1557,20 @@ internal class DataStoreManagerImpl(
     // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
     override val helpBuildLyricsDatabase: Flow<String> = flowOf(FALSE)
 
+    override val preferredAudioLanguage =
+        settingsDataStore.data.map { preferences ->
+            preferences[PREFERRED_AUDIO_LANGUAGE] ?: ""
+        }
+
+    override suspend fun setPreferredAudioLanguage(language: String) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                settings[PREFERRED_AUDIO_LANGUAGE] = language.trim()
+            }
+        }
+    }
+
+
     override suspend fun setHelpBuildLyricsDatabase(help: Boolean) {
         withContext(Dispatchers.IO) {
             if (help) {
@@ -1892,6 +1906,7 @@ internal class DataStoreManagerImpl(
 
         val LOCAL_PLAYLIST_FILTER = stringPreferencesKey("local_playlist_filter")
         val YOUTUBE_SUBTITLE_LANGUAGE = stringPreferencesKey("youtube_subtitle_language")
+        val PREFERRED_AUDIO_LANGUAGE = stringPreferencesKey("preferred_audio_language")
         val HELP_BUILD_LYRICS_DATABASE = stringPreferencesKey("help_build_lyrics_database")
         val CONTRIBUTOR_NAME = stringPreferencesKey("contributor_name")
         val CONTRIBUTOR_EMAIL = stringPreferencesKey("contributor_email")
