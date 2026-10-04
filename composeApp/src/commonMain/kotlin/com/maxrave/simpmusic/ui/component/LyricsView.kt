@@ -347,7 +347,7 @@ fun LyricsView(
     // would be four copies of the same lookup. Re-checked against isLyricsBlurSupported() even
     // though Settings hides the option below Android 12 — a DataStore restored from a backup, or
     // carried to another device, can still hold APPLE_MUSIC on a phone that cannot draw it.
-    val lyricsStyle by dataStoreManager.lyricsStyle.collectAsStateWithLifecycle(DataStoreManager.LYRICS_STYLE_CLASSIC)
+    val lyricsStyle by dataStoreManager.lyricsStyle.collectAsStateWithLifecycle(DataStoreManager.LYRICS_STYLE_APPLE_MUSIC)
     val appleStyle = lyricsStyle == DataStoreManager.LYRICS_STYLE_APPLE_MUSIC && isLyricsBlurSupported()
     val fontScalePercent by dataStoreManager.lyricsFontScalePercent.collectAsStateWithLifecycle(100)
     val lyricFontScale = (fontScalePercent.coerceIn(50, 200) / 100f)
@@ -1121,7 +1121,7 @@ fun FullscreenLyricsSheet(
     // the edge. This sheet's own 50dp then stacked on top of it, insetting the text by 70dp.
     val fullscreenLyricsStyle by sharedViewModel
         .getLyricsStyle()
-        .collectAsStateWithLifecycle(DataStoreManager.LYRICS_STYLE_CLASSIC)
+        .collectAsStateWithLifecycle(DataStoreManager.LYRICS_STYLE_APPLE_MUSIC)
     val fullscreenAppleLyrics =
         fullscreenLyricsStyle == DataStoreManager.LYRICS_STYLE_APPLE_MUSIC && isLyricsBlurSupported()
     val screenDataState by sharedViewModel.nowPlayingScreenData.collectAsStateWithLifecycle()

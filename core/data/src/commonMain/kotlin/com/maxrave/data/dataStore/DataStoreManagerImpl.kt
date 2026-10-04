@@ -1030,7 +1030,7 @@ internal class DataStoreManagerImpl(
 
     override val nowPlayingStyle =
         settingsDataStore.data.map { preferences ->
-            preferences[NOW_PLAYING_STYLE] ?: DataStoreManager.NOW_PLAYING_STYLE_SPOTIFY
+            preferences[NOW_PLAYING_STYLE] ?: DataStoreManager.NOW_PLAYING_STYLE_APPLE_MUSIC
         }
 
     override suspend fun setNowPlayingStyle(style: String) {
@@ -1043,7 +1043,7 @@ internal class DataStoreManagerImpl(
 
     override val lyricsStyle =
         settingsDataStore.data.map { preferences ->
-            preferences[LYRICS_STYLE] ?: DataStoreManager.LYRICS_STYLE_CLASSIC
+            preferences[LYRICS_STYLE] ?: DataStoreManager.LYRICS_STYLE_APPLE_MUSIC
         }
 
     override suspend fun setLyricsStyle(style: String) {

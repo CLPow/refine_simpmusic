@@ -162,8 +162,11 @@ internal data class AppleMusicTypography(
 internal fun rememberAppleMusicTypography(): AppleMusicTypography {
     val t = typo()
     return AppleMusicTypography(
-        mainTitle = t.titleMedium,
-        mainArtist = t.bodyMedium,
+        // Louder than titleMedium/bodyMedium: the owner asked for the song title and artist
+        // to dominate the Apple Music player the way Apple Music does (large type, not a
+        // caption under the art).
+        mainTitle = t.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
+        mainArtist = t.titleSmall,
         // The compact header — Lyrics, Queue, and the row under a running canvas — carries the
         // SIZES FullscreenLyricsSheet uses for the same job (LyricsView.kt: labelSmall over
         // bodySmall), while mainTitle/mainArtist stay 18/13 because they head the controller
