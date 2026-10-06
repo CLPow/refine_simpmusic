@@ -416,6 +416,9 @@ class MpvPlayerAdapter(
                 try {
                     player.seekTo(positionMs)
                     Logger.d(TAG, "Seeked to position: $positionMs")
+                    // Same contract as the Android adapter: every seek is reported, whoever asked
+                    // for it (seek bar, lyric tap, ±5 s, Control Center, SponsorBlock).
+                    notifyListeners { onSeeked(positionMs) }
                 } catch (e: Exception) {
                     // Same reasoning as the null case: the bar has already moved, so the position
                     // has to be applied somewhere or the two stay disagreeing.
