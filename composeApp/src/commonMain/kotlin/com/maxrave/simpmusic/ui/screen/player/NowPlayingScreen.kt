@@ -61,8 +61,6 @@ import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.player.FullscreenDestination
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentActions
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentAppleMusic
-import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentM3Expressive
-import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentSpotify
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentState
 import com.maxrave.simpmusic.ui.screen.player.content.PlayerBackdropColor
 import com.maxrave.simpmusic.ui.screen.player.content.toAudioCodecLabel
@@ -150,17 +148,13 @@ fun NowPlayingScreenContent(
     // Apple Music style's progress-bar codec badge — see NowPlayingContentState.toAudioCodecLabel.
     val formatState by sharedViewModel.format.collectAsStateWithLifecycle(initialValue = null)
 
-    val shouldShowVideo by sharedViewModel.getVideo.collectAsStateWithLifecycle()
+    // Songs only: the player never shows a music video, whatever an old setting says.
+    val shouldShowVideo = false
     val translatedVoteState by sharedViewModel.translatedVoteState.collectAsStateWithLifecycle()
     val lyricsVoteState by sharedViewModel.lyricsVoteState.collectAsStateWithLifecycle()
     val isUserLoggedIn by sharedViewModel
         .isUserLoggedInFlow()
         .collectAsStateWithLifecycle(initialValue = false)
-
-    // Which Now Playing style renders the content layer (Settings → Now Playing style).
-    val nowPlayingStyle by sharedViewModel
-        .getNowPlayingStyle()
-        .collectAsStateWithLifecycle(initialValue = DataStoreManager.NOW_PLAYING_STYLE_APPLE_MUSIC)
 
     // Artwork Pager state — Spotify-style horizontal swipe between queue tracks.
     // The pager wraps the Canvas + Thumbnail layers. Controller layout below stays fixed.
@@ -421,24 +415,26 @@ fun NowPlayingScreenContent(
         }
     }
 
-    // Crossfade: RGB rainbow color cycling when transitioning between tracks
-    val infiniteTransition = rememberInfiniteTransition(label = "crossfadeRainbow")
-    val rainbowHue by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec =
-            infiniteRepeatable(
-                animation = tween(1000, easing = LinearEasing),
-                repeatMode = RepeatMode.Restart,
-            ),
-        label = "rainbowHue",
-    )
-    val rainbowColor = hsvToColor(rainbowHue, 1f, 1f)
-    val sliderTrackColor by animateColorAsState(
-        targetValue = if (timelineState.isCrossfading) rainbowColor else Color.White,
-        animationSpec = tween(300),
-        label = "sliderCrossfadeColor",
-    )
+    // Crossfade: RGB rainbow color cycling when transitioning between tracks. Only composed while a
+    // crossfade runs — an always-on infinite transition read here recomposed this whole screen on
+    // every frame, crossfading or not.
+    val sliderTrackColor =
+        if (timelineState.isCrossfading) {
+            val infiniteTransition = rememberInfiniteTransition(label = "crossfadeRainbow")
+            val rainbowHue by infiniteTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec =
+                    infiniteRepeatable(
+                        animation = tween(1000, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+                label = "rainbowHue",
+            )
+            hsvToColor(rainbowHue, 1f, 1f)
+        } else {
+            Color.White
+        }
 
     // Show ControlLayout Or Show Artist Badge
     var showHideControlLayout by rememberSaveable {
@@ -733,23 +729,10 @@ fun NowPlayingScreenContent(
                 mediaPlayerHandler.removeMediaItem(index)
             },
         )
-    when (nowPlayingStyle) {
-        DataStoreManager.NOW_PLAYING_STYLE_M3_EXPRESSIVE ->
-            NowPlayingContentM3Expressive(
-                state = state,
-                actions = actions,
-            )
-
-        DataStoreManager.NOW_PLAYING_STYLE_APPLE_MUSIC ->
-            NowPlayingContentAppleMusic(
-                state = state,
-                actions = actions,
-            )
-
-        else ->
-            NowPlayingContentSpotify(
-                state = state,
-                actions = actions,
-            )
-    }
+    // One player. Refine used to ship four interchangeable styles; they are consolidated into the
+    // artwork-led one (big cover, title/artist, transport, and a Lyrics · Queue dock).
+    NowPlayingContentAppleMusic(
+        state = state,
+        actions = actions,
+    )
 }

@@ -60,7 +60,7 @@ internal class LibraryTabCarScreen(
     private val tabChildren = mutableMapOf<String, List<MediaItem>?>()
 
     // Home tab — shelf node paired with its children; null = not loaded yet
-    private var homeShelves: List<Pair<MediaItem, List<MediaItem>>>? = null
+    private var homeShelves: List<Pair<String, List<MediaItem>>>? = null
     private var homeLoading = false
 
     // This screen lives for the whole car session — a transient failure must
@@ -104,25 +104,18 @@ internal class LibraryTabCarScreen(
         screenScope.launch {
             val shelves =
                 try {
-                    val browser = browserProvider().await()
-                    browser
+                    // Home is one flat list whose items carry their shelf in the group-title
+                    // hint (the layout YouTube Music uses), so one call returns every shelf.
+                    browserProvider()
+                        .await()
                         .getChildren(SimpleMediaSessionCallback.HOME, 0, Int.MAX_VALUE, null)
                         .await()
                         .value
                         ?.toList()
                         .orEmpty()
-                        .filter { it.mediaMetadata.isBrowsable == true }
-                        .map { shelf ->
-                            // Second level reads the callback's in-memory home cache — no extra network
-                            val children =
-                                browser
-                                    .getChildren(shelf.mediaId, 0, Int.MAX_VALUE, null)
-                                    .await()
-                                    .value
-                                    ?.toList()
-                                    .orEmpty()
-                            shelf to children.take(MAX_GRID_ITEMS_PER_SECTION)
-                        }.filter { it.second.isNotEmpty() }
+                        .groupBy { it.mediaMetadata.extras?.getString(SimpleMediaSessionCallback.CONTENT_STYLE_GROUP_TITLE_HINT).orEmpty() }
+                        .map { (title, items) -> title to items.take(MAX_GRID_ITEMS_PER_SECTION) }
+                        .filter { it.second.isNotEmpty() }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -249,7 +242,7 @@ internal class LibraryTabCarScreen(
                     .Builder()
                     // Spotify-sized tiles; anything smaller renders as a dense mosaic
                     .setItemSize(GridSection.ITEM_SIZE_EXTRA_LARGE)
-                    .setTitle(shelf.mediaMetadata.title?.toString().orEmpty().ifBlank { " " })
+                    .setTitle(shelf.ifBlank { " " })
             val nowPlayingId = handler.nowPlaying.value?.mediaId
             items.forEach { item -> section.addItem(buildGridItem(item, nowPlayingId)) }
             builder.addSection(section.build())
@@ -358,9 +351,8 @@ internal class LibraryTabCarScreen(
         private val TABS =
             listOf(
                 LibraryTab(SimpleMediaSessionCallback.HOME, R.string.home, R.drawable.home_android_auto),
-                LibraryTab(SimpleMediaSessionCallback.DOWNLOADED, R.string.downloaded, R.drawable.baseline_downloaded),
-                LibraryTab(SimpleMediaSessionCallback.FAVORITE, R.string.favorites, R.drawable.baseline_favorite_24),
-                LibraryTab(SimpleMediaSessionCallback.PLAYLIST, R.string.playlists, R.drawable.baseline_playlist_add_24),
+                LibraryTab("${SimpleMediaSessionCallback.HOME}/${SimpleMediaSessionCallback.RECENT}", R.string.recently_played, R.drawable.baseline_album_24),
+                LibraryTab(SimpleMediaSessionCallback.LIBRARY, R.string.library, R.drawable.baseline_playlist_add_24),
             )
     }
 }

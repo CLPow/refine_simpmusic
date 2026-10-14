@@ -1,13 +1,11 @@
 package com.maxrave.media3.exoplayer
 
-import android.os.Handler
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import android.view.TextureView
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.maxrave.logger.Logger
@@ -119,7 +117,9 @@ internal class DelegatingForwardingPlayer(
     // ========== Listener Tracking ==========
 
     // Track all externally registered listeners so we can re-register them after delegate swap
-    private val trackedListeners = mutableListOf<Player.Listener>()
+    // Copy-on-write: notifyMediaItemChanged iterates this while a listener may (un)register itself
+    // from inside the callback, which would throw ConcurrentModificationException on a plain list.
+    private val trackedListeners = java.util.concurrent.CopyOnWriteArrayList<Player.Listener>()
 
     override fun addListener(listener: Player.Listener) {
         trackedListeners.add(listener)
@@ -129,55 +129,6 @@ internal class DelegatingForwardingPlayer(
     override fun removeListener(listener: Player.Listener) {
         trackedListeners.remove(listener)
         super.removeListener(listener)
-    }
-
-    // ========== Metadata Overlay ==========
-
-    /**
-     * Replacement metadata published in place of the track's own, or null to publish the track's.
-     *
-     * Written by [CarLyricsOverlay][com.maxrave.media3.carapp.CarLyricsOverlay] so the two text
-     * rows Android Auto draws can carry lyrics. Android Auto renders its now-playing screen
-     * itself, from the media session — the app owns no pixels there — so the session's metadata is
-     * the only way to put a lyric in front of the driver.
-     */
-    @Volatile
-    private var metadataOverlay: MediaMetadata? = null
-
-    override fun getMediaMetadata(): MediaMetadata = metadataOverlay ?: super.getMediaMetadata()
-
-    /**
-     * The track's own metadata, whatever is currently overlaid on top of it.
-     *
-     * The overlay is built by editing this — the artwork, duration and everything else must carry
-     * through untouched — so reading it back through [getMediaMetadata] would compound each edit
-     * onto the last and lose the real title after the first line.
-     */
-    val underlyingMediaMetadata: MediaMetadata
-        get() = super.getMediaMetadata()
-
-    /**
-     * Publishes [overlay] as the session's metadata, or restores the track's own when null.
-     *
-     * Notifies listeners directly rather than waiting for the delegate to emit something, because
-     * the delegate has nothing to emit: the track has not changed, only the words on top of it.
-     * `MediaSessionImpl` takes the metadata straight from this callback's argument, so the value
-     * passed here is exactly what reaches the head unit.
-     *
-     * A no-op when the value is unchanged. This is called on every lyric line, and a redundant
-     * notification would re-post the phone's media notification for nothing.
-     */
-    fun setMetadataOverlay(overlay: MediaMetadata?) {
-        if (metadataOverlay == overlay) return
-        metadataOverlay = overlay
-        val published = overlay ?: super.getMediaMetadata()
-        // Listeners expect the application thread; the overlay is computed on whichever thread the
-        // lyric clock happens to run on.
-        Handler(applicationLooper).post {
-            trackedListeners.toList().forEach { listener ->
-                listener.onMediaMetadataChanged(published)
-            }
-        }
     }
 
     // ========== Video Surface Tracking ==========

@@ -69,7 +69,6 @@ fun GenericMediaItem.toSongEntity(): SongEntity =
     )
 
 fun SongEntity.toGenericMediaItem(): GenericMediaItem {
-    val isSong = (this.thumbnails?.contains("w544") == true && this.thumbnails.contains("h544"))
     return GenericMediaItem(
         mediaId = this.videoId,
         uri = this.videoId,
@@ -79,7 +78,7 @@ fun SongEntity.toGenericMediaItem(): GenericMediaItem {
                 artist = this.artistName?.connectArtists(),
                 albumTitle = this.albumName,
                 artworkUri = this.thumbnails,
-                description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                description = MERGING_DATA_TYPE.SONG, // songs only: every item plays as audio
             ),
         customCacheKey = this.videoId,
     )
@@ -93,13 +92,6 @@ fun Track.toGenericMediaItem(): GenericMediaItem {
         thumbUrl = Regex("([wh])120").replace(thumbUrl, "$1544")
     }
     val artistName: String = this.artists.toListName().connectArtists()
-    val isSong =
-        (
-            this.thumbnails?.last()?.height != 0 &&
-                this.thumbnails?.last()?.height == this.thumbnails?.last()?.width &&
-                this.thumbnails?.last()?.height != null
-        ) &&
-            (!thumbUrl.contains("hq720") && !thumbUrl.contains("maxresdefault"))
     return GenericMediaItem(
         mediaId = this.videoId,
         uri = this.videoId,
@@ -109,7 +101,7 @@ fun Track.toGenericMediaItem(): GenericMediaItem {
                 artist = artistName,
                 albumTitle = this.album?.name,
                 artworkUri = thumbUrl,
-                description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                description = MERGING_DATA_TYPE.SONG, // songs only: every item plays as audio
             ),
         customCacheKey = this.videoId,
     )

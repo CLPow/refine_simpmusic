@@ -198,17 +198,8 @@ internal class DownloadUtils(
         title: String,
         thumbnail: String,
     ) {
-        var isVideo = false
-        val request =
-            ImageRequest
-                .Builder(context)
-                .data(thumbnail)
-                .diskCachePolicy(CachePolicy.ENABLED)
-                .build()
-        val imageResult = ImageLoader(context).execute(request)
-        if (imageResult.image?.height != imageResult.image?.width && imageResult.image != null) {
-            isVideo = true
-        }
+        // Songs only: the audio stream is the whole download. This used to fetch the artwork just
+        // to guess "video" from a non-square thumbnail and then queue the video stream as well.
         val downloadRequest =
             DownloadRequest
                 .Builder(videoId, videoId.toUri())
@@ -221,21 +212,6 @@ internal class DownloadUtils(
             downloadRequest,
             false,
         )
-        if (isVideo) {
-            val id = MERGING_DATA_TYPE.VIDEO + videoId
-            val downloadRequestVideo =
-                DownloadRequest
-                    .Builder(id, id.toUri())
-                    .setData("Video $title".toByteArray())
-                    .setCustomCacheKey(id)
-                    .build()
-            DownloadService.sendAddDownload(
-                context,
-                MusicDownloadService::class.java,
-                downloadRequestVideo,
-                false,
-            )
-        }
     }
 
     override fun removeDownload(videoId: String) {

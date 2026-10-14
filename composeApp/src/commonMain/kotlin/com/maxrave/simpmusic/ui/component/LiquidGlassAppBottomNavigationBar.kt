@@ -7,7 +7,7 @@ import com.maxrave.simpmusic.expect.ui.PlatformBackdrop
 import com.maxrave.simpmusic.ui.icon.AutoGraph
 import com.maxrave.simpmusic.ui.icon.Home
 import com.maxrave.simpmusic.ui.icon.LibraryMusic
-import com.maxrave.simpmusic.ui.icon.Search
+import com.maxrave.simpmusic.ui.icon.Explore
 import com.maxrave.simpmusic.ui.icon.Sensors
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.navigation.destination.home.AnalyticsDestination
@@ -22,7 +22,7 @@ import simpmusic.composeapp.generated.resources.analytics
 import simpmusic.composeapp.generated.resources.home
 import simpmusic.composeapp.generated.resources.library
 import simpmusic.composeapp.generated.resources.mix
-import simpmusic.composeapp.generated.resources.search
+import simpmusic.composeapp.generated.resources.explore
 import kotlin.reflect.KClass
 
 @Composable
@@ -59,10 +59,10 @@ sealed class BottomNavScreen(
     data object Search : BottomNavScreen(
         ordinal = 1,
         destination = SearchDestination,
-        title = Res.string.search,
+        title = Res.string.explore,
         icon = {
             Icon(
-                SimpIcons.Search,
+                SimpIcons.Explore,
                 contentDescription = null,
             )
         },

@@ -42,6 +42,7 @@ import com.maxrave.domain.repository.PlaylistRepository
 import com.maxrave.domain.repository.SearchRepository
 import com.maxrave.domain.repository.SongRepository
 import com.maxrave.domain.repository.StreamRepository
+import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.domain.utils.Resource
 import com.maxrave.domain.utils.connectArtists
 import com.maxrave.domain.utils.toArrayListTrack
@@ -53,7 +54,6 @@ import com.maxrave.domain.utils.toTrack
 import com.maxrave.logger.Logger
 import com.maxrave.media3.R
 import com.maxrave.media3.extension.toMediaItem
-import com.maxrave.media3.service.CarConnectionState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -84,21 +84,24 @@ internal class SimpleMediaSessionCallback(
     var toggleRadio: () -> Unit = {
         mediaPlayerHandler.toggleRadio()
     }
-    private val searchTempList = mutableListOf<Track>()
+    /** Results of each recent search, by query; the host asks for them in a second call. */
+    private val searchResults = java.util.concurrent.ConcurrentHashMap<String, List<Track>>()
+
     /** Tracks of the YouTube playlist last browsed, so playback need not re-fetch it. */
-    private val onlinePlaylistCache = mutableMapOf<String, List<Track>>()
+    private val onlinePlaylistCache = java.util.concurrent.ConcurrentHashMap<String, List<Track>>()
 
     /** Songs of the artist last browsed, so playback can build a queue without a second fetch. */
-    private val artistSongCache = mutableMapOf<String, List<Track>>()
+    private val artistSongCache = java.util.concurrent.ConcurrentHashMap<String, List<Track>>()
 
-    private val listHomeItem = mutableListOf<HomeItem>()
+    /** The Home shelves last served; replaced whole, never mutated, since browse runs on IO threads. */
+    @Volatile
+    private var listHomeItem: List<HomeItem> = emptyList()
 
     override fun onConnect(
         session: MediaSession,
         controller: MediaSession.ControllerInfo,
     ): MediaSession.ConnectionResult {
         Logger.w(TAG, "onConnect: ${controller.packageName}")
-        CarConnectionState.onControllerConnected(controller.packageName)
         val sessionCommands =
             MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                 .buildUpon()
@@ -107,7 +110,6 @@ internal class SimpleMediaSessionCallback(
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.REPEAT, Bundle()))
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.RADIO, Bundle()))
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.SHUFFLE, Bundle()))
-                .add(SessionCommand(MEDIA_CUSTOM_COMMAND.SHARE, Bundle()))
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.GET_PLATFORM_TOKEN, Bundle()))
                 .build()
         return MediaSession.ConnectionResult
@@ -126,7 +128,7 @@ internal class SimpleMediaSessionCallback(
         session: MediaSession,
         controller: MediaSession.ControllerInfo,
     ) {
-        CarConnectionState.onControllerDisconnected(controller.packageName)
+        Logger.w(TAG, "onDisconnected: ${controller.packageName}")
         super.onDisconnected(session, controller)
     }
 
@@ -188,13 +190,6 @@ internal class SimpleMediaSessionCallback(
                 }
             }
 
-            MEDIA_CUSTOM_COMMAND.SHARE -> {
-                // Hosts (AA / notification) ask us to share the current track. The session
-                // itself cannot start a chooser; return success so the UI path can pick it up
-                // if a share sheet is wired later.
-                Logger.i(TAG, "Share requested for current track")
-            }
-
             MEDIA_CUSTOM_COMMAND.GET_PLATFORM_TOKEN -> {
                 return Futures.immediateFuture(
                     SessionResult(
@@ -248,25 +243,15 @@ internal class SimpleMediaSessionCallback(
         params: MediaLibraryService.LibraryParams?,
     ): ListenableFuture<LibraryResult<Void>> =
         scope.future(Dispatchers.IO) {
-            val searchResult =
-                searchRepository.getSearchDataSong(query).lastOrNull()?.let { resource ->
-                    when (resource) {
-                        is Resource.Success -> {
-                            resource.data?.let {
-                                searchTempList.clear()
-                                searchTempList.addAll(it.toListTrack())
-                            }
-                            resource.data
-                        }
-
-                        else -> {
-                            emptyList()
-                        }
-                    }
-                }
-            if (searchResult != null) {
-                session.notifySearchResultChanged(browser, query, searchResult.size, params)
-            }
+            val tracks =
+                (searchRepository.getSearchDataSong(query).lastOrNull() as? Resource.Success)
+                    ?.data
+                    ?.toListTrack()
+                    ?.filter { MusicVideoType.isPlayableSong(it.videoType) }
+                    .orEmpty()
+            searchResults[query] = tracks
+            if (searchResults.size > 8) searchResults.keys.firstOrNull { it != query }?.let(searchResults::remove)
+            session.notifySearchResultChanged(browser, query, tracks.size, params)
             LibraryResult.ofVoid()
         }
 
@@ -280,12 +265,9 @@ internal class SimpleMediaSessionCallback(
         params: MediaLibraryService.LibraryParams?,
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
         scope.future(Dispatchers.IO) {
-            LibraryResult.ofItemList(
-                searchTempList.map {
-                    it.toMediaItemWithoutPath()
-                },
-                params,
-            )
+            val tracks = searchResults[query].orEmpty()
+            val window = if (pageSize in 1 until Int.MAX_VALUE) tracks.drop(page * pageSize).take(pageSize) else tracks
+            LibraryResult.ofItemList(window.map { it.toMediaItemWithoutPath() }, params)
         }
 
     @UnstableApi
@@ -310,45 +292,43 @@ internal class SimpleMediaSessionCallback(
                     .Builder()
                     .setExtras(rootExtras)
                     .build()
-            return@future LibraryResult.ofItemList(
+            val children: List<MediaItem> =
                 when (parentId) {
+                    // Three tabs, like YouTube Music's own car root (Home | Library, plus Recent
+                    // here). Android Auto draws at most four; the old five-tab root lost one.
                     ROOT -> {
                         listOf(
                             browsableMediaItem(
                                 HOME,
                                 context.getString(R.string.home),
-                                context.getString(R.string.available_online),
+                                null,
                                 drawableUri(R.drawable.home_android_auto),
                                 MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
                             ),
                             browsableMediaItem(
-                                SONG,
-                                context.getString(R.string.songs),
+                                "$HOME/$RECENT",
+                                context.getString(R.string.recently_played),
                                 null,
                                 drawableUri(R.drawable.baseline_album_24),
                                 MediaMetadata.MEDIA_TYPE_PLAYLIST,
                             ),
                             browsableMediaItem(
-                                FAVORITE,
-                                context.getString(R.string.favorites),
-                                null,
-                                drawableUri(R.drawable.baseline_favorite_24),
-                                MediaMetadata.MEDIA_TYPE_PLAYLIST,
-                            ),
-                            browsableMediaItem(
-                                DOWNLOADED,
-                                context.getString(R.string.downloaded),
-                                null,
-                                drawableUri(R.drawable.baseline_downloaded),
-                                MediaMetadata.MEDIA_TYPE_PLAYLIST,
-                            ),
-                            browsableMediaItem(
-                                PLAYLIST,
-                                context.getString(R.string.playlists),
+                                LIBRARY,
+                                context.getString(R.string.library),
                                 null,
                                 drawableUri(R.drawable.baseline_playlist_add_24),
-                                MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS,
+                                MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
                             ),
+                        )
+                    }
+
+                    LIBRARY -> {
+                        listOf(
+                            folderRow(FAVORITE, context.getString(R.string.favorites), R.drawable.baseline_favorite_24),
+                            folderRow(DOWNLOADED, context.getString(R.string.downloaded), R.drawable.baseline_downloaded),
+                            folderRow(PLAYLIST, context.getString(R.string.playlists), R.drawable.baseline_playlist_add_24),
+                            folderRow("$HOME/$ARTIST", context.getString(R.string.your_artists), R.drawable.baseline_album_24),
+                            folderRow(SONG, context.getString(R.string.songs), R.drawable.baseline_album_24),
                         )
                     }
 
@@ -425,78 +405,34 @@ internal class SimpleMediaSessionCallback(
                                     songString = context.getString(R.string.song),
                                 ).lastOrNull()
                                 ?.data
-                        listHomeItem.clear()
-                        listHomeItem.addAll(temp?.second ?: emptyList())
-                        if (!temp?.first.isNullOrEmpty()) {
-                            var continueParam = temp.first
-                            while (continueParam != null) {
+                        val shelves = ArrayList(temp?.second ?: emptyList())
+                        // Bounded, never `while (continuation != null)`: YouTube's home feed keeps
+                        // offering continuations, and the old unbounded loop fetched every one of
+                        // them before the head unit saw a single row.
+                        var continueParam = temp?.first
+                        var pages = 0
+                        while (!continueParam.isNullOrEmpty() && pages < HOME_CONTINUATION_PAGES) {
+                            val more =
                                 homeRepository
                                     .getHomeDataContinue(
                                         continueParam,
                                         viewString = context.getString(R.string.view_count),
                                         songString = context.getString(R.string.song),
                                     ).lastOrNull()
-                                    .let {
-                                        listHomeItem.addAll(it?.data?.second ?: emptyList())
-                                        continueParam = it?.data?.first
-                                    }
-                            }
+                                    ?.data
+                            shelves.addAll(more?.second ?: emptyList())
+                            continueParam = more?.first
+                            pages++
                         }
-                        // Two locally-sourced shelves lead, because they are what the driver
-                        // reaches for most: what they were just listening to, and the artists they
-                        // follow. Everything after is YouTube's own home feed.
-                        // Each shelf borrows the artwork of its first entry, the way a folder
-                        // shows what is inside it. Without an image these render as broken tiles.
-                        val recentArtwork =
-                            songRepository
-                                .getRecentSong(1, 0)
-                                .firstOrNull()
-                                ?.thumbnails
-                                ?.asSquareArtwork()
-                                ?.toUri()
-                        val artistArtwork =
-                            artistRepository
-                                .getFollowedArtists()
-                                .first()
-                                .firstOrNull()
-                                ?.thumbnails
-                                ?.toUri()
-                        listOf(
-                            browsableMediaItem(
-                                "$HOME/$RECENT",
-                                context.getString(R.string.recently_played),
-                                null,
-                                recentArtwork,
-                                MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
-                            ),
-                            browsableMediaItem(
-                                "$HOME/$ARTIST",
-                                context.getString(R.string.your_artists),
-                                null,
-                                artistArtwork,
-                                MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS,
-                            ),
-                        ) +
-                            listHomeItem.map { shelf ->
-                                browsableMediaItem(
-                                    "$HOME/${shelf.title}",
-                                    shelf.title,
-                                    shelf.subtitle,
-                                    // contents are already parsed here, so the shelf can show
-                                    // what is in it rather than a blank tile.
-                                    shelf.thumbnail
-                                        ?.lastOrNull()
-                                        ?.url
-                                        ?.toUri()
-                                        ?: shelf.contents
-                                            .firstOrNull { c -> !c?.thumbnails.isNullOrEmpty() }
-                                            ?.thumbnails
-                                            ?.lastOrNull()
-                                            ?.url
-                                            ?.toUri(),
-                                    MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
-                                )
-                            }
+                        listHomeItem = shelves.filter { it.title.isNotBlank() }
+                        // One flat list, each shelf's items carrying the shelf title as their group
+                        // — how YouTube Music lays out its car Home. Songs play straight from it;
+                        // playlists and albums open one level down.
+                        listHomeItem.flatMap { shelf ->
+                            shelfItems(shelf)
+                                .take(HOME_ITEMS_PER_SHELF)
+                                .map { it.withGroupTitle(shelf.title) }
+                        }
                     }
 
                     "$HOME/$RECENT" -> {
@@ -558,6 +494,7 @@ internal class SimpleMediaSessionCallback(
                                         ?.data
                                         ?.tracks
                                         .orEmpty()
+                                        .filter { MusicVideoType.isPlayableSong(it.videoType) }
                                 onlinePlaylistCache[playlistId] = tracks
                                 tracks.map { track ->
                                     track
@@ -586,73 +523,12 @@ internal class SimpleMediaSessionCallback(
 
                             parentId.startsWith("$HOME/") -> {
                                 if (parentId.split("/").size == 2) {
-                                    val homeItem =
-                                        listHomeItem.find {
-                                            it.title == parentId.split("/").getOrNull(1)
-                                        }
-                                    homeItem
-                                        ?.contents
-                                        // Emptiness matters, not just nullity. The home parser
-                                        // gives an album `playlistId = null` and `videoId = ""` —
-                                        // an empty string, which is not null, so an album used to
-                                        // pass this filter and then fall into the song branch
-                                        // below. Every album in a shelf came out with the media id
-                                        // "home/<shelf>/song/", identical for all of them, and the
-                                        // head unit keys its browse items by id: ten albums
-                                        // collapsed onto one entry and every tile drew the same
-                                        // cover while the titles, read from elsewhere, still
-                                        // differed. Albums are routed by their own browseId now.
-                                        ?.filter {
-                                            !it?.playlistId.isNullOrEmpty() ||
-                                                !it?.videoId.isNullOrEmpty() ||
-                                                !it?.browseId.isNullOrEmpty()
-                                        }?.mapNotNull {
-                                            if (!it?.playlistId.isNullOrEmpty()) {
-                                                val art =
-                                                    it.thumbnails
-                                                        .lastOrNull()
-                                                        ?.url
-                                                        ?.asSquareArtwork()
-                                                browsableMediaItem(
-                                                    id = "$HOME/${homeItem.title}/$PLAYLIST/${it.playlistId}",
-                                                    title = it.title,
-                                                    subtitle = it.description,
-                                                    iconUri = art?.toUri(),
-                                                    mediaType = MediaMetadata.MEDIA_TYPE_PLAYLIST,
-                                                )
-                                            } else if (!it?.videoId.isNullOrEmpty()) {
-                                                it
-                                                    .toTrack()
-                                                    .toSongEntity()
-                                                    .toMediaItem("$HOME/${homeItem.title}/$SONG", asTile = true)
-                                            } else if (!it?.browseId.isNullOrEmpty()) {
-                                                // An album: browsable, and keyed by its own
-                                                // browseId so each tile is a distinct item.
-                                                browsableMediaItem(
-                                                    id = "$HOME/${homeItem.title}/$PLAYLIST/${it?.browseId}",
-                                                    title = it?.title.orEmpty(),
-                                                    // The artist, not album.name — the parser sets
-                                                    // that to the shelf's own title, so it read
-                                                    // "Albums for you" under every album.
-                                                    subtitle =
-                                                        it
-                                                            ?.artists
-                                                            ?.joinToString(", ") { a -> a.name }
-                                                            ?.takeIf { n -> n.isNotBlank() },
-                                                    iconUri =
-                                                        it
-                                                            ?.thumbnails
-                                                            ?.lastOrNull()
-                                                            ?.url
-                                                            ?.asSquareArtwork()
-                                                            ?.toUri(),
-                                                    mediaType = MediaMetadata.MEDIA_TYPE_ALBUM,
-                                                )
-                                            } else {
-                                                null
-                                            }
-                                        }
-                                        ?: emptyList()
+                                    // A whole shelf, from an older head-unit cache that still
+                                    // holds the previous two-level layout.
+                                    listHomeItem
+                                        .find { it.title == Uri.decode(parentId.split("/")[1]) }
+                                        ?.let { shelfItems(it) }
+                                        .orEmpty()
                                 } else {
                                     val playlistId = parentId.split("/").getOrNull(3)
                                     if (playlistId != null) {
@@ -707,10 +583,91 @@ internal class SimpleMediaSessionCallback(
                             }
                         }
                     }
-                },
-                libraryParams,
-            )
+                }
+            // Media3 hands the host's page window through; honour it instead of answering every
+            // request with the whole list (1 000 songs in one Binder transaction).
+            val paged =
+                if (pageSize in 1 until Int.MAX_VALUE) {
+                    children.drop(page * pageSize).take(pageSize)
+                } else {
+                    children
+                }
+            return@future LibraryResult.ofItemList(paged, libraryParams)
         }
+
+    /**
+     * The browse items of one Home shelf, songs-only. Songs are playable rows; playlists and
+     * albums are browsable tiles keyed by their own id.
+     *
+     * Emptiness matters, not just nullity: the home parser gives an album `playlistId = null` and
+     * `videoId = ""`. Before albums were routed by browseId every album in a shelf got the same
+     * media id, and the head unit — which keys items by id — drew one cover for all of them.
+     */
+    private fun shelfItems(shelf: HomeItem): List<MediaItem> {
+        val shelfKey = Uri.encode(shelf.title)
+        return shelf.contents.filterNotNull().mapNotNull { content ->
+            when {
+                !content.playlistId.isNullOrEmpty() ->
+                    browsableMediaItem(
+                        id = "$HOME/$shelfKey/$PLAYLIST/${content.playlistId}",
+                        title = content.title,
+                        subtitle = content.description,
+                        iconUri = content.thumbnails.lastOrNull()?.url?.asSquareArtwork()?.toUri(),
+                        mediaType = MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                    )
+
+                !content.videoId.isNullOrEmpty() ->
+                    if (MusicVideoType.isPlayableSong(content.videoType)) {
+                        content
+                            .toTrack()
+                            .toSongEntity()
+                            .toMediaItem("$HOME/$shelfKey/$SONG", asTile = true)
+                    } else {
+                        null
+                    }
+
+                !content.browseId.isNullOrEmpty() ->
+                    browsableMediaItem(
+                        id = "$HOME/$shelfKey/$PLAYLIST/${content.browseId}",
+                        title = content.title,
+                        // The artist, not album.name — the parser sets that to the shelf's title.
+                        subtitle = content.artists?.joinToString(", ") { a -> a.name }?.takeIf { n -> n.isNotBlank() },
+                        iconUri = content.thumbnails.lastOrNull()?.url?.asSquareArtwork()?.toUri(),
+                        mediaType = MediaMetadata.MEDIA_TYPE_ALBUM,
+                    )
+
+                else -> null
+            }
+        }
+    }
+
+    /** Marks [this] as part of a titled section in a flat list (Android Auto groups consecutive items). */
+    private fun MediaItem.withGroupTitle(title: String): MediaItem {
+        val extras = Bundle(mediaMetadata.extras ?: Bundle()).apply { putString(CONTENT_STYLE_GROUP_TITLE_HINT, title) }
+        return buildUpon()
+            .setMediaMetadata(mediaMetadata.buildUpon().setExtras(extras).build())
+            .build()
+    }
+
+    /** A plain list row that opens a library folder. */
+    private fun folderRow(
+        id: String,
+        title: String,
+        @DrawableRes icon: Int,
+    ) = MediaItem
+        .Builder()
+        .setMediaId(id)
+        .setMediaMetadata(
+            MediaMetadata
+                .Builder()
+                .setTitle(title)
+                .setArtworkUri(drawableUri(icon))
+                .setIsPlayable(false)
+                .setIsBrowsable(true)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
+                .setExtras(contentStyle(browsable = CONTENT_STYLE_LIST_ITEM))
+                .build(),
+        ).build()
 
     @UnstableApi
     override fun onGetItem(
@@ -805,6 +762,7 @@ internal class SimpleMediaSessionCallback(
                                 ?.data
                                 ?.tracks
                                 .orEmpty()
+                                .filter { MusicVideoType.isPlayableSong(it.videoType) }
                                 .also { onlinePlaylistCache[playlistId] = it }
                     val clicked = tracks.firstOrNull { it.videoId == songId } ?: return@future defaultResult
                     mediaPlayerHandler.setQueueData(
@@ -988,16 +946,17 @@ internal class SimpleMediaSessionCallback(
 
                 HOME -> {
                     val type = path.getOrNull(2) ?: return@future defaultResult
-                    val content = listHomeItem.find { it.title == path.getOrNull(1) }?.contents
+                    val shelfTitle = path.getOrNull(1)?.let(Uri::decode)
+                    val content = listHomeItem.find { it.title == shelfTitle }?.contents
                     if (type == SONG) {
                         val songId = path.getOrNull(3) ?: return@future defaultResult
                         val songs =
                             // isNullOrEmpty, not != null: the home parser gives albums and
                             // artists videoId = "", which is non-null and would otherwise be
                             // treated as a playable track here.
-                            content?.filter { !it?.videoId.isNullOrEmpty() }?.mapNotNull {
-                                it?.toTrack()
-                            }
+                            content
+                                ?.filter { !it?.videoId.isNullOrEmpty() && MusicVideoType.isPlayableSong(it?.videoType) }
+                                ?.mapNotNull { it?.toTrack() }
                         if (songs.isNullOrEmpty()) {
                             defaultResult
                         } else {
@@ -1225,8 +1184,17 @@ internal class SimpleMediaSessionCallback(
         const val CONTENT_STYLE_SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED"
         const val CONTENT_STYLE_BROWSABLE_HINT = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
         const val CONTENT_STYLE_PLAYABLE_HINT = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
+        const val CONTENT_STYLE_GROUP_TITLE_HINT = "android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT"
         const val CONTENT_STYLE_LIST_ITEM = 1
         const val CONTENT_STYLE_GRID_ITEM = 2
+
+        const val LIBRARY = "library"
+
+        /** Home feed continuation pages fetched per browse, on top of the first page. */
+        private const val HOME_CONTINUATION_PAGES = 2
+
+        /** Items shown per Home shelf; the rest are a scroll too far while driving. */
+        private const val HOME_ITEMS_PER_SHELF = 10
 
         /**
          * Synthetic Home shelves, prefixed so they cannot collide with a YouTube shelf that

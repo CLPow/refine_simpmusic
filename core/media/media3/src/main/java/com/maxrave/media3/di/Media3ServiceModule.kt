@@ -61,8 +61,6 @@ import com.maxrave.domain.repository.SearchRepository
 import com.maxrave.domain.repository.SongRepository
 import com.maxrave.domain.repository.StreamRepository
 import com.maxrave.logger.Logger
-import com.maxrave.media3.carapp.CarLyricsOverlay
-import com.maxrave.media3.carapp.CarLyricsSource
 import com.maxrave.media3.cast.CastHandoffManager
 import com.maxrave.media3.cast.CastStreamResolver
 import com.maxrave.media3.exoplayer.CrossfadeExoPlayerAdapter
@@ -82,7 +80,6 @@ import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import org.koin.android.ext.koin.androidApplication
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.loadKoinModules
@@ -226,26 +223,6 @@ private val mediaServiceModule =
             )
         }
 
-        // Android Auto lyrics. Bound to the adapter's own ForwardingPlayer rather than the
-        // session player: only that one carries the metadata overlay, and in the Cast build the
-        // session player is a CastPlayer that would drop it anyway.
-        //
-        // Not created at start: it is started by SimpleMediaService, so nothing here forces the
-        // player and its handler into existence before there is anything to play.
-        single<CarLyricsOverlay> {
-            CarLyricsOverlay(
-                player = (get<MediaPlayerInterface>() as CrossfadeExoPlayerAdapter).forwardingPlayer,
-                mediaPlayerHandler = get(),
-                dataStoreManager = get(),
-                source =
-                    CarLyricsSource(
-                        lyricsCanvasRepository = get(),
-                        dataStoreManager = get(),
-                    ),
-                scope = get(named(SERVICE_SCOPE)),
-            )
-        }
-
         single<CacheRepository>(createdAtStart = true) {
             CacheRepositoryImpl(
                 playerCache = get(named(PLAYER_CACHE)),
@@ -266,41 +243,23 @@ private fun provideResolvingDataSourceFactory(
 ): DataSource.Factory {
     val chunkLength = 10 * 512 * 1024L
     return ResolvingDataSource.Factory(cacheDataSourceFactory) { dataSpec ->
-        val mediaId = dataSpec.key ?: error("No media id")
-        Logger.w("Stream", mediaId)
-        Logger.w("Stream", mediaId.startsWith(MERGING_DATA_TYPE.VIDEO).toString())
+        // Songs only: a legacy VIDEO-prefixed id (a queue restored from an older build) resolves
+        // to the same recording's audio.
+        val mediaId = (dataSpec.key ?: error("No media id")).removePrefix(MERGING_DATA_TYPE.VIDEO)
         if (downloadCache.isFullyCached(mediaId, dataSpec.position)) {
             // Only on the first chunk: the subrange below makes the resolver run once per
             // chunk, and updateFormat is a fire-and-forget youTube.player() call with no
             // in-flight dedup, so leaving it ungated would fan out one request per 5 MiB.
             if (dataSpec.position == 0L) {
-                coroutineScope.launch(Dispatchers.IO) {
-                    streamRepository.updateFormat(
-                        if (mediaId.contains(MERGING_DATA_TYPE.VIDEO)) {
-                            mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO)
-                        } else {
-                            mediaId
-                        },
-                    )
-                }
+                coroutineScope.launch(Dispatchers.IO) { streamRepository.updateFormat(mediaId) }
             }
-            Logger.w("Stream", "Downloaded $mediaId")
             return@Factory dataSpec.subrange(dataSpec.uriPositionOffset, chunkLength)
         }
         if (playerCache.isFullyCached(mediaId, dataSpec.position)) {
             // See the note above: once per track, not once per chunk.
             if (dataSpec.position == 0L) {
-                coroutineScope.launch(Dispatchers.IO) {
-                    streamRepository.updateFormat(
-                        if (mediaId.contains(MERGING_DATA_TYPE.VIDEO)) {
-                            mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO)
-                        } else {
-                            mediaId
-                        },
-                    )
-                }
+                coroutineScope.launch(Dispatchers.IO) { streamRepository.updateFormat(mediaId) }
             }
-            Logger.w("Stream", "Cached $mediaId")
             // Every byte is on disk right now, so CacheDataSource can serve this chunk
             // without ever reaching upstream, and the bare media id is safe as the URI.
             //
@@ -319,65 +278,30 @@ private fun provideResolvingDataSourceFactory(
         }
         var dataSpecReturn: DataSpec = dataSpec
         var resolved = false
+        // Runs on ExoPlayer's loader thread, never Main, so blocking here is the intended shape.
         runBlocking(Dispatchers.IO) {
-            if (mediaId.contains(MERGING_DATA_TYPE.VIDEO)) {
-                val id = mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO)
-                streamRepository.getNewFormat(id).lastOrNull()?.let {
-                    val videoUrl = it.videoUrl
-                    if (videoUrl != null && it.expiredTime > now()) {
-                        Logger.d("Stream", videoUrl)
-                        Logger.w("Stream", "Video from format")
-                        val is403Url = streamRepository.is403Url(videoUrl).firstOrNull() != false
-                        Logger.d("Stream", "is 403 $is403Url")
-                        if (!is403Url) {
-                            dataSpecReturn = dataSpec.withUri(videoUrl.toUri()).subrange(dataSpec.uriPositionOffset, chunkLength)
-                            resolved = true
-                            return@runBlocking
-                        }
+            streamRepository.getNewFormat(mediaId).lastOrNull()?.let {
+                val audioUrl = it.audioUrl
+                if (audioUrl != null && it.expiredTime > now()) {
+                    val is403Url = streamRepository.is403Url(audioUrl).firstOrNull() != false
+                    if (!is403Url) {
+                        dataSpecReturn = dataSpec.withUri(audioUrl.toUri()).subrange(dataSpec.uriPositionOffset, chunkLength)
+                        resolved = true
+                        return@runBlocking
                     }
                 }
-                streamRepository
-                    .getStream(
-                        dataStoreManager,
-                        id,
-                        isDownloading = false,
-                        isVideo = true,
-                    ).lastOrNull()
-                    ?.let {
-                        Logger.d("Stream", it)
-                        Logger.w("Stream", "Video")
-                        dataSpecReturn = dataSpec.withUri(it.toUri()).subrange(dataSpec.uriPositionOffset, chunkLength)
-                        resolved = true
-                    }
-            } else {
-                streamRepository.getNewFormat(mediaId).lastOrNull()?.let {
-                    val audioUrl = it.audioUrl
-                    if (audioUrl != null && it.expiredTime > now()) {
-                        Logger.d("Stream", audioUrl)
-                        Logger.w("Stream", "Audio from format")
-                        val is403Url = streamRepository.is403Url(audioUrl).firstOrNull() != false
-                        Logger.d("Stream", "is 403 $is403Url")
-                        if (!is403Url) {
-                            dataSpecReturn = dataSpec.withUri(audioUrl.toUri()).subrange(dataSpec.uriPositionOffset, chunkLength)
-                            resolved = true
-                            return@runBlocking
-                        }
-                    }
-                }
-                streamRepository
-                    .getStream(
-                        dataStoreManager,
-                        mediaId,
-                        isDownloading = false,
-                        isVideo = false,
-                    ).lastOrNull()
-                    ?.let {
-                        Logger.d("Stream", it)
-                        Logger.w("Stream", "Audio")
-                        dataSpecReturn = dataSpec.withUri(it.toUri()).subrange(dataSpec.uriPositionOffset, chunkLength)
-                        resolved = true
-                    }
             }
+            streamRepository
+                .getStream(
+                    dataStoreManager,
+                    mediaId,
+                    isDownloading = false,
+                    isVideo = false,
+                ).lastOrNull()
+                ?.let {
+                    dataSpecReturn = dataSpec.withUri(it.toUri()).subrange(dataSpec.uriPositionOffset, chunkLength)
+                    resolved = true
+                }
         }
         if (!resolved) {
             Logger.e("Stream", "Failed to resolve stream URL for $mediaId")
@@ -458,7 +382,6 @@ private fun provideMergingMediaSource(
             dataStoreManager,
             coroutineScope,
         ),
-        dataStoreManager,
     )
 
 @UnstableApi
@@ -513,11 +436,6 @@ private fun provideCacheDataSource(
                                     .readTimeout(30.seconds)
                                     .proxy(
                                         proxy,
-                                    ).addInterceptor(
-                                        HttpLoggingInterceptor()
-                                            .apply {
-                                                level = HttpLoggingInterceptor.Level.HEADERS
-                                            },
                                     ).build(),
                             ),
                         ),

@@ -125,6 +125,8 @@ import com.maxrave.simpmusic.ui.component.rememberHolderPainter
 import com.maxrave.simpmusic.ui.icon.Groups
 import com.maxrave.simpmusic.ui.icon.History
 import com.maxrave.simpmusic.ui.icon.Notifications
+import com.maxrave.simpmusic.ui.icon.Search
+import com.maxrave.simpmusic.ui.navigation.destination.search.SearchDestination
 import com.maxrave.simpmusic.ui.icon.Settings
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.navigation.destination.home.HomeDestination
@@ -908,11 +910,13 @@ fun HomeTopAppBar(navController: NavController) {
             }
         },
         actions = {
+            // Search sits in the top bar, as in YouTube Music; the Explore tab holds moods, genres
+            // and charts. History moved to Library, where the rest of the user's own music lives.
+            RippleIconButton(imageVector = SimpIcons.Search, tint = MaterialTheme.colorScheme.onBackground) {
+                navController.navigate(SearchDestination)
+            }
             RippleIconButton(imageVector = SimpIcons.Notifications, tint = MaterialTheme.colorScheme.onBackground) {
                 navController.navigate(NotificationDestination)
-            }
-            RippleIconButton(imageVector = SimpIcons.History, tint = MaterialTheme.colorScheme.onBackground) {
-                navController.navigate(RecentlySongsDestination)
             }
             // Fourth button, immediately before Settings — the position the design canvas fixes.
             ListenTogetherIconButton { navController.navigate(ListenTogetherDestination) }

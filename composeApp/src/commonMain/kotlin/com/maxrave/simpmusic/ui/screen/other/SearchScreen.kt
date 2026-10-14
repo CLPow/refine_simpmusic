@@ -1100,7 +1100,8 @@ fun SearchScreen(
                                 .padding(top = 10.dp)
                                 .padding(horizontal = 12.dp),
                     ) {
-                        SearchType.entries.forEach { id ->
+                        // Songs only: no Videos or Podcasts filter.
+                        SearchType.entries.filter { it != SearchType.VIDEOS && it != SearchType.PODCASTS }.forEach { id ->
                             val isSelected = id == searchScreenState.searchType
                             Spacer(modifier = Modifier.width(4.dp))
                             Chip(

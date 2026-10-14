@@ -1,5 +1,6 @@
 package com.maxrave.kotlinytmusicscraper.models
 
+import com.maxrave.domain.utils.MusicVideoType
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -14,6 +15,15 @@ data class PlaylistPanelRenderer(
     val playlistId: String? = null,
     val continuations: List<Continuation>?,
 ) {
+    /**
+     * Maps YouTube's [currentIndex] (a position in [contents]) to the position the same row has once
+     * rows without a song rendition are dropped. Null when the current row itself was dropped.
+     */
+    fun songIndexOf(index: Int?): Int? {
+        if (index == null || contents.getOrNull(index)?.songTrack == null) return null
+        return contents.take(index).count { it.songTrack != null }
+    }
+
     @Serializable
     data class Content(
         val playlistPanelVideoWrapperRenderer: PlaylistPanelWrapperVideoRenderer?,
@@ -36,6 +46,14 @@ data class PlaylistPanelRenderer(
             get() = playlistPanelVideoWrapperRenderer
                 ?.counterpart
                 ?.firstNotNullOfOrNull { it.counterpartRenderer?.playlistPanelVideoRenderer }
+
+        /**
+         * The rendition Refine plays: the audio one, whichever side of the wrapper it is on.
+         * Null when the row has no song rendition at all (a fan video, a live stream, a podcast
+         * episode), which drops it from the queue.
+         */
+        val songTrack: PlaylistPanelVideoRenderer?
+            get() = MusicVideoType.preferSong(track, counterpartTrack) { it.musicVideoType }
 
         /**
          * A queue row that exists in more than one rendition.

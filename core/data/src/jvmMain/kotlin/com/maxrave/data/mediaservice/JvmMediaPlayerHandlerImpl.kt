@@ -236,7 +236,7 @@ class JvmMediaPlayerHandlerImpl(
 
     private var normalizeVolume = false
 
-    private var watchTimeList: ArrayList<Float> = arrayListOf()
+    private val playbackReporter = PlaybackReporter(streamRepository, dataStoreManager, coroutineScope)
 
     private var volumeNormalizationJob: Job? = null
 
@@ -274,7 +274,6 @@ class JvmMediaPlayerHandlerImpl(
 
     private var songEntityJob: Job? = null
 
-    private var jobWatchtime: Job? = null
 
     private var getDataOfNowPlayingTrackStateJob: Job? = null
 
@@ -332,7 +331,6 @@ class JvmMediaPlayerHandlerImpl(
         songEntityJob = Job()
         getSkipSegmentsJob = Job()
         getFormatJob = Job()
-        jobWatchtime = Job()
         skipSilent = runBlocking { dataStoreManager.skipSilent.first() == TRUE }
         // Collected rather than read once like the settings around it: the equalizer is adjusted
         // while music is playing, and a curve that only takes effect after a restart is useless
@@ -460,25 +458,6 @@ class JvmMediaPlayerHandlerImpl(
                             }
                         }
                 }
-            val playbackJob =
-                launch {
-                    format.collectLatest { formatTemp ->
-                        if (dataStoreManager.sendBackToGoogle.first() == TRUE) {
-                            if (formatTemp != null) {
-                                println("format in viewModel: $formatTemp")
-                                Logger.d(TAG, "Collect format ${formatTemp.videoId}")
-                                Logger.w(TAG, "Format expire at ${formatTemp.expiredTime}")
-                                Logger.i(TAG, "AtrUrl ${formatTemp.playbackTrackingAtrUrl}")
-                                initPlayback(
-                                    formatTemp.playbackTrackingVideostatsPlaybackUrl,
-                                    formatTemp.playbackTrackingAtrUrl,
-                                    formatTemp.playbackTrackingVideostatsWatchtimeUrl,
-                                    formatTemp.cpn,
-                                )
-                            }
-                        }
-                    }
-                }
             val playbackSpeedPitchJob =
                 launch {
                     combine(dataStoreManager.playbackSpeed, dataStoreManager.pitch) { speed, pitch ->
@@ -566,7 +545,6 @@ class JvmMediaPlayerHandlerImpl(
                 }
             controlStateJob.join()
             skipSegmentsJob.join()
-            playbackJob.join()
             playbackSpeedPitchJob.join()
             discordRPCEnabledJob.join()
         }
@@ -590,6 +568,13 @@ class JvmMediaPlayerHandlerImpl(
         }
         _format.value = null
         _skipSegments.value = null
+        playbackReporter.start(
+            videoId = videoId,
+            playlistId = queueData.value.data.playlistId,
+            positionMs = { player.currentPosition },
+            durationMs = { player.duration },
+            isPlaying = { player.isPlaying },
+        )
         getDataOfNowPlayingTrackStateJob?.cancel()
         getDataOfNowPlayingTrackStateJob =
             coroutineScope.launch {
@@ -701,9 +686,7 @@ class JvmMediaPlayerHandlerImpl(
                 if (dataStoreManager.sponsorBlockEnabled.first() == TRUE) {
                     getSkipSegments(videoId)
                 }
-                if (dataStoreManager.sendBackToGoogle.first() == TRUE) {
-                    getFormat(videoId)
-                }
+                getFormat(videoId)
             }
     }
 
@@ -742,83 +725,6 @@ class JvmMediaPlayerHandlerImpl(
             }
     }
 
-    private fun initPlayback(
-        playback: String?,
-        atr: String?,
-        watchTime: String?,
-        cpn: String?,
-    ) {
-        jobWatchtime?.cancel()
-        coroutineScope.launch {
-            if (playback != null && atr != null && watchTime != null && cpn != null) {
-                watchTimeList = arrayListOf()
-                streamRepository
-                    .initPlayback(playback, atr, watchTime, cpn, queueData.value.data.playlistId)
-                    .collect {
-                        if (it.first == 204) {
-                            Logger.d("Check initPlayback", "Success")
-                            watchTimeList.add(0f)
-                            watchTimeList.add(5.54f)
-                            watchTimeList.add(it.second)
-                            updateWatchTime()
-                        }
-                    }
-            }
-        }
-    }
-
-    private fun updateWatchTime() {
-        coroutineScope.launch {
-            jobWatchtime =
-                launch {
-                    simpleMediaState.collect { state ->
-                        if (state is SimpleMediaState.Progress) {
-                            val value = state.progress
-                            if (value > 0 && watchTimeList.isNotEmpty()) {
-                                val second = (value / 1000).toFloat()
-                                if (second in watchTimeList.last()..watchTimeList.last() + 1.2f) {
-                                    val watchTimeUrl =
-                                        _format.value?.playbackTrackingVideostatsWatchtimeUrl
-                                    val cpn = _format.value?.cpn
-                                    if (second + 20.23f < (player.duration / 1000).toFloat()) {
-                                        watchTimeList.add(second + 20.23f)
-                                        if (watchTimeUrl != null && cpn != null) {
-                                            streamRepository
-                                                .updateWatchTime(
-                                                    watchTimeUrl,
-                                                    watchTimeList,
-                                                    cpn,
-                                                    queueData.value.data.playlistId,
-                                                ).collect { response ->
-                                                    if (response == 204) {
-                                                        Logger.d("Check updateWatchTime", "Success")
-                                                    }
-                                                }
-                                        }
-                                    } else {
-                                        watchTimeList.clear()
-                                        if (watchTimeUrl != null && cpn != null) {
-                                            streamRepository
-                                                .updateWatchTimeFull(
-                                                    watchTimeUrl,
-                                                    cpn,
-                                                    queueData.value.data.playlistId,
-                                                ).collect { response ->
-                                                    if (response == 204) {
-                                                        Logger.d("Check updateWatchTimeFull", "Success")
-                                                    }
-                                                }
-                                        }
-                                    }
-                                    Logger.w("Check updateWatchTime", watchTimeList.toString())
-                                }
-                            }
-                        }
-                    }
-                }
-            jobWatchtime?.join()
-        }
-    }
 
     private fun updateNextPreviousTrackAvailability() {
         _controlState.value =
@@ -1810,7 +1716,7 @@ class JvmMediaPlayerHandlerImpl(
                                             artist = songInfo.author ?: "",
                                             albumTitle = track.album?.name,
                                             artworkUri = thumbUrl,
-                                            description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                            description = MERGING_DATA_TYPE.SONG,
                                         ),
                                     customCacheKey = track.videoId,
                                 ),
@@ -1826,7 +1732,7 @@ class JvmMediaPlayerHandlerImpl(
                                             artist = "Various Artists",
                                             albumTitle = track.album?.name,
                                             artworkUri = thumbUrl,
-                                            description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                            description = MERGING_DATA_TYPE.SONG,
                                         ),
                                     customCacheKey = track.videoId,
                                 )
@@ -1849,7 +1755,7 @@ class JvmMediaPlayerHandlerImpl(
                                 artist = artistName,
                                 albumTitle = track.album?.name,
                                 artworkUri = thumbUrl,
-                                description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                description = MERGING_DATA_TYPE.SONG,
                             ),
                         customCacheKey = track.videoId,
                     ),
@@ -1939,7 +1845,7 @@ class JvmMediaPlayerHandlerImpl(
                                                 artist = songInfo.author ?: "",
                                                 albumTitle = track.album?.name,
                                                 artworkUri = thumbUrl,
-                                                description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                                description = MERGING_DATA_TYPE.SONG,
                                             ),
                                         customCacheKey = track.videoId,
                                     )
@@ -1966,7 +1872,7 @@ class JvmMediaPlayerHandlerImpl(
                                                 artist = "Various Artists",
                                                 albumTitle = track.album?.name,
                                                 artworkUri = thumbUrl,
-                                                description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                                description = MERGING_DATA_TYPE.SONG,
                                             ),
                                         customCacheKey = track.videoId,
                                     )
@@ -1989,7 +1895,7 @@ class JvmMediaPlayerHandlerImpl(
                                         artist = track.artists.toListName().connectArtists(),
                                         albumTitle = track.album?.name,
                                         artworkUri = thumbUrl,
-                                        description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                        description = MERGING_DATA_TYPE.SONG,
                                     ),
                                 customCacheKey = track.videoId,
                             )
@@ -2027,7 +1933,7 @@ class JvmMediaPlayerHandlerImpl(
                                                     artist = songInfo.author ?: "",
                                                     albumTitle = track.album?.name,
                                                     artworkUri = thumbUrl,
-                                                    description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                                    description = MERGING_DATA_TYPE.SONG,
                                                 ),
                                             customCacheKey = track.videoId,
                                         ),
@@ -2043,7 +1949,7 @@ class JvmMediaPlayerHandlerImpl(
                                                     artist = "Various Artists",
                                                     albumTitle = track.album?.name,
                                                     artworkUri = thumbUrl,
-                                                    description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                                    description = MERGING_DATA_TYPE.SONG,
                                                 ),
                                             customCacheKey = track.videoId,
                                         )
@@ -2066,7 +1972,7 @@ class JvmMediaPlayerHandlerImpl(
                                         artist = artistName,
                                         albumTitle = track.album?.name,
                                         artworkUri = thumbUrl,
-                                        description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                        description = MERGING_DATA_TYPE.SONG,
                                     ),
                                 customCacheKey = track.videoId,
                             ),
@@ -2167,7 +2073,7 @@ class JvmMediaPlayerHandlerImpl(
                                         artist = songInfo.author ?: "",
                                         albumTitle = track.album?.name,
                                         artworkUri = thumbUrl,
-                                        description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                        description = MERGING_DATA_TYPE.SONG,
                                     ),
                                 customCacheKey = track.videoId,
                             ),
@@ -2184,7 +2090,7 @@ class JvmMediaPlayerHandlerImpl(
                                         artist = "Various Artists",
                                         albumTitle = track.album?.name,
                                         artworkUri = thumbUrl,
-                                        description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                        description = MERGING_DATA_TYPE.SONG,
                                     ),
                                 customCacheKey = track.videoId,
                             )
@@ -2208,7 +2114,7 @@ class JvmMediaPlayerHandlerImpl(
                                 artist = artistName,
                                 albumTitle = track.album?.name,
                                 artworkUri = thumbUrl,
-                                description = if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
+                                description = MERGING_DATA_TYPE.SONG,
                             ),
                         customCacheKey = track.videoId,
                     ),
@@ -2487,8 +2393,7 @@ class JvmMediaPlayerHandlerImpl(
             getSkipSegmentsJob = null
             getFormatJob?.cancel()
             getFormatJob = null
-            jobWatchtime?.cancel()
-            jobWatchtime = null
+            playbackReporter.stop()
             getDataOfNowPlayingTrackStateJob?.cancel()
             getDataOfNowPlayingTrackStateJob = null
             rpcSenderJob?.cancel()

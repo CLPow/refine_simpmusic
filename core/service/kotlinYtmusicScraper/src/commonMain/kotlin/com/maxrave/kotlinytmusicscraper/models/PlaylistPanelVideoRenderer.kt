@@ -16,4 +16,11 @@ data class PlaylistPanelVideoRenderer(
     val unplayableText: Runs?,
     val menu: Menu?,
     val navigationEndpoint: NavigationEndpoint,
-)
+) {
+    val musicVideoType: String?
+        get() =
+            navigationEndpoint.watchEndpoint
+                ?.watchEndpointMusicSupportedConfigs
+                ?.watchEndpointMusicConfig
+                ?.musicVideoType
+}

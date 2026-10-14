@@ -16,6 +16,7 @@ import com.maxrave.domain.data.model.searchResult.playlists.PlaylistsResult
 import com.maxrave.domain.data.model.searchResult.songs.SongsResult
 import com.maxrave.domain.data.model.searchResult.videos.VideosResult
 import com.maxrave.domain.repository.SearchRepository
+import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.domain.utils.Resource
 import com.maxrave.kotlinytmusicscraper.YouTube
 import com.maxrave.logger.Logger
@@ -46,38 +47,26 @@ internal class SearchRepositoryImpl(
 
     override fun getSearchDataSong(query: String): Flow<Resource<ArrayList<SongsResult>>> =
         flow {
-            runCatching {
-                youTube
-                    .search(query, YouTube.SearchFilter.FILTER_SONG)
-                    .onSuccess { result ->
-                        val listSongs: ArrayList<SongsResult> = arrayListOf()
-                        var countinueParam = result.continuation
-                        parseSearchSong(result).let { list ->
-                            listSongs.addAll(list)
-                        }
-                        var count = 0
-                        while (count < 2 && countinueParam != null) {
-                            youTube
-                                .searchContinuation(countinueParam)
-                                .onSuccess { values ->
-                                    parseSearchSong(values).let { list ->
-                                        listSongs.addAll(list)
-                                    }
-                                    count++
-                                    countinueParam = values.continuation
-                                }.onFailure {
-                                    Logger.e("Continue", "Error: ${it.message}")
-                                    countinueParam = null
-                                    count++
-                                }
-                        }
-
-                        emit(Resource.Success<ArrayList<SongsResult>>(listSongs))
-                    }.onFailure { e ->
-                        Logger.d("Search", "Error: ${e.message}")
-                        emit(Resource.Error<ArrayList<SongsResult>>(e.message.toString()))
-                    }
+            val first = youTube.search(query, YouTube.SearchFilter.FILTER_SONG)
+            val result = first.getOrNull()
+            if (result == null) {
+                Logger.d("Search", "Error: ${first.exceptionOrNull()?.message}")
+                emit(Resource.Error<ArrayList<SongsResult>>(first.exceptionOrNull()?.message.toString()))
+                return@flow
             }
+            val listSongs: ArrayList<SongsResult> = arrayListOf()
+            listSongs.addAll(parseSearchSong(result))
+            var continueParam = result.continuation
+            var count = 0
+            while (count < 2 && continueParam != null) {
+                val values = youTube.searchContinuation(continueParam).getOrNull()
+                if (values != null) listSongs.addAll(parseSearchSong(values))
+                continueParam = values?.continuation
+                count++
+            }
+            // The Songs filter is already audio, but YouTube slips the odd video row into it.
+            listSongs.retainAll { MusicVideoType.isPlayableSong(it.videoType) }
+            emit(Resource.Success<ArrayList<SongsResult>>(listSongs))
         }.flowOn(Dispatchers.IO)
 
     override fun getSearchDataVideo(query: String): Flow<Resource<ArrayList<VideosResult>>> =

@@ -11,6 +11,7 @@ import com.maxrave.simpmusic.ui.navigation.destination.home.ListenTogetherSettin
 import com.maxrave.simpmusic.ui.navigation.destination.home.MoodDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.NotificationDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.RecentlySongsDestination
+import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsCategoryDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsDestination
 import com.maxrave.simpmusic.ui.screen.home.ListenTogetherScreen
 import com.maxrave.simpmusic.ui.screen.home.ListenTogetherSettingsScreen
@@ -18,6 +19,8 @@ import com.maxrave.simpmusic.ui.screen.home.MoodScreen
 import com.maxrave.simpmusic.ui.screen.home.NotificationScreen
 import com.maxrave.simpmusic.ui.screen.home.RecentlySongsScreen
 import com.maxrave.simpmusic.ui.screen.home.SettingScreen
+import com.maxrave.simpmusic.ui.screen.home.SettingsCategory
+import com.maxrave.simpmusic.ui.screen.home.SettingsHomeScreen
 import com.maxrave.simpmusic.ui.screen.other.CreditScreen
 
 fun NavGraphBuilder.homeScreenGraph(
@@ -61,9 +64,16 @@ fun NavGraphBuilder.homeScreenGraph(
         )
     }
     composable<SettingsDestination> {
+        SettingsHomeScreen(
+            navController = navController,
+            innerPadding = innerPadding,
+        )
+    }
+    composable<SettingsCategoryDestination> { entry ->
         SettingScreen(
             navController = navController,
             innerPadding = innerPadding,
+            category = SettingsCategory.fromKey(entry.toRoute<SettingsCategoryDestination>().category),
         )
     }
 }

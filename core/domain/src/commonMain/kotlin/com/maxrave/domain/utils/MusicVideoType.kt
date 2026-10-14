@@ -48,5 +48,51 @@ object MusicVideoType {
     /** Podcast episodes carry their own variants, e.g. `MUSIC_VIDEO_TYPE_PODCAST_EPISODE`. */
     fun isPodcast(musicVideoType: String?): Boolean = normalize(musicVideoType)?.contains("PODCAST") == true
 
+    /**
+     * The songs-only policy: may this item be shown or played at all?
+     *
+     * Refine plays music, not videos. YouTube Music's own client splits its types the same way:
+     * [AUDIO_TYPES] are recordings; `OMV` (an official music video, which normally has an `ATV`
+     * counterpart to swap to), `UGC`, `SHOULDER`, `LIVE_STREAM` and podcast episodes are not.
+     *
+     * An unknown type is allowed through. Many surfaces (library rows written before the type was
+     * parsed, local playlists, imports) carry no type at all; dropping them would empty the
+     * user's own library. Playback is audio-only regardless, so a mislabelled video still only
+     * ever plays as sound.
+     */
+    fun isPlayableSong(musicVideoType: String?): Boolean {
+        val type = normalize(musicVideoType) ?: return true
+        return type in AUDIO_TYPES
+    }
+
+    /** `OMV`: the official video of a recording, whose counterpart is that recording's audio. */
+    fun isOfficialVideo(musicVideoType: String?): Boolean = normalize(musicVideoType) == MUSIC_VIDEO_TYPE_OMV
+
+    /**
+     * Picks the rendition to keep from a queue row that may ship both (`playlistPanelVideoWrapperRenderer`
+     * carries the primary and its `counterpart`). The audio one wins; a row with no playable
+     * rendition yields null and is dropped by the caller.
+     */
+    fun <T> preferSong(
+        primary: T?,
+        counterpart: T?,
+        typeOf: (T) -> String?,
+    ): T? =
+        when {
+            primary != null && isPlayableSong(typeOf(primary)) -> primary
+            counterpart != null && isPlayableSong(typeOf(counterpart)) -> counterpart
+            else -> null
+        }
+
     private const val PREFIX = "MUSIC_VIDEO_TYPE_"
+    private const val MUSIC_VIDEO_TYPE_OMV = "MUSIC_VIDEO_TYPE_OMV"
+
+    /** Every type YouTube Music treats as an audio recording rather than a video. */
+    val AUDIO_TYPES =
+        setOf(
+            MUSIC_VIDEO_TYPE_ATV,
+            "MUSIC_VIDEO_TYPE_GATV",
+            "MUSIC_VIDEO_TYPE_OFFICIAL_SOURCE_MUSIC",
+            "MUSIC_VIDEO_TYPE_PRIVATELY_OWNED_TRACK",
+        )
 }

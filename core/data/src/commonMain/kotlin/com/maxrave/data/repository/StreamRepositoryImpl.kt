@@ -10,11 +10,13 @@ import com.maxrave.data.mapping.toTrack
 import com.maxrave.domain.data.entities.NewFormatEntity
 import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.data.model.mediaService.SponsorSkipSegments
+import com.maxrave.domain.extension.isAfter
 import com.maxrave.domain.extension.isBefore
 import com.maxrave.domain.extension.now
 import com.maxrave.domain.extension.plusSeconds
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.repository.PlaybackPingStatus
+import com.maxrave.domain.repository.PlaybackTracking
 import com.maxrave.domain.repository.StreamRepository
 import com.maxrave.domain.utils.Resource
 import com.maxrave.kotlinytmusicscraper.YouTube
@@ -82,11 +84,51 @@ internal class StreamRepositoryImpl(
             localDataSource.insertNewFormat(newFormat)
         }
 
-    override fun getNewFormat(videoId: String): Flow<NewFormatEntity?> = flow { emit(localDataSource.getNewFormat(videoId)) }.flowOn(Dispatchers.Main)
+    // IO, never Main: the stream resolver blocks ExoPlayer's loader thread on this, and a read
+    // dispatched to Main tied every track start to whatever the UI thread was doing.
+    override fun getNewFormat(videoId: String): Flow<NewFormatEntity?> = flow { emit(localDataSource.getNewFormat(videoId)) }.flowOn(Dispatchers.IO)
 
     override suspend fun getFormatFlow(videoId: String) = localDataSource.getNewFormatAsFlow(videoId)
 
     override fun getExtractSource(videoId: String): String? = youTube.getExtractSource(videoId)
+
+    override suspend fun getPlaybackTracking(videoId: String): PlaybackTracking? =
+        withContext(Dispatchers.IO) {
+            val stored = localDataSource.getNewFormat(videoId)
+            if (stored != null && stored.expiredTime.isAfter(now())) {
+                val playback = stored.playbackTrackingVideostatsPlaybackUrl
+                val atr = stored.playbackTrackingAtrUrl
+                val watchtime = stored.playbackTrackingVideostatsWatchtimeUrl
+                val cpn = stored.cpn
+                if (playback != null && atr != null && watchtime != null && cpn != null) {
+                    return@withContext PlaybackTracking(playback, atr, watchtime, cpn)
+                }
+            }
+            // Downloaded and fully-cached tracks never ran a player request, so they carry no
+            // tracking URLs and used to be silently skipped — the listen never reached the account.
+            val triple = youTube.player(videoId).getOrNull() ?: return@withContext null
+            val cpn = triple.first ?: return@withContext null
+            val response = triple.second
+            val tracking = response.playbackTracking
+            val playback = tracking?.videostatsPlaybackUrl?.baseUrl?.toMusicHost()
+            val atr = tracking?.atrUrl?.baseUrl?.toMusicHost()
+            val watchtime = tracking?.videostatsWatchtimeUrl?.baseUrl?.toMusicHost()
+            if (playback == null || atr == null || watchtime == null) return@withContext null
+            stored?.let {
+                localDataSource.updateNewFormat(
+                    it.copy(
+                        expiredTime = now().plusSeconds(response.streamingData?.expiresInSeconds?.toLong() ?: 0L),
+                        playbackTrackingVideostatsPlaybackUrl = playback,
+                        playbackTrackingAtrUrl = atr,
+                        playbackTrackingVideostatsWatchtimeUrl = watchtime,
+                        cpn = cpn,
+                    ),
+                )
+            }
+            PlaybackTracking(playback, atr, watchtime, cpn)
+        }
+
+    private fun String.toMusicHost() = replace("https://s.youtube.com", "https://music.youtube.com")
 
     override suspend fun updateFormat(videoId: String) {
         localDataSource.getNewFormat(videoId)?.let { oldFormat ->
@@ -404,16 +446,9 @@ internal class StreamRepositoryImpl(
         playlistId: String?,
     ): Flow<Int> =
         flow {
-            runCatching {
-                youTube
-                    .updateWatchTimeFull(watchTime, cpn, playlistId)
-                    .onSuccess { response ->
-                        emit(response)
-                    }.onFailure {
-                        it.printStackTrace()
-                        emit(0)
-                    }
-            }
+            val code = youTube.updateWatchTimeFull(watchTime, cpn, playlistId).getOrDefault(0)
+            recordPing("watchtimeFull", code)
+            emit(code)
         }.flowOn(Dispatchers.IO)
 
     override fun updateWatchTime(
@@ -423,20 +458,9 @@ internal class StreamRepositoryImpl(
         playlistId: String?,
     ): Flow<Int> =
         flow {
-            runCatching {
-                youTube
-                    .updateWatchTime(
-                        playbackTrackingVideostatsWatchtimeUrl,
-                        watchTimeList,
-                        cpn,
-                        playlistId,
-                    ).onSuccess { response ->
-                        emit(response)
-                    }.onFailure {
-                        it.printStackTrace()
-                        emit(0)
-                    }
-            }
+            val code = youTube.updateWatchTime(playbackTrackingVideostatsWatchtimeUrl, watchTimeList, cpn, playlistId).getOrDefault(0)
+            recordPing("watchtime", code)
+            emit(code)
         }.flowOn(Dispatchers.IO)
 
     override fun getSkipSegments(videoId: String): Flow<Resource<List<SponsorSkipSegments>>> =

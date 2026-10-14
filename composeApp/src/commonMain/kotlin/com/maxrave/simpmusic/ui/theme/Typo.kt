@@ -4,6 +4,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -38,8 +39,23 @@ fun typo(
     // Titles were pure white, everything else muted gray (#A8A8A8) in the old dark-only palette.
     // forceDark keeps that; otherwise both come from the scheme (theme-aware light/dark).
     val titleColor = if (forceDark) Color.White else colorScheme.onBackground
-    val bodyColor = if (forceDark) Color(0xFFA8A8A8) else colorScheme.onSurfaceVariant
+    val bodyColor = if (forceDark) Color(0xFFAAAAAA) else colorScheme.onSurfaceVariant
 
+    // Remembered: this is called from ~600 places, and building a Typography (eleven TextStyles)
+    // on every recomposition of every one of them was measurable on the progress tick.
+    return remember(fontFamily, titleColor, bodyColor) { buildTypography(fontFamily, titleColor, bodyColor) }
+}
+
+/**
+ * Refine's type ramp. Sizes follow YouTube Music's density: 12sp is the floor for any text
+ * (the old 11sp captions were below Android's own minimum for body copy), 14sp for row titles,
+ * 22-28sp bold for screen and section headings.
+ */
+private fun buildTypography(
+    fontFamily: FontFamily,
+    titleColor: Color,
+    bodyColor: Color,
+): Typography {
     val typo =
         Typography(
             /***
@@ -47,7 +63,7 @@ fun typo(
              */
             titleSmall =
                 TextStyle(
-                    fontSize = 13.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     fontFamily = fontFamily,
                     color = titleColor,
@@ -68,7 +84,7 @@ fun typo(
                 ),
             bodySmall =
                 TextStyle(
-                    fontSize = 11.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Normal,
                     fontFamily = fontFamily,
                     color = bodyColor,

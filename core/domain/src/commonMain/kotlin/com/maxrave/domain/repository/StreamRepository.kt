@@ -20,6 +20,14 @@ data class PlaybackPingStatus(
     val accepted: Boolean get() = code in 200..299
 }
 
+/** The three tracking endpoints of one playback, and the client playback nonce they belong to. */
+data class PlaybackTracking(
+    val playbackUrl: String,
+    val atrUrl: String,
+    val watchtimeUrl: String,
+    val cpn: String,
+)
+
 interface StreamRepository {
     /**
      * Milliseconds the account guard is holding back requests that carry the user's account, or 0
@@ -48,6 +56,13 @@ interface StreamRepository {
     suspend fun getFormatFlow(videoId: String): Flow<NewFormatEntity?>
 
     suspend fun updateFormat(videoId: String)
+
+    /**
+     * The playback-tracking URLs YouTube uses to count a listen towards the account: from the
+     * stored format when it still carries valid ones, otherwise from a fresh authenticated player
+     * request. Null when YouTube offered none.
+     */
+    suspend fun getPlaybackTracking(videoId: String): PlaybackTracking?
 
     fun getStream(
         dataStoreManager: DataStoreManager,

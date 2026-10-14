@@ -20,6 +20,7 @@ import com.maxrave.kotlinytmusicscraper.models.AlbumItem
 import com.maxrave.kotlinytmusicscraper.models.ArtistItem
 import com.maxrave.kotlinytmusicscraper.models.PlaylistItem
 import com.maxrave.kotlinytmusicscraper.models.SearchSuggestions
+import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.kotlinytmusicscraper.models.SongItem
 import com.maxrave.kotlinytmusicscraper.models.VideoItem
 import com.maxrave.kotlinytmusicscraper.models.WatchEndpoint
@@ -303,7 +304,10 @@ internal fun SearchSuggestions.toDomainSearchSuggestions(): com.maxrave.domain.d
     com.maxrave.domain.data.model.searchResult.SearchSuggestions(
         queries = this.queries,
         recommendedItems =
-            this.recommendedItems.map {
+            this.recommendedItems
+                // Songs only: no video cards among the suggestions either.
+                .filterNot { it is VideoItem || (it is SongItem && !MusicVideoType.isPlayableSong(it.musicVideoType)) }
+                .map {
                 when (it) {
                     is SongItem -> {
                         SongsResult(

@@ -24,32 +24,25 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.DefaultMediaDescriptionAdapter
 import androidx.media3.ui.PlayerNotificationManager
-import com.google.common.util.concurrent.MoreExecutors
+import com.google.common.util.concurrent.ListenableFuture
 import com.maxrave.common.MEDIA_NOTIFICATION
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.logger.Logger
 import com.maxrave.media3.R
-import com.maxrave.media3.carapp.CarLyricsOverlay
 import com.maxrave.media3.extension.toCommandButton
 import com.maxrave.media3.utils.CoilBitmapLoader
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import org.koin.core.qualifier.named
 import kotlin.system.exitProcess
-import kotlin.time.Duration.Companion.seconds
 
 @UnstableApi
 internal class SimpleMediaService :
     MediaLibraryService(),
     KoinComponent {
-    private val coroutineScope by inject<CoroutineScope>(named(com.maxrave.common.Config.SERVICE_SCOPE))
     // Session-level player from DI: the ForwardingPlayer wrapped with Cast support in the
     // full build (plain ForwardingPlayer in the FOSS build).
     private val player: Player by inject<Player>(qualifier = named(com.maxrave.common.Config.MAIN_PLAYER))
@@ -62,15 +55,15 @@ internal class SimpleMediaService :
     private val simpleMediaServiceHandler: MediaPlayerHandler by inject<MediaPlayerHandler>()
     private val dataStoreManager: DataStoreManager by inject<DataStoreManager>()
 
-    /**
-     * Android Auto lyrics. Injected here rather than created at start-up so it comes into being
-     * with playback, which is also the only time a car can be attached.
-     */
-    private val carLyricsOverlay: CarLyricsOverlay by inject<CarLyricsOverlay>()
-
     private val binder = MusicBinder()
 
-    private lateinit var playerNotificationManager: PlayerNotificationManager
+    private var playerNotificationManager: PlayerNotificationManager? = null
+
+    /** The controller this service keeps on its own session; released in [onDestroy]. */
+    private var selfControllerFuture: ListenableFuture<MediaController>? = null
+
+    /** Whether the keep-alive notification currently holds this service in the foreground. */
+    private var keepAliveForeground = false
 
     inner class MusicBinder : Binder() {
         val service: SimpleMediaService
@@ -101,8 +94,6 @@ internal class SimpleMediaService :
         super.onCreate()
         Logger.w("Service", "Simple Media Service Created")
 
-        carLyricsOverlay.start()
-
         setMediaNotificationProvider(
             DefaultMediaNotificationProvider(
                 this,
@@ -131,8 +122,7 @@ internal class SimpleMediaService :
         }
 
         val sessionToken = SessionToken(this, ComponentName(this, SimpleMediaService::class.java))
-        val controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
-        controllerFuture.addListener({ controllerFuture.get() }, MoreExecutors.directExecutor())
+        selfControllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
 
         if (runBlocking { dataStoreManager.keepServiceAlive.first() == DataStoreManager.TRUE }) {
             val notificationManager = getSystemService<NotificationManager>()
@@ -154,38 +144,45 @@ internal class SimpleMediaService :
                     .Builder(this, 2026, "media_playback_channel")
                     .setNotificationListener(
                         object : PlayerNotificationManager.NotificationListener {
+                            // Posted on every metadata, play/pause and artwork change. It used to
+                            // launch a new endless `startForeground` loop each time, so a few songs
+                            // in there were hundreds of loops on Main. Promoting once per post is
+                            // all a foreground service needs; it stays foreground until stopped.
                             override fun onNotificationPosted(
                                 notificationId: Int,
                                 notification: Notification,
                                 ongoing: Boolean,
                             ) {
-                                fun startFg() {
+                                if (!ongoing && keepAliveForeground) return
+                                try {
                                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                                         startForeground(notificationId, notification, FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
                                     } else {
                                         startForeground(notificationId, notification)
                                     }
+                                    keepAliveForeground = true
+                                } catch (e: Exception) {
+                                    // ForegroundServiceStartNotAllowedException (Android 12+) when
+                                    // promoted from the background; Media3 keeps its own
+                                    // foreground state for playback, so this is not fatal.
+                                    Logger.w("Service", "Keep-alive startForeground refused: ${e.message}")
                                 }
-                                coroutineScope.launch {
-                                    while (coroutineScope.isActive) {
-                                        startFg()
-                                        delay(30.seconds)
-                                    }
-                                }
+                            }
+
+                            override fun onNotificationCancelled(
+                                notificationId: Int,
+                                dismissedByUser: Boolean,
+                            ) {
+                                keepAliveForeground = false
                             }
                         },
                     ).setMediaDescriptionAdapter(DefaultMediaDescriptionAdapter(mediaSession?.sessionActivity))
                     .build()
-            playerNotificationManager.setPlayer(player)
-            playerNotificationManager.setSmallIcon(R.drawable.mono)
-            mediaSession?.platformToken?.let { playerNotificationManager.setMediaSessionToken(it) }
-        }
-
-        simpleMediaServiceHandler.onUpdateNotification = { list ->
-            val commandButtonList = list.map { it.toCommandButton(this) }
-            mediaSession?.setMediaButtonPreferences(
-                commandButtonList,
-            )
+                    .apply {
+                        setPlayer(player)
+                        setSmallIcon(R.drawable.mono)
+                        mediaSession?.platformToken?.let { setMediaSessionToken(it) }
+                    }
         }
     }
 
@@ -209,35 +206,47 @@ internal class SimpleMediaService :
         super.onUpdateNotification(session, startInForegroundRequired)
     }
 
+    /**
+     * Releases what this service instance owns: its session, its self-controller and the
+     * keep-alive notification. The player, its handler and the shared coroutine scope are
+     * process-wide singletons and outlive the service — Android Auto, a widget or a media button
+     * can bring a new service up in the same process, and it must find them working.
+     */
     @UnstableApi
-    fun release() {
-        Logger.w("Service", "Starting release process")
-        runBlocking {
-            try {
-                // Release MediaSession (don't release player - CrossfadeExoPlayerAdapter manages it)
-                mediaSession?.run {
-                    this.player.pause()
-                    this.player.playWhenReady = false
-                    // Don't call this.player.release() - CrossfadeExoPlayerAdapter manages player lifecycle
-                    this.release()
-                }
-                // Release handler (contains coroutines and jobs, which also releases the adapter)
-                simpleMediaServiceHandler.release()
-                mediaSession = null
-                Logger.w("Service", "Simple Media Service Released")
-            } catch (e: Exception) {
-                Logger.e("Service", "Error during release")
-            }
+    private fun releaseServiceResources() {
+        selfControllerFuture?.let { MediaController.releaseFuture(it) }
+        selfControllerFuture = null
+        playerNotificationManager?.setPlayer(null)
+        playerNotificationManager = null
+        mediaSession?.release()
+        mediaSession = null
+    }
+
+    /**
+     * Tears down the process-wide playback singletons. Their scope is cancelled for good, so this
+     * is only done right before the process exits (the "kill service on exit" setting).
+     */
+    @UnstableApi
+    private fun releaseEverythingAndExit() {
+        Logger.w("Service", "Releasing playback and exiting")
+        try {
+            player.pause()
+            player.playWhenReady = false
+            releaseServiceResources()
+            simpleMediaServiceHandler.release()
+        } catch (e: Exception) {
+            Logger.e("Service", "Error during release: ${e.message}")
         }
+        exitProcess(0)
     }
 
     @UnstableApi
     override fun onDestroy() {
-        super.onDestroy()
         Logger.w("Service", "Simple Media Service Destroyed")
-        if (simpleMediaServiceHandler.shouldReleaseOnTaskRemoved()) {
-            release()
-        }
+        val killOnExit = simpleMediaServiceHandler.shouldReleaseOnTaskRemoved()
+        releaseServiceResources()
+        super.onDestroy()
+        if (killOnExit) releaseEverythingAndExit()
     }
 
     override fun onTrimMemory(level: Int) {
@@ -248,10 +257,10 @@ internal class SimpleMediaService :
     @UnstableApi
     override fun onTaskRemoved(rootIntent: Intent?) {
         Logger.w("Service", "Simple Media Service Task Removed")
+        simpleMediaServiceHandler.mayBeSaveRecentSong()
         if (simpleMediaServiceHandler.shouldReleaseOnTaskRemoved()) {
-            release()
             super.onTaskRemoved(rootIntent)
-            exitProcess(0)
+            releaseEverythingAndExit()
         }
     }
 

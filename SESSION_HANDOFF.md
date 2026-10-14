@@ -5,8 +5,18 @@
 **Repo root:** `C:\Users\USER\src\SimpMusic`  
 **Fork remote:** `https://github.com/CLPow/refine_simpmusic.git` (origin)  
 **Upstream:** `https://github.com/maxrave-dev/SimpMusic.git` (upstream)  
-**Shipped HEAD:** `de622aa2` · tag `v2.1.14` · `version-name = 2.1.14` · `version-code = 121`  
-**Working tree:** **uncommitted** Apple Music default-style + title/artist prominence work (see §12).  
+**Shipped:** tag `v2.1.15` · `version-name = 2.1.15` · `version-code = 122` (2026-10-14)  
+**Working tree:** clean after 2.1.15. §12's WIP was folded into 2.1.15 (the duplicate lyrics-style radio is fixed).  
+
+> **2.1.15 (2026-10-14) — read this first; it supersedes the AA-lyrics material below.**
+> Songs only (no MV/video anywhere), AA lyrics **removed** (YouTube Music shows none either — see
+> `docs/ytm-car-reference.md`), AA browse = Home · Recent · Library with grouped Home shelves,
+> service lifecycle no longer kills singletons, `PlaybackReporter` sends watch history to YouTube
+> (default ON), one Now Playing style, YTM-style nav/chips/mini player, Settings split into
+> categories, widgets rebuilt on a single `WidgetUpdater`. Details: CLAUDE.md changelog entry
+> "Refine 2.1.15". Still to verify on the phone + Toyota: a full drive (no disconnects), history
+> appearing at music.youtube.com › History, widgets after a service restart.
+
 **Product:** Personal FOSS YouTube Music client (“Refine Music” branding). Android + Desktop (KMP). GPL-3.0.  
 **applicationId:** still `com.maxrave.simpmusic` (own-package experiment was **reverted**; display name/icon are Refine).
 

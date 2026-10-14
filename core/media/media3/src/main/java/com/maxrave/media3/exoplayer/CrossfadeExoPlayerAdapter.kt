@@ -2948,6 +2948,25 @@ internal class CrossfadeExoPlayerAdapter(
                         }
                     }
 
+                    // Players precached for tracks that are no longer next (a skip, a queue edit,
+                    // shuffle) are released here. Each holds a decoder and buffers; left alone
+                    // they piled up for the whole session.
+                    val wanted =
+                        (1..maxPrecacheCount)
+                            .mapNotNull { offset ->
+                                val i = index + offset
+                                when {
+                                    i < playlist.size -> playlist[i].mediaId
+                                    internalRepeatMode == PlayerConstants.REPEAT_MODE_ALL -> playlist.getOrNull(i % playlist.size)?.mediaId
+                                    else -> null
+                                }
+                            }.toSet()
+                    precachedPlayers.entries.removeIf { (videoId, cached) ->
+                        val stale = videoId !in wanted && videoId != currentMediaItem?.mediaId
+                        if (stale) cleanupPlayerInternal(cached.player)
+                        stale
+                    }
+
                     for (idx in indicesToPrecache) {
                         if (!isActive) break
 
@@ -2957,7 +2976,9 @@ internal class CrossfadeExoPlayerAdapter(
                             val pwf = createExoPlayerInstance()
                             pwf.player.setMediaItem(mediaItem.toMedia3MediaItem())
                             pwf.player.prepare()
-                            precachedPlayers[mediaItem.mediaId] = PrecachedPlayer(pwf.player, mediaItem, pwf.filter)
+                            precachedPlayers.put(mediaItem.mediaId, PrecachedPlayer(pwf.player, mediaItem, pwf.filter))?.let {
+                                cleanupPlayerInternal(it.player)
+                            }
                             Logger.d(TAG, "Precached player for index $idx")
                         } catch (e: Exception) {
                             Logger.e(TAG, "Precaching error for $idx: ${e.message}")

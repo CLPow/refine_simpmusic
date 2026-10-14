@@ -86,6 +86,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
@@ -132,6 +133,7 @@ import com.maxrave.simpmusic.ui.icon.Close
 import com.maxrave.simpmusic.ui.icon.PictureInPictureAlt
 import com.maxrave.simpmusic.ui.icon.QueueMusic
 import com.maxrave.simpmusic.ui.icon.SimpIcons
+import com.maxrave.simpmusic.ui.icon.SkipNext
 import com.maxrave.simpmusic.ui.icon.VolumeOff
 import com.maxrave.simpmusic.ui.icon.VolumeUp
 import com.maxrave.simpmusic.ui.theme.LocalIsDarkTheme
@@ -142,6 +144,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -167,7 +170,6 @@ fun MiniPlayer(
 ) {
     val isLiquidGlassEnabled by sharedViewModel.getEnableLiquidGlass().collectAsStateWithLifecycle(DataStoreManager.FALSE)
     val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
-    val timelineState by sharedViewModel.timeline.collectAsStateWithLifecycle()
 
     val layer = rememberGraphicsLayer()
     val luminanceAnimation = remember { Animatable(0f) }
@@ -235,22 +237,12 @@ fun MiniPlayer(
         remember {
             mutableStateOf(false)
         }
-    val (progress, setProgress) =
-        remember {
-            mutableFloatStateOf(0f)
-        }
     val (isCrossfading, setIsCrossfading) =
         remember {
             mutableStateOf(false)
         }
 
     val coroutineScope = rememberCoroutineScope()
-
-    val animatedProgress by animateFloatAsState(
-        targetValue = progress,
-        animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
-        label = "",
-    )
 
     // Palette state
     val paletteState = rememberPaletteState()
@@ -302,18 +294,14 @@ fun MiniPlayer(
                     setIsCrossfading(state.isCrossfading)
                 }
             }
+        // Only the loading flag is lifted out of the timeline here. Progress is read by the small
+        // MiniPlayerProgress composable, so a tick redraws one hairline, not this whole bar.
         val job4 =
             launch {
-                sharedViewModel.timeline.collect { timeline ->
-                    loading = timeline.loading
-                    val prog =
-                        if (timeline.total > 0L && timeline.current >= 0L) {
-                            timeline.current.toFloat() / timeline.total
-                        } else {
-                            0f
-                        }
-                    setProgress(prog)
-                }
+                sharedViewModel.timeline
+                    .map { it.loading }
+                    .distinctUntilChanged()
+                    .collect { loading = it }
             }
         job1.join()
         job2.join()
@@ -325,13 +313,17 @@ fun MiniPlayer(
         // the Card's own background draw, so the larger radius wins and silently becomes the
         // visible one.
         val miniPlayerShape =
-            if (isLiquidGlassEnabled == DataStoreManager.TRUE) CircleShape else RoundedCornerShape(12.dp)
+            if (isLiquidGlassEnabled == DataStoreManager.TRUE) CircleShape else RoundedCornerShape(8.dp)
+        // A dark bar tinted by the artwork, as in YouTube Music — the raw palette colour made a
+        // pastel slab that fought the page and the white text on it.
+        val surface = MaterialTheme.colorScheme.surfaceContainerHigh
+        val cardColor = if (isLiquidGlassEnabled == DataStoreManager.TRUE) Color.Transparent else lerp(background.value, surface, 0.6f)
         Card(
             shape = miniPlayerShape,
             colors =
                 CardDefaults.cardColors(
-                    containerColor = if (isLiquidGlassEnabled == DataStoreManager.TRUE) Color.Transparent else background.value,
-                    disabledContainerColor = if (isLiquidGlassEnabled == DataStoreManager.TRUE) Color.Transparent else background.value,
+                    containerColor = cardColor,
+                    disabledContainerColor = cardColor,
                 ),
             modifier =
                 modifier
@@ -539,11 +531,7 @@ fun MiniPlayer(
                             }
                         }
                     }
-                    Spacer(modifier = Modifier.width(15.dp))
-                    HeartCheckBox(checked = liked, size = 30, tint = textColor) {
-                        sharedViewModel.onUIEvent(UIEvent.ToggleLike)
-                    }
-                    Spacer(modifier = Modifier.width(15.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Crossfade(targetState = loading, label = "") {
                         if (it) {
                             Box(modifier = Modifier.size(48.dp), contentAlignment = Alignment.Center) {
@@ -559,36 +547,31 @@ fun MiniPlayer(
                             }
                         }
                     }
-
-                    Spacer(modifier = Modifier.width(15.dp))
+                    IconButton(
+                        onClick = { sharedViewModel.onUIEvent(UIEvent.Next) },
+                        enabled = controllerState.isNextAvailable,
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Icon(
+                            SimpIcons.SkipNext,
+                            contentDescription = null,
+                            tint = if (controllerState.isNextAvailable) textColor else textColor.copy(alpha = 0.38f),
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
-                Box(
-                    modifier =
-                        Modifier
-                            .wrapContentSize(Alignment.Center)
-                            .padding(
-                                horizontal = 10.dp,
-                            ).align(Alignment.BottomCenter),
-                ) {
-                    LinearProgressIndicator(
-                        progress = { animatedProgress },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(
-                                    color = Color.Transparent,
-                                    shape = RoundedCornerShape(4.dp),
-                                ),
-                        color = textColor,
-                        trackColor = Color.Transparent,
-                        strokeCap = StrokeCap.Round,
-                        drawStopIndicator = {},
-                    )
-                }
+                MiniPlayerProgress(
+                    sharedViewModel = sharedViewModel,
+                    color = textColor,
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                )
             }
         }
     } else {
+        // The desktop capsule shows elapsed/remaining time, so it does follow the timeline — but
+        // only in this branch; the phone bar reads progress in MiniPlayerProgress alone.
+        val timelineState by sharedViewModel.timeline.collectAsStateWithLifecycle()
+
         // Desktop bottom bar surface follows the theme (haze over content), so text and controls
         // use the theme foreground token instead of the artwork-luminance colour.
         val textColor = MaterialTheme.colorScheme.onBackground
@@ -1247,4 +1230,36 @@ private fun CapsuleProgress(
             }
         }
     }
+}
+/**
+ * The phone bar's progress hairline. Its own composable so the timeline — which ticks several times
+ * a second — recomposes only this line, not the bar with its artwork, marquee text and buttons.
+ */
+@Composable
+private fun MiniPlayerProgress(
+    sharedViewModel: SharedViewModel,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    val timeline by sharedViewModel.timeline.collectAsStateWithLifecycle()
+    val target =
+        if (timeline.total > 0L && timeline.current >= 0L) {
+            (timeline.current.toFloat() / timeline.total).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+    val progress by animateFloatAsState(
+        targetValue = target,
+        animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
+        label = "miniPlayerProgress",
+    )
+    LinearProgressIndicator(
+        progress = { progress },
+        modifier = modifier.fillMaxWidth().height(2.dp),
+        color = color,
+        trackColor = color.copy(alpha = 0.18f),
+        strokeCap = StrokeCap.Butt,
+        gapSize = 0.dp,
+        drawStopIndicator = {},
+    )
 }

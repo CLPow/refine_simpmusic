@@ -3,6 +3,7 @@ package com.maxrave.simpmusic.ui.component
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -13,6 +14,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,11 +39,13 @@ import simpmusic.composeapp.generated.resources.*
 import kotlin.reflect.KClass
 
 /**
- * The phone bottom bar with liquid glass OFF: the same floating capsule-and-FAB form as the glass
- * bar, drawn flat. One capsule of tabs (Search stays out — it is the round button beside it, the
- * same split the glass bar makes), a sliding rounded indicator instead of the frosted blob, solid
- * theme surfaces instead of refraction. Geometry mirrors the glass bar so switching the setting
- * changes the material, not the layout: 96dp tab cap, 64dp bar, 56dp indicator and FAB.
+ * The phone bottom bar with liquid glass off, laid out like YouTube Music's: a full-width flat bar
+ * on the page colour, a hairline above it, three equal tabs — Home · Explore · Library — with the
+ * label always shown and the selected tab marked by a filled pill behind its icon.
+ *
+ * Mix for you and Analytics no longer take tab slots (four or five tabs squeezed every label);
+ * they live inside Library. [showAnalyticsTab] and [showMixForYouTab] are kept for the rail and
+ * the glass bar, which still read them.
  */
 @Composable
 fun AppBottomNavigationBar(
@@ -53,176 +57,92 @@ fun AppBottomNavigationBar(
     reloadDestinationIfNeeded: (KClass<*>) -> Unit = { _ -> },
 ) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
-    // `ordinal` identifies a tab, it is NOT the position — Mix for you and Analytics sit before
-    // Library here while keeping the ordinal they were declared with, so that the numbering stays
-    // stable whether or not those tabs are present.
-    val bottomNavScreens =
-        listOfNotNull(
-            BottomNavScreen.Home,
-            BottomNavScreen.MixForYou.takeIf { showMixForYouTab },
-            BottomNavScreen.Analytics.takeIf { showAnalyticsTab },
-            BottomNavScreen.Library,
-            BottomNavScreen.Search,
-        )
+    val tabs = listOf(BottomNavScreen.Home, BottomNavScreen.Search, BottomNavScreen.Library)
     var selectedIndex by rememberSaveable {
         mutableIntStateOf(
             when (startDestination) {
-                is HomeDestination -> BottomNavScreen.Home.ordinal
                 is SearchDestination -> BottomNavScreen.Search.ordinal
                 is LibraryDestination -> BottomNavScreen.Library.ordinal
-                is AnalyticsDestination -> BottomNavScreen.Analytics.ordinal
-                is MixForYouDestination -> BottomNavScreen.MixForYou.ordinal
-                else -> BottomNavScreen.Home.ordinal // Default to Home if not recognized
+                else -> BottomNavScreen.Home.ordinal
             },
         )
     }
-    // A tab can disappear from the list under the user: tracking gets turned off while Analytics is
-    // selected, or the YouTube session ends while Mix for you is. Fall back to Home in both cases so
-    // nothing is left highlighted.
-    LaunchedEffect(showAnalyticsTab, showMixForYouTab) {
-        if ((!showAnalyticsTab && selectedIndex == BottomNavScreen.Analytics.ordinal) ||
-            (!showMixForYouTab && selectedIndex == BottomNavScreen.MixForYou.ordinal)
-        ) {
-            selectedIndex = BottomNavScreen.Home.ordinal
-        }
+    // Follow the back stack, so a deep link or a back press lands the highlight on the right tab.
+    LaunchedEffect(currentBackStackEntry) {
+        val hierarchy = currentBackStackEntry?.destination?.hierarchy ?: return@LaunchedEffect
+        tabs.firstOrNull { tab -> hierarchy.any { it.hasRoute(tab.destination::class) } }?.let { selectedIndex = it.ordinal }
     }
     val selectTab: (BottomNavScreen) -> Unit = { screen ->
-        if (selectedIndex == screen.ordinal) {
-            if (currentBackStackEntry?.destination?.hierarchy?.any {
-                    it.hasRoute(screen.destination::class)
-                } == true
-            ) {
-                reloadDestinationIfNeeded(screen.destination::class)
-            } else {
-                navController.navigate(screen.destination)
-            }
+        if (selectedIndex == screen.ordinal &&
+            currentBackStackEntry?.destination?.hierarchy?.any { it.hasRoute(screen.destination::class) } == true
+        ) {
+            reloadDestinationIfNeeded(screen.destination::class)
         } else {
             selectedIndex = screen.ordinal
             navController.navigate(screen.destination) {
-                popUpTo(navController.graph.startDestinationId) {
-                    saveState = true
-                }
+                popUpTo(navController.graph.startDestinationId) { saveState = true }
                 launchSingleTop = true
                 restoreState = true
             }
         }
     }
 
-    // Search rides in its own circular button, so the capsule holds everything else.
-    val barTabs = bottomNavScreens.filter { it != BottomNavScreen.Search }
-
-    // The translucent switch tints the CAPSULE ITSELF, never a strip behind it — the area around
-    // the floating cluster always shows the page. ON reads the content through the pill; OFF is a
-    // solid surface. The indicator stays nearer opaque so the selection survives busy artwork.
-    val capsuleColor =
-        MaterialTheme.colorScheme.surfaceContainer.copy(alpha = if (isTranslucentBackground) 0.72f else 1f)
-    val indicatorColor =
-        MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = if (isTranslucentBackground) 0.85f else 1f)
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        // One centred cluster — capsule, gap, FAB — exactly like the glass bar: fill = false keeps
-        // the capsule at its measured width, so the leftover goes around the cluster instead of
-        // wedging itself between the capsule and the search button.
-        horizontalArrangement = Arrangement.Center,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(NavigationBarDefaults.windowInsets)
-                .padding(horizontal = 16.dp)
-                .padding(top = 4.dp, bottom = 8.dp),
-    ) {
-        BoxWithConstraints(Modifier.weight(1f, fill = false)) {
-            // Every tab the same width, capped so two tabs on a wide screen do not stretch into
-            // slabs — the same budget rule as the glass tab bar.
-            val tabWidth = ((maxWidth - CapsuleInset * 2) / barTabs.size).coerceAtMost(FlatTabWidth)
-            val selectedPosition = barTabs.indexOfFirst { it.ordinal == selectedIndex }
-            val indicatorOffset by animateDpAsState(tabWidth * selectedPosition.coerceAtLeast(0), label = "flatBarIndicator")
-            Box(
-                modifier =
-                    Modifier
-                        .height(FlatBarHeight)
-                        .clip(RoundedCornerShape(FlatBarHeight / 2))
-                        .background(capsuleColor)
-                        .padding(horizontal = CapsuleInset),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                // The sliding indicator — the flat stand-in for the glass bar's frosted blob. Hidden
-                // while Search (a non-capsule tab) is the selection, so nothing sits half-lit.
-                if (selectedPosition >= 0) {
+    val barColor = MaterialTheme.colorScheme.background.copy(alpha = if (isTranslucentBackground) 0.88f else 1f)
+    Column(Modifier.fillMaxWidth().background(barColor)) {
+        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(NavigationBarDefaults.windowInsets)
+                    .height(BarHeight),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            tabs.forEach { screen ->
+                val selected = selectedIndex == screen.ordinal
+                val contentColor =
+                    if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                val pillWidth by animateDpAsState(if (selected) PillWidth else PillHeight, label = "navPill")
+                Column(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { selectTab(screen) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
                     Box(
                         modifier =
                             Modifier
-                                .offset(x = indicatorOffset)
-                                .size(width = tabWidth, height = FlatIndicatorHeight)
-                                .clip(RoundedCornerShape(FlatIndicatorHeight / 2))
-                                .background(indicatorColor),
-                    )
-                }
-                Row {
-                    barTabs.forEach { screen ->
-                        val selected = selectedIndex == screen.ordinal
-                        val contentColor =
-                            if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        Column(
-                            modifier =
-                                Modifier
-                                    .width(tabWidth)
-                                    .fillMaxHeight()
-                                    .clip(RoundedCornerShape(FlatIndicatorHeight / 2))
-                                    .clickable { selectTab(screen) },
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                        ) {
-                            CompositionLocalProvider(LocalContentColor provides contentColor) {
-                                screen.icon()
-                            }
-                            Text(
-                                stringResource(screen.title),
-                                style = typo().bodySmall,
-                                color = contentColor,
-                                maxLines = 1,
-                            )
+                                .size(width = pillWidth, height = PillHeight)
+                                .clip(RoundedCornerShape(PillHeight / 2))
+                                .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        CompositionLocalProvider(LocalContentColor provides contentColor) {
+                            screen.icon()
                         }
                     }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        stringResource(screen.title),
+                        style = typo().bodySmall,
+                        color = contentColor,
+                        maxLines = 1,
+                    )
                 }
-            }
-        }
-        Spacer(Modifier.size(12.dp))
-        val searchSelected = selectedIndex == BottomNavScreen.Search.ordinal
-        Box(
-            modifier =
-                Modifier
-                    .size(FlatIndicatorHeight)
-                    .clip(CircleShape)
-                    .background(if (searchSelected) indicatorColor else capsuleColor)
-                    .clickable { selectTab(BottomNavScreen.Search) },
-            contentAlignment = Alignment.Center,
-        ) {
-            CompositionLocalProvider(
-                LocalContentColor provides
-                    if (searchSelected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-            ) {
-                BottomNavScreen.Search.icon()
             }
         }
     }
 }
 
-// Mirrors the glass tab bar's geometry (TabWidth/BarHeight/BlobHeight/BarInset in
-// LiquidGlassTabBar.android.kt) so the two bars are one form in two materials.
-private val FlatTabWidth = 96.dp
-private val FlatBarHeight = 64.dp
-private val FlatIndicatorHeight = 56.dp
-private val CapsuleInset = 6.dp
+private val BarHeight = 68.dp
+private val PillHeight = 32.dp
+private val PillWidth = 60.dp
 
 @Composable
 fun AppNavigationRail(

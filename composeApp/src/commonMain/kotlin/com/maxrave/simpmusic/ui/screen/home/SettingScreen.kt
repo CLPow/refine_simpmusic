@@ -33,6 +33,8 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -483,6 +485,7 @@ import java.time.format.DateTimeFormatter
 fun SettingScreen(
     innerPadding: PaddingValues,
     navController: NavController,
+    category: SettingsCategory,
     viewModel: SettingsViewModel = koinViewModel(),
     sharedViewModel: SharedViewModel = koinInject(),
 ) {
@@ -711,13 +714,12 @@ fun SettingScreen(
                 .padding(horizontal = 16.dp)
                 .hazeSource(hazeState),
     ) {
-        item(key = "user_interface") {
+        // Clears the floating top bar on every category page, whichever section comes first.
+        item(key = "top") {
+            Spacer(Modifier.height(80.dp))
+        }
+        settingsSection(category, "user_interface") {
             Column {
-                // Was its own item. Folded in so item 0 is taller than the glow — the glow's
-                // translation tracks item 0's offset exactly and parks once it scrolls past, and a
-                // 64dp item 0 would have switched branches while the glow was still half-visible.
-                Spacer(Modifier.height(64.dp))
-                Spacer(Modifier.height(16.dp))
                 Text(text = stringResource(Res.string.user_interface), style = typo().labelMedium, color = MaterialTheme.colorScheme.onBackground)
                 val themeModeLabels =
                     listOf(
@@ -755,43 +757,13 @@ fun SettingScreen(
                 // themselves. The requirement is spelled out on the option itself rather than left
                 // for the user to discover after switching.
                 val requiresAndroid12 = " (" + stringResource(Res.string.requires_android_12) + ")"
-                val nowPlayingStyleLabels =
-                    listOf(
-                        DataStoreManager.NOW_PLAYING_STYLE_SPOTIFY to stringResource(Res.string.now_playing_style_spotify),
-                        DataStoreManager.NOW_PLAYING_STYLE_M3_EXPRESSIVE to stringResource(Res.string.now_playing_style_m3_expressive),
-                        DataStoreManager.NOW_PLAYING_STYLE_APPLE_MUSIC to
-                            stringResource(Res.string.now_playing_style_apple_music) + requiresAndroid12,
-                    )
-                SettingItem(
-                    title = stringResource(Res.string.now_playing_style),
-                    subtitle = nowPlayingStyleLabels.firstOrNull { it.first == nowPlayingStyle }?.second ?: "",
-                    onClick = {
-                        viewModel.setAlertData(
-                            SettingAlertState(
-                                title = runBlocking { getString(Res.string.now_playing_style) },
-                                selectOne =
-                                    SettingAlertState.SelectData(
-                                        listSelect = nowPlayingStyleLabels.map { (it.first == nowPlayingStyle) to it.second },
-                                    ),
-                                confirm =
-                                    runBlocking { getString(Res.string.change) } to { state ->
-                                        val selected = state.selectOne?.getSelected()
-                                        nowPlayingStyleLabels.firstOrNull { it.second == selected }?.first?.let {
-                                            sharedViewModel.setNowPlayingStyle(it)
-                                        }
-                                    },
-                                dismiss = runBlocking { getString(Res.string.cancel) },
-                            ),
-                        )
-                    },
-                )
                 // Hidden outright below Android 12 rather than offered with one option: the Apple
                 // Music treatment IS the blur, and Modifier.blur is a documented no-op there, so
                 // the choice would be between Classic and a broken-looking Classic.
                 if (isLyricsBlurSupported()) {
                     val lyricsStyleLabels =
                         listOf(
-                            DataStoreManager.LYRICS_STYLE_APPLE_MUSIC to stringResource(Res.string.lyrics_style_classic),
+                            DataStoreManager.LYRICS_STYLE_CLASSIC to stringResource(Res.string.lyrics_style_classic),
                             DataStoreManager.LYRICS_STYLE_APPLE_MUSIC to
                                 stringResource(Res.string.lyrics_style_apple_music) + requiresAndroid12,
                         )
@@ -957,7 +929,7 @@ fun SettingScreen(
                 }
             }
         }
-        item(key = "content") {
+        settingsSection(category, "content") {
             Column {
                 Text(
                     text = stringResource(Res.string.content),
@@ -1083,68 +1055,10 @@ fun SettingScreen(
                     },
                 )
                 SettingItem(
-                    title = stringResource(Res.string.video_quality),
-                    subtitle = videoQuality ?: "",
-                    onClick = {
-                        viewModel.setAlertData(
-                            SettingAlertState(
-                                title = runBlocking { getString(Res.string.video_quality) },
-                                selectOne =
-                                    SettingAlertState.SelectData(
-                                        listSelect =
-                                            VIDEO_QUALITY.items.map { item ->
-                                                (item.toString() == videoQuality) to item.toString()
-                                            },
-                                    ),
-                                confirm =
-                                    runBlocking { getString(Res.string.change) } to { state ->
-                                        viewModel.changeVideoQuality(state.selectOne?.getSelected() ?: "")
-                                    },
-                                dismiss = runBlocking { getString(Res.string.cancel) },
-                            ),
-                        )
-                    },
-                )
-                SettingItem(
-                    title = stringResource(Res.string.video_download_quality),
-                    subtitle = videoDownloadQuality ?: "",
-                    onClick = {
-                        viewModel.setAlertData(
-                            SettingAlertState(
-                                title = runBlocking { getString(Res.string.video_download_quality) },
-                                selectOne =
-                                    SettingAlertState.SelectData(
-                                        listSelect =
-                                            VIDEO_QUALITY.items.map { item ->
-                                                (item.toString() == videoDownloadQuality) to item.toString()
-                                            },
-                                    ),
-                                confirm =
-                                    runBlocking { getString(Res.string.change) } to { state ->
-                                        viewModel.setVideoDownloadQuality(state.selectOne?.getSelected() ?: "")
-                                    },
-                                dismiss = runBlocking { getString(Res.string.cancel) },
-                            ),
-                        )
-                    },
-                )
-                SettingItem(
                     title = stringResource(Res.string.auto_download_liked_songs),
                     subtitle = stringResource(Res.string.auto_download_liked_songs_description),
                     smallSubtitle = true,
                     switch = (autoDownloadLikedSongs to { viewModel.setAutoDownloadLikedSongs(it) }),
-                )
-                SettingItem(
-                    title = stringResource(Res.string.play_video_for_video_track_instead_of_audio_only),
-                    subtitle = stringResource(Res.string.such_as_music_video_lyrics_video_podcasts_and_more),
-                    smallSubtitle = true,
-                    switch = (playVideo to { viewModel.setPlayVideoInsteadOfAudio(it) }),
-                )
-                SettingItem(
-                    title = stringResource(Res.string.radio_audio_only),
-                    subtitle = stringResource(Res.string.radio_audio_only_description),
-                    smallSubtitle = true,
-                    switch = (radioAudioOnly to { viewModel.setRadioAudioOnly(it) }),
                 )
                 SettingItem(
                     title = stringResource(Res.string.sync_follow_to_youtube),
@@ -1232,7 +1146,7 @@ fun SettingScreen(
                 )
             }
         }
-        item(key = "proxy") {
+        settingsSection(category, "proxy") {
             Crossfade(usingProxy) { it ->
                 if (it) {
                     Column {
@@ -1396,7 +1310,7 @@ fun SettingScreen(
             }
         }
         if (getPlatform() == Platform.Android) {
-            item(key = "audio") {
+            settingsSection(category, "audio") {
                 Column {
                     Text(
                         text = stringResource(Res.string.audio),
@@ -1414,7 +1328,7 @@ fun SettingScreen(
                 }
             }
         }
-        item(key = "playback") {
+        settingsSection(category, "playback") {
             Column {
                 Text(
                     text = stringResource(Res.string.playback),
@@ -1468,7 +1382,7 @@ fun SettingScreen(
             }
         }
         // Crossfade Settings (all platforms)
-        item(key = "crossfade_settings") {
+        settingsSection(category, "crossfade_settings") {
             Column {
                 SettingItem(
                     title = stringResource(Res.string.crossfade),
@@ -1579,7 +1493,7 @@ fun SettingScreen(
         // Deliberately not part of "storage" further down, which is Android-only: tracking and the
         // rows it leaves behind exist on Desktop just the same. The switch that produces the history
         // and the button that erases it belong together.
-        item(key = "listening_history") {
+        settingsSection(category, "listening_history") {
             Column {
                 Text(
                     text = stringResource(Res.string.listening_history),
@@ -1611,7 +1525,7 @@ fun SettingScreen(
                 )
             }
         }
-        item(key = "lyrics") {
+        settingsSection(category, "lyrics") {
             Column {
                 Text(
                     text = stringResource(Res.string.lyrics),
@@ -1665,64 +1579,6 @@ fun SettingScreen(
                 )
 
                 SettingItem(
-                    title = stringResource(Res.string.aa_lyrics_lead),
-                    subtitle = stringResource(Res.string.aa_lyrics_lead_description),
-                    onClick = {
-                        val current = aaLyricsLeadMs
-                        viewModel.setAlertData(
-                            SettingAlertState(
-                                title = runBlocking { getString(Res.string.aa_lyrics_lead) },
-                                message = runBlocking { getString(Res.string.aa_lyrics_lead_description) },
-                                selectOne =
-                                    SettingAlertState.SelectData(
-                                        listSelect =
-                                            listOf(0, 400, 750, 1000, 1500, 2000).map {
-                                                (it == current) to "${it} ms"
-                                            },
-                                    ),
-                                confirm =
-                                    runBlocking { getString(Res.string.change) } to { state ->
-                                        state.selectOne
-                                            ?.getSelected()
-                                            ?.removeSuffix(" ms")
-                                            ?.toIntOrNull()
-                                            ?.let { viewModel.setAaLyricsLeadMs(it) }
-                                    },
-                                dismiss = runBlocking { getString(Res.string.cancel) },
-                            ),
-                        )
-                    },
-                )
-                SettingItem(
-                    title = stringResource(Res.string.lyrics_sync_offset),
-                    subtitle = stringResource(Res.string.lyrics_sync_offset_description),
-                    onClick = {
-                        val current = lyricsSyncOffsetMs
-                        viewModel.setAlertData(
-                            SettingAlertState(
-                                title = runBlocking { getString(Res.string.lyrics_sync_offset) },
-                                message = runBlocking { getString(Res.string.lyrics_sync_offset_description) },
-                                selectOne =
-                                    SettingAlertState.SelectData(
-                                        listSelect =
-                                            listOf(-1000, -500, 0, 500, 1000, 1500).map {
-                                                (it == current) to "$it ms"
-                                            },
-                                    ),
-                                confirm =
-                                    runBlocking { getString(Res.string.change) } to { state ->
-                                        state.selectOne
-                                            ?.getSelected()
-                                            ?.removeSuffix(" ms")
-                                            ?.toIntOrNull()
-                                            ?.let { viewModel.setLyricsSyncOffsetMs(it) }
-                                    },
-                                dismiss = runBlocking { getString(Res.string.cancel) },
-                            ),
-                        )
-                    },
-                )
-                SettingItem(
                     title = stringResource(Res.string.lyrics_font_size),
                     subtitle = stringResource(Res.string.lyrics_font_size_description),
                     onClick = {
@@ -1751,46 +1607,6 @@ fun SettingScreen(
                         )
                     },
                 )
-                if (getPlatform() == Platform.Android) {
-                    val androidAutoLyricsLabels =
-                        listOf(
-                            DataStoreManager.AA_LYRICS_OFF to stringResource(Res.string.android_auto_lyrics_off),
-                            DataStoreManager.AA_LYRICS_TITLE_AND_LYRIC to
-                                stringResource(Res.string.android_auto_lyrics_title_and_lyric),
-                            DataStoreManager.AA_LYRICS_BOTH_LINES to stringResource(Res.string.android_auto_lyrics_both_lines),
-                        )
-                    SettingItem(
-                        title = stringResource(Res.string.android_auto_lyrics),
-                        subtitle =
-                            androidAutoLyricsLabels
-                                .firstOrNull { it.first == androidAutoLyricsMode }
-                                ?.second
-                                ?: stringResource(Res.string.android_auto_lyrics_title_and_lyric),
-                        onClick = {
-                            viewModel.setAlertData(
-                                SettingAlertState(
-                                    title = runBlocking { getString(Res.string.android_auto_lyrics) },
-                                    message = runBlocking { getString(Res.string.android_auto_lyrics_message) },
-                                    selectOne =
-                                        SettingAlertState.SelectData(
-                                            listSelect =
-                                                androidAutoLyricsLabels.map {
-                                                    (it.first == androidAutoLyricsMode) to it.second
-                                                },
-                                        ),
-                                    confirm =
-                                        runBlocking { getString(Res.string.change) } to { state ->
-                                            androidAutoLyricsLabels
-                                                .firstOrNull { it.second == state.selectOne?.getSelected() }
-                                                ?.first
-                                                ?.let { viewModel.setAndroidAutoLyricsMode(it) }
-                                        },
-                                    dismiss = runBlocking { getString(Res.string.cancel) },
-                                ),
-                            )
-                        },
-                    )
-                }
                 SettingItem(
                     title = stringResource(Res.string.skip_short_tracks),
                     subtitle = stringResource(Res.string.skip_short_tracks_description),
@@ -2025,7 +1841,7 @@ fun SettingScreen(
                 )
             }
         }
-        item(key = "AI") {
+        settingsSection(category, "AI") {
             Column {
                 Text(
                     text = stringResource(Res.string.ai),
@@ -2201,7 +2017,7 @@ fun SettingScreen(
                 )
             }
         }
-        item(key = "spotify") {
+        settingsSection(category, "spotify") {
             Column {
                 Text(
                     text = stringResource(Res.string.spotify),
@@ -2248,7 +2064,7 @@ fun SettingScreen(
                 )
             }
         }
-        item(key = "discord") {
+        settingsSection(category, "discord") {
             Column {
                 Text(
                     text = stringResource(Res.string.discord_integration),
@@ -2290,7 +2106,7 @@ fun SettingScreen(
         // Hidden entirely when the build carries no Last.fm credentials — a FOSS build, or a full
         // build whose local.properties has no key.
         if (viewModel.lastfmAvailable) {
-            item(key = "lastfm") {
+            settingsSection(category, "lastfm") {
                 Column {
                     Text(
                         text = stringResource(Res.string.lastfm_integration),
@@ -2330,7 +2146,7 @@ fun SettingScreen(
                 }
             }
         }
-        item(key = "sponsor_block") {
+        settingsSection(category, "sponsor_block") {
             Column {
                 Text(
                     text = stringResource(Res.string.sponsorBlock),
@@ -2408,7 +2224,7 @@ fun SettingScreen(
             }
         }
         if (getPlatform() == Platform.Android) {
-            item(key = "storage") {
+            settingsSection(category, "storage") {
                 Column {
                     Text(
                         text = stringResource(Res.string.storage),
@@ -2719,7 +2535,7 @@ fun SettingScreen(
                 }
             }
         }
-        item(key = "backup") {
+        settingsSection(category, "backup") {
             Column {
                 Text(
                     text = stringResource(Res.string.backup),
@@ -2908,7 +2724,7 @@ fun SettingScreen(
                 )
             }
         }
-        item(key = "about_us") {
+        settingsSection(category, "about_us") {
             Column {
                 Text(
                     text = stringResource(Res.string.about_us),
@@ -3616,10 +3432,7 @@ fun SettingScreen(
         TopAppBar(
             title = {
                 Text(
-                    text =
-                        stringResource(
-                            Res.string.settings,
-                        ),
+                    text = stringResource(category.title),
                     style = typo().titleMedium,
                 )
             },
@@ -3980,4 +3793,12 @@ private fun ImportProgressDialog(
             }
         },
     )
+}
+/** Adds the section [key] only on the page of the [category] that owns it. */
+private fun LazyListScope.settingsSection(
+    category: SettingsCategory,
+    key: String,
+    content: @Composable LazyItemScope.() -> Unit,
+) {
+    if (key in category.sections) item(key = key, content = content)
 }

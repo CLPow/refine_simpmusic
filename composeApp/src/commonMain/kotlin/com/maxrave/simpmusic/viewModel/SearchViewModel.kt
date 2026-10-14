@@ -259,15 +259,8 @@ class SearchViewModel(
                         }
                     }
                 }
-            val job5 =
-                launch {
-                    searchRepository.getSearchDataVideo(query).collect { values ->
-                        when (values) {
-                            is Resource.Success -> values.data?.let { video.addAll(it) }
-                            is Resource.Error -> {}
-                        }
-                    }
-                }
+            // Songs only: no video or podcast search is requested; `video` and `podcast` stay
+            // empty so every list below that still mentions them contributes nothing.
             val job6 =
                 launch {
                     searchRepository.getSearchDataFeaturedPlaylist(query).collect { values ->
@@ -277,22 +270,11 @@ class SearchViewModel(
                         }
                     }
                 }
-            val job7 =
-                launch {
-                    searchRepository.getSearchDataPodcast(query).collect { values ->
-                        when (values) {
-                            is Resource.Success -> values.data?.let { podcast = it }
-                            is Resource.Error -> {}
-                        }
-                    }
-                }
             job1.join()
             job2.join()
             job3.join()
             job4.join()
-            job5.join()
             job6.join()
-            job7.join()
 
             try {
                 if (artist.size >= 3) {

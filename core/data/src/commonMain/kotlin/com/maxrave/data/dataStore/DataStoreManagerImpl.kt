@@ -400,21 +400,20 @@ internal class DataStoreManagerImpl(
         }
     }
 
+    /**
+     * On by default: reporting listens is what lets YouTube's recommendations learn from this app
+     * at all. Stored under a new key so every existing install starts with it on once (the old
+     * key defaulted to off, and almost nobody found the switch); a choice made after that sticks.
+     */
     override val sendBackToGoogle =
         settingsDataStore.data.map { preferences ->
-            preferences[SEND_BACK_TO_GOOGLE] ?: FALSE
+            preferences[SEND_BACK_TO_GOOGLE_V2] ?: TRUE
         }
 
     override suspend fun setSendBackToGoogle(send: Boolean) {
         withContext(Dispatchers.IO) {
-            if (send) {
-                settingsDataStore.edit { settings ->
-                    settings[SEND_BACK_TO_GOOGLE] = TRUE
-                }
-            } else {
-                settingsDataStore.edit { settings ->
-                    settings[SEND_BACK_TO_GOOGLE] = FALSE
-                }
+            settingsDataStore.edit { settings ->
+                settings[SEND_BACK_TO_GOOGLE_V2] = if (send) TRUE else FALSE
             }
         }
     }
@@ -1848,7 +1847,7 @@ internal class DataStoreManagerImpl(
         val RECENT_SONG_POSITION_KEY = stringPreferencesKey("recent_song_position")
         val SHUFFLE_KEY = stringPreferencesKey("shuffle_key")
         val REPEAT_KEY = stringPreferencesKey("repeat_key")
-        val SEND_BACK_TO_GOOGLE = stringPreferencesKey("send_back_to_google")
+        val SEND_BACK_TO_GOOGLE_V2 = stringPreferencesKey("send_back_to_google_v2")
         val FROM_SAVED_PLAYLIST = stringPreferencesKey("from_saved_playlist")
 
         val KILL_SERVICE_ON_EXIT = stringPreferencesKey("kill_service_on_exit")

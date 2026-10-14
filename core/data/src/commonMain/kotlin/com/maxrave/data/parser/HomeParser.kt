@@ -2,6 +2,7 @@ package com.maxrave.data.parser
 
 import com.maxrave.domain.data.model.home.Content
 import com.maxrave.domain.data.model.home.HomeItem
+import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.domain.data.model.searchResult.songs.Album
 import com.maxrave.domain.data.model.searchResult.songs.Artist
 import com.maxrave.kotlinytmusicscraper.models.ArtistItem
@@ -571,7 +572,16 @@ internal fun parseMixedContent(
             }
         }
     }
-    return list
+    // Songs only: video rows (UGC, live, podcast, an MV whose audio is not offered here) are
+    // dropped, and a shelf left with nothing is dropped with them.
+    return list.mapNotNull { shelf ->
+        val kept = shelf.contents.filter { it == null || it.videoId.isNullOrEmpty() || MusicVideoType.isPlayableSong(it.videoType) }
+        when {
+            kept.size == shelf.contents.size -> shelf
+            kept.isEmpty() -> null
+            else -> shelf.copy(contents = kept)
+        }
+    }
 }
 
 internal fun parseSongFlat(

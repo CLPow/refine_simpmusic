@@ -143,16 +143,13 @@ class ListeningInsightsWidget :
     private val songRepository by inject<SongRepository>()
     private val artistRepository by inject<ArtistRepository>()
     private val sharedViewModel by inject<SharedViewModel>()
-    private val serviceScope by inject<CoroutineScope>(named(Config.SERVICE_SCOPE))
 
     @SuppressLint("RestrictedApi")
     override suspend fun provideGlance(
         context: Context,
         id: GlanceId,
     ) {
-        serviceScope.launch {
-            sharedViewModel.nowPlayingScreenData.collectLatest { refresh(context) }
-        }
+        WidgetUpdater.ensureStarted(context)
 
         provideContent {
             GlanceTheme {
@@ -166,8 +163,6 @@ class ListeningInsightsWidget :
                 var paletteArtwork by remember { mutableStateOf<Bitmap?>(null) }
                 var bgColor by remember { mutableStateOf(Color.Black) }
                 val thumbUrl by remember { derivedStateOf { screenDataState.thumbnailURL } }
-
-                LaunchedEffect(bgColor) { refresh(context) }
 
                 LaunchedEffect(paletteArtwork) {
                     paletteArtwork?.asImageBitmap()?.let { paletteState.generate(it) }
@@ -242,7 +237,8 @@ class ListeningInsightsWidget :
                     modifier =
                         GlanceModifier
                             .fillMaxSize()
-                            .background(ColorProvider(bgColor))
+                            .cornerRadius(android.R.dimen.system_app_widget_background_radius)
+                            .background(ColorProvider(WidgetStyle.surfaceFor(bgColor)))
                             .padding(12.dp)
                             .clickable(
                                 actionStartActivity<MainActivity>(),

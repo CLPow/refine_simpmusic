@@ -49,7 +49,7 @@ fun MediaItem?.toSongEntity(): SongEntity? =
 @JvmName("MediaItemtoSongEntity")
 @UnstableApi
 fun SongEntity.toMediaItem(): MediaItem {
-    val isSong = (this.thumbnails?.contains("w544") == true && this.thumbnails?.contains("h544") == true)
+    // Refine plays songs only: every item is the audio rendition, whatever its artwork shape.
     return MediaItem
         .Builder()
         .setMediaId(this.videoId)
@@ -62,9 +62,8 @@ fun SongEntity.toMediaItem(): MediaItem {
                 .setArtist(this.artistName?.connectArtists())
                 .setArtworkUri(this.thumbnails?.toUri())
                 .setAlbumTitle(this.albumName)
-                .setDescription(
-                    if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
-                ).build(),
+                .setDescription(MERGING_DATA_TYPE.SONG)
+                .build(),
         ).build()
 }
 
@@ -77,14 +76,6 @@ fun Track.toMediaItem(): MediaItem {
     if (thumbUrl.contains("w120")) {
         thumbUrl = Regex("([wh])120").replace(thumbUrl, "$1544")
     }
-    val artistName: String = this.artists.toListName().connectArtists()
-    val isSong =
-        (
-            this.thumbnails?.last()?.height != 0 &&
-                this.thumbnails?.last()?.height == this.thumbnails?.last()?.width &&
-                this.thumbnails?.last()?.height != null
-        ) &&
-            (!thumbUrl.contains("hq720") && !thumbUrl.contains("maxresdefault"))
     return MediaItem
         .Builder()
         .setMediaId(this.videoId)
@@ -97,9 +88,8 @@ fun Track.toMediaItem(): MediaItem {
                 .setArtist(this.artists.toListName().connectArtists())
                 .setArtworkUri(thumbUrl.toUri())
                 .setAlbumTitle(this.album?.name)
-                .setDescription(
-                    if (isSong) MERGING_DATA_TYPE.SONG else MERGING_DATA_TYPE.VIDEO,
-                ).build(),
+                .setDescription(MERGING_DATA_TYPE.SONG)
+                .build(),
         ).build()
 }
 

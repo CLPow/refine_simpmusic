@@ -142,11 +142,7 @@ object NextPage {
                     it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
                 } != null,
             thumbnails = renderer.thumbnail,
-            musicVideoType =
-                renderer.navigationEndpoint.watchEndpoint
-                    ?.watchEndpointMusicSupportedConfigs
-                    ?.watchEndpointMusicConfig
-                    ?.musicVideoType,
+            musicVideoType = renderer.musicVideoType,
         )
     }
 }

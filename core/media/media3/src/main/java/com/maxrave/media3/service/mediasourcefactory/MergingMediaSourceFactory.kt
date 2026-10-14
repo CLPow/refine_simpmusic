@@ -5,20 +5,18 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.drm.DrmSessionManagerProvider
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
-import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
-import com.maxrave.common.MERGING_DATA_TYPE
-import com.maxrave.domain.manager.DataStoreManager
-import com.maxrave.logger.Logger
-import com.maxrave.media3.service.CarConnectionState
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 
+/**
+ * Refine plays songs only, so every item gets a single audio source.
+ *
+ * This used to merge a separate video stream into items tagged VIDEO when "play video" was on,
+ * reading that setting with `runBlocking` on every `createMediaSource`. Both are gone; the name
+ * is kept so the adapter and DI wiring stay unchanged.
+ */
 @UnstableApi
 internal class MergingMediaSourceFactory(
     private val defaultMediaSourceFactory: DefaultMediaSourceFactory,
-    private val dataStoreManager: DataStoreManager,
 ) : MediaSource.Factory {
     override fun setDrmSessionManagerProvider(drmSessionManagerProvider: DrmSessionManagerProvider): MediaSource.Factory {
         defaultMediaSourceFactory.setDrmSessionManagerProvider(drmSessionManagerProvider)
@@ -32,29 +30,5 @@ internal class MergingMediaSourceFactory(
 
     override fun getSupportedTypes(): IntArray = defaultMediaSourceFactory.supportedTypes
 
-    override fun createMediaSource(mediaItem: MediaItem): MediaSource {
-        Logger.w("Merging Media Source", mediaItem.mediaMetadata.description.toString())
-        val getVideo = runBlocking(Dispatchers.IO) { dataStoreManager.watchVideoInsteadOfPlayingAudio.first() } == DataStoreManager.Values.TRUE
-        Logger.w("Merging Media Source", getVideo.toString())
-        // Never pull the video stream while a car is attached. Android Auto denies video focus
-        // in motion, so the merged source buys nothing and the user is left looking at a black
-        // "Video focus is off" panel instead of the player.
-        val allowVideo = getVideo && !CarConnectionState.isCarConnected
-        if (mediaItem.mediaMetadata.description == MERGING_DATA_TYPE.VIDEO && allowVideo) {
-            val videoItem =
-                mediaItem
-                    .buildUpon()
-                    .setMediaId("${MERGING_DATA_TYPE.VIDEO}${mediaItem.mediaId}")
-                    .setCustomCacheKey("${MERGING_DATA_TYPE.VIDEO}${mediaItem.mediaId}")
-                    .build()
-            return MergingMediaSource(
-                defaultMediaSourceFactory.createMediaSource(videoItem),
-                defaultMediaSourceFactory.createMediaSource(mediaItem),
-            )
-        } else {
-            return defaultMediaSourceFactory.createMediaSource(mediaItem)
-        }
-
-//        val default = defaultMediaSourceFactory.createMediaSource(mediaItem.buildUpon().setMediaId("AUDIO-${mediaItem.mediaId}").build())
-    }
+    override fun createMediaSource(mediaItem: MediaItem): MediaSource = defaultMediaSourceFactory.createMediaSource(mediaItem)
 }

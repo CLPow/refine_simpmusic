@@ -330,7 +330,7 @@ internal class SongRepositoryImpl(
         }
 
     override suspend fun getSongInfoEntity(videoId: String): Flow<SongInfoEntity?> =
-        flow { emit(localDataSource.getSongInfo(videoId)) }.flowOn(Dispatchers.Main)
+        flow { emit(localDataSource.getSongInfo(videoId)) }.flowOn(Dispatchers.IO)
 
     override suspend fun recoverQueue(
         temp: List<Track>,
@@ -354,26 +354,14 @@ internal class SongRepositoryImpl(
         }.flowOn(Dispatchers.IO)
 
     /**
-     * Drops the video entries YouTube mixes into a radio queue, when the user asked radios to stay
-     * audio-only. [isRadio] gates it because the setting is deliberately radio-scoped: a playlist
-     * or album the user picked themselves must still play exactly what it contains.
+     * Refine plays songs only, everywhere: every queue source passes through here.
      *
-     * Only entries YouTube *named* as a video are dropped. A null `musicVideoType` means the
-     * response never said, which is not a claim of "audio" — those are kept rather than guessed at
-     * (see [MusicVideoType]).
-     *
-     * Dropping is the only option here; substituting the audio version is not available. Measured
-     * against a live logged-in radio (197 entries over four pages), every video that reached the
-     * queue was `MUSIC_VIDEO_TYPE_UGC` — a fan remix or mashup that exists only as a video and
-     * ships no `counterpart` to swap in. Official music videos never arrive as the primary
-     * rendition at all: YouTube already demotes those to the counterpart of the audio track, which
-     * is what [com.maxrave.kotlinytmusicscraper.models.PlaylistPanelRenderer.Content.track] reads.
+     * Queue rows that ship both renditions were already resolved to their audio side by
+     * `PlaylistPanelRenderer.Content.songTrack`; what reaches this point with a video type has no
+     * audio counterpart (measured: almost always `MUSIC_VIDEO_TYPE_UGC` fan remixes), so it is
+     * dropped. Unknown types are kept — see [MusicVideoType.isPlayableSong].
      */
-    private suspend fun List<SongItem>.dropVideosWhenRadioAudioOnly(isRadio: Boolean): List<SongItem> {
-        if (!isRadio) return this
-        if (dataStoreManager.radioAudioOnly.first() != TRUE) return this
-        return filterNot { MusicVideoType.isVideoSong(it.musicVideoType) }
-    }
+    private fun List<SongItem>.songsOnly(): List<SongItem> = filter { MusicVideoType.isPlayableSong(it.musicVideoType) }
 
     /**
      * Drop entries shorter than the user's skip-short threshold. Unknown duration is kept:
@@ -394,157 +382,94 @@ internal class SongRepositoryImpl(
         fromPlaylist: Boolean,
     ): Flow<Pair<ArrayList<Track>?, String?>> =
         flow {
-            runCatching {
-                var newContinuation: String? = null
-                Logger.d(TAG, "getContinueTrack -> playlistId: $playlistId")
-                Logger.d(TAG, "getContinueTrack -> continuation: $continuation")
-                if (!fromPlaylist) {
-                    youTube
-                        .next(
-                            if (playlistId.startsWith("RRDAMVM")) {
-                                WatchEndpoint(videoId = playlistId.removePrefix("RRDAMVM"))
-                            } else {
-                                WatchEndpoint(playlistId = playlistId)
-                            },
-                            continuation = continuation,
-                        ).onSuccess { next ->
-                            val data: ArrayList<SongItem> = arrayListOf()
-                            // Only this branch can be a radio — the `else` below continues a real
-                            // playlist. `RRDAMVM…` counts as one too: it is YouTube's other
-                            // spelling for the radio of a single video, which `isRadioQueueId`
-                            // deliberately does not match because it never appears as a queue's
-                            // own playlistId.
-                            val isRadio =
-                                playlistId.startsWith("RRDAMVM") || playlistId.isRadioQueueId()
-                            data.addAll(
-                                next.items
-                                    .dropVideosWhenRadioAudioOnly(isRadio)
-                                    .dropShortWhenConfigured(),
-                            )
-                            newContinuation = next.continuation
-                            emit(Pair(data.toListTrack(), newContinuation))
-                        }.onFailure { exception ->
-                            exception.printStackTrace()
-                            emit(Pair(null, null))
-                        }
+            Logger.d(TAG, "getContinueTrack -> playlistId: $playlistId, continuation: $continuation")
+            if (!fromPlaylist) {
+                // `RRDAMVM…` is YouTube's other spelling for the radio of a single video.
+                val result =
+                    youTube.next(
+                        if (playlistId.startsWith("RRDAMVM")) {
+                            WatchEndpoint(videoId = playlistId.removePrefix("RRDAMVM"))
+                        } else {
+                            WatchEndpoint(playlistId = playlistId)
+                        },
+                        continuation = continuation,
+                    )
+                val next = result.getOrNull()
+                if (next == null) {
+                    Logger.e(TAG, "getContinueTrack -> ${result.exceptionOrNull()?.message}")
+                    emit(Pair(null, null))
                 } else {
-                    youTube
-                        .customQuery(
-                            browseId = null,
-                            continuation = continuation,
-                            setLogin = true,
-                        ).onSuccess { values ->
-                            Logger.d(TAG, "getPlaylistData -> continue: $continuation")
-                            Logger.d(TAG, "getPlaylistData -> values: ${values.onResponseReceivedActions}")
-                            val dataMore: List<SongItem> =
-                                values.onResponseReceivedActions
-                                    ?.firstOrNull()
-                                    ?.appendContinuationItemsAction
-                                    ?.continuationItems
-                                    ?.apply {
-                                        Logger.w(TAG, "getContinueTrack -> dataMore: ${this.size}")
-                                    }?.mapNotNull {
-                                        NextPage.fromMusicResponsiveListItemRenderer(
-                                            it.musicResponsiveListItemRenderer ?: return@mapNotNull null,
-                                        )
-                                    } ?: emptyList()
-                            newContinuation =
-                                values.getPlaylistContinuation()
-                            emit(
-                                Pair<ArrayList<Track>?, String?>(
-                                    dataMore.toListTrack(),
-                                    newContinuation,
-                                ),
-                            )
-                        }.onFailure {
-                            Logger.e(TAG, "getContinueTrack -> Error: ${it.message}")
-                            emit(Pair(null, null))
-                        }
+                    val data = next.items.songsOnly().dropShortWhenConfigured()
+                    emit(Pair(data.toListTrack(), next.continuation))
+                }
+            } else {
+                val result =
+                    youTube.customQuery(
+                        browseId = null,
+                        continuation = continuation,
+                        setLogin = true,
+                    )
+                val values = result.getOrNull()
+                if (values == null) {
+                    Logger.e(TAG, "getContinueTrack -> ${result.exceptionOrNull()?.message}")
+                    emit(Pair(null, null))
+                } else {
+                    val dataMore: List<SongItem> =
+                        values.onResponseReceivedActions
+                            ?.firstOrNull()
+                            ?.appendContinuationItemsAction
+                            ?.continuationItems
+                            ?.mapNotNull {
+                                NextPage.fromMusicResponsiveListItemRenderer(
+                                    it.musicResponsiveListItemRenderer ?: return@mapNotNull null,
+                                )
+                            } ?: emptyList()
+                    emit(Pair<ArrayList<Track>?, String?>(dataMore.songsOnly().toListTrack(), values.getPlaylistContinuation()))
                 }
             }
         }.flowOn(Dispatchers.IO)
 
     override fun getSongInfo(videoId: String): Flow<SongInfoEntity?> =
         flow {
-            runCatching {
-                val id =
-                    if (videoId.contains(MERGING_DATA_TYPE.VIDEO)) {
-                        videoId.removePrefix(MERGING_DATA_TYPE.VIDEO)
-                    } else {
-                        videoId
-                    }
-                youTube
-                    .getSongInfo(id)
-                    .onSuccess { songInfo ->
-                        val song =
-                            SongInfoEntity(
-                                videoId = songInfo.videoId,
-                                author = songInfo.author,
-                                authorId = songInfo.authorId,
-                                authorThumbnail = songInfo.authorThumbnail,
-                                description = songInfo.description,
-                                uploadDate = songInfo.uploadDate,
-                                subscribers = songInfo.subscribers,
-                                viewCount = songInfo.viewCount,
-                                like = songInfo.like,
-                                dislike = songInfo.dislike,
-                            )
-                        emit(song)
-                        insertSongInfo(
-                            song,
-                        )
-                    }.onFailure {
-                        it.printStackTrace()
-                        emit(getSongInfoEntity(videoId).lastOrNull())
-                    }
+            val id = videoId.removePrefix(MERGING_DATA_TYPE.VIDEO)
+            val songInfo = youTube.getSongInfo(id).getOrNull()
+            if (songInfo == null) {
+                emit(getSongInfoEntity(videoId).lastOrNull())
+            } else {
+                val song =
+                    SongInfoEntity(
+                        videoId = songInfo.videoId,
+                        author = songInfo.author,
+                        authorId = songInfo.authorId,
+                        authorThumbnail = songInfo.authorThumbnail,
+                        description = songInfo.description,
+                        uploadDate = songInfo.uploadDate,
+                        subscribers = songInfo.subscribers,
+                        viewCount = songInfo.viewCount,
+                        like = songInfo.like,
+                        dislike = songInfo.dislike,
+                    )
+                emit(song)
+                insertSongInfo(song)
             }
         }.flowOn(Dispatchers.IO)
 
     override suspend fun getLikeStatus(videoId: String): Flow<Boolean> =
         flow {
-            runCatching {
-                youTube
-                    .getLikedInfo(videoId)
-                    .onSuccess {
-                        if (it == LikeStatus.LIKE) emit(true) else emit(false)
-                    }.onFailure {
-                        it.printStackTrace()
-                        emit(false)
-                    }
-            }
-        }
+            emit(youTube.getLikedInfo(videoId).getOrNull() == LikeStatus.LIKE)
+        }.flowOn(Dispatchers.IO)
 
     override suspend fun addToYouTubeLiked(mediaId: String?): Flow<Int> =
         flow {
             if (mediaId != null) {
-                runCatching {
-                    youTube
-                        .addToLiked(mediaId)
-                        .onSuccess {
-                            Logger.d(TAG, "Liked -> Success: $it")
-                            emit(it)
-                        }.onFailure {
-                            it.printStackTrace()
-                            emit(0)
-                        }
-                }
+                emit(youTube.addToLiked(mediaId).getOrElse { Logger.e(TAG, "addToLiked: ${it.message}"); 0 })
             }
         }.flowOn(Dispatchers.IO)
 
     override suspend fun removeFromYouTubeLiked(mediaId: String?): Flow<Int> =
         flow {
             if (mediaId != null) {
-                runCatching {
-                    youTube
-                        .removeFromLiked(mediaId)
-                        .onSuccess {
-                            Logger.d(TAG, "Liked -> Success: $it")
-                            emit(it)
-                        }.onFailure {
-                            it.printStackTrace()
-                            emit(0)
-                        }
-                }
+                emit(youTube.removeFromLiked(mediaId).getOrElse { Logger.e(TAG, "removeFromLiked: ${it.message}"); 0 })
             }
         }.flowOn(Dispatchers.IO)
 
@@ -574,48 +499,33 @@ internal class SongRepositoryImpl(
 
     override fun getRelatedData(videoId: String): Flow<Resource<Pair<List<Track>, String?>>> =
         flow {
-            runCatching {
-                youTube
-                    .next(WatchEndpoint(videoId = videoId))
-                    .onSuccess { next ->
-                        val data: ArrayList<SongItem> = arrayListOf()
-                        // Always a radio, though not directly: `next(videoId)` alone answers with
-                        // just two rows — the song itself and an `automixPreviewVideoRenderer`
-                        // pointing at its `RDAMVM…` radio. `YouTube.next` follows that pointer and
-                        // splices the radio in, so everything here past the first row is radio
-                        // content, and this is what extends the queue once it runs dry.
-                        data.addAll(
-                            next.items
-                                .filter { it.id != videoId }
-                                .toSet()
-                                .toList()
-                                .dropVideosWhenRadioAudioOnly(isRadio = true)
-                                .dropShortWhenConfigured(),
-                        )
-                        val nextContinuation = next.continuation
-                        emit(Resource.Success<Pair<List<Track>, String?>>(Pair(data.toListTrack().toList(), nextContinuation)))
-                    }.onFailure { exception ->
-                        exception.printStackTrace()
-                        emit(Resource.Error<Pair<List<Track>, String?>>(exception.message.toString()))
-                    }
+            val result = youTube.next(WatchEndpoint(videoId = videoId))
+            val next = result.getOrNull()
+            if (next == null) {
+                emit(Resource.Error<Pair<List<Track>, String?>>(result.exceptionOrNull()?.message.toString()))
+            } else {
+                // Always a radio, though not directly: `next(videoId)` alone answers with just two
+                // rows — the song itself and an `automixPreviewVideoRenderer` pointing at its
+                // `RDAMVM…` radio. `YouTube.next` follows that pointer and splices the radio in, so
+                // everything past the first row is radio content that extends the queue.
+                val data =
+                    next.items
+                        .filter { it.id != videoId }
+                        .distinct()
+                        .songsOnly()
+                        .dropShortWhenConfigured()
+                emit(Resource.Success<Pair<List<Track>, String?>>(Pair(data.toListTrack().toList(), next.continuation)))
             }
         }.flowOn(Dispatchers.IO)
 
     override fun getRadioFromEndpoint(endpoint: YouTubeWatchEndpoint): Flow<Resource<Pair<List<Track>, String?>>> =
         flow {
-            runCatching {
-                youTube
-                    .next(endpoint.toWatchEndpoint())
-                    .onSuccess { next ->
-                        val items =
-                            next.items.dropVideosWhenRadioAudioOnly(
-                                isRadio = endpoint.playlistId?.isRadioQueueId() == true,
-                            )
-                        emit(Resource.Success(Pair(items.toListTrack(), next.continuation)))
-                    }.onFailure {
-                        it.printStackTrace()
-                        emit(Resource.Error(it.message ?: "Error"))
-                    }
+            val result = youTube.next(endpoint.toWatchEndpoint())
+            val next = result.getOrNull()
+            if (next == null) {
+                emit(Resource.Error(result.exceptionOrNull()?.message ?: "Error"))
+            } else {
+                emit(Resource.Success<Pair<List<Track>, String?>>(Pair(next.items.songsOnly().toListTrack(), next.continuation)))
             }
-        }
+        }.flowOn(Dispatchers.IO)
 }

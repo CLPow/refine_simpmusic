@@ -49,11 +49,13 @@ class SimpMusicApplication :
 
     override fun onCreate() {
         super.onCreate()
+        if (!BuildConfig.DEBUG) Logger.setMinLevel(com.maxrave.logger.LogLevel.WARN)
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         configCrashlytics(this, BuildKonfig.sentryDsn)
         configLastfm(BuildKonfig.lastfmApiKey, BuildKonfig.lastfmSecret)
         startKoin {
-            androidLogger(level = Level.DEBUG)
+            // DEBUG logged every injection on the main thread, release builds included.
+            androidLogger(level = Level.ERROR)
             androidContext(this@SimpMusicApplication)
             loadAllModules()
             loadKoinModules(viewModelModule)
@@ -87,11 +89,20 @@ class SimpMusicApplication :
             .restartActivity(MainActivity::class.java) // default: null (your app's launch activity)
             .apply()
 
-        @SuppressLint("DiscouragedPrivateApi")
-        val field: Field = CursorWindow::class.java.getDeclaredField("sCursorWindowSize")
-        field.isAccessible = true
-        val expectSize = 100 * 1024 * 1024
-        field.set(null, expectSize)
+        // Wraps the crash handler already installed: the crash is written to a file the user can
+        // export from Settings › About (the FOSS build has no Sentry), then handled as before.
+        CrashLog.install(this)
+
+        // A hidden-API tweak (bigger CursorWindow for large queue rows). Newer Android versions
+        // may refuse the reflection; that must cost the tweak, not the app start.
+        try {
+            @SuppressLint("DiscouragedPrivateApi")
+            val field: Field = CursorWindow::class.java.getDeclaredField("sCursorWindowSize")
+            field.isAccessible = true
+            field.set(null, 100 * 1024 * 1024)
+        } catch (e: Exception) {
+            Logger.w("Startup", "CursorWindow size not raised: ${e.message}")
+        }
 
         AppContext.apply {
             set(applicationContext)

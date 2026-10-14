@@ -81,7 +81,20 @@ import com.maxrave.simpmusic.ui.component.selection.SongSelectionTopAppBar
 import com.maxrave.simpmusic.ui.component.selection.rememberSongSelectionState
 import com.maxrave.simpmusic.ui.icon.Groups
 import com.maxrave.simpmusic.ui.icon.PeopleAlt
+import com.maxrave.simpmusic.ui.icon.ArrowForwardIos
+import com.maxrave.simpmusic.ui.icon.AutoGraph
+import com.maxrave.simpmusic.ui.icon.History
+import com.maxrave.simpmusic.ui.icon.Sensors
 import com.maxrave.simpmusic.ui.icon.SimpIcons
+import com.maxrave.simpmusic.ui.navigation.destination.home.AnalyticsDestination
+import com.maxrave.simpmusic.ui.navigation.destination.home.RecentlySongsDestination
+import com.maxrave.simpmusic.ui.navigation.destination.library.MixForYouDestination
+import androidx.compose.foundation.clickable
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
+import simpmusic.composeapp.generated.resources.analytics
+import simpmusic.composeapp.generated.resources.history
+import simpmusic.composeapp.generated.resources.mix_for_you
 import com.maxrave.simpmusic.ui.navigation.destination.home.ListenTogetherDestination
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.LibraryViewModel
@@ -104,7 +117,6 @@ import simpmusic.composeapp.generated.resources.downloaded_playlists
 import simpmusic.composeapp.generated.resources.favorite_playlists
 import simpmusic.composeapp.generated.resources.favorite_podcasts
 import simpmusic.composeapp.generated.resources.library
-import simpmusic.composeapp.generated.resources.mix_for_you
 import simpmusic.composeapp.generated.resources.no_YouTube_playlists
 import simpmusic.composeapp.generated.resources.no_charts_found
 import simpmusic.composeapp.generated.resources.no_favorite_playlists
@@ -242,6 +254,26 @@ fun LibraryScreen(
                 ) {
                     item {
                         LibraryTilingBox(navController)
+                    }
+
+                    // Destinations that used to take bottom-bar tabs (Mix for you, Analytics) or a
+                    // Home top-bar slot (History) now live here, with the rest of the user's music.
+                    item {
+                        Column(Modifier.padding(vertical = 8.dp)) {
+                            if (loggedIn) {
+                                LibraryShortcutRow(SimpIcons.Sensors, stringResource(Res.string.mix_for_you)) {
+                                    navController.navigate(MixForYouDestination)
+                                }
+                            }
+                            LibraryShortcutRow(SimpIcons.History, stringResource(Res.string.history)) {
+                                navController.navigate(RecentlySongsDestination)
+                            }
+                            if (localTrackingEnabled) {
+                                LibraryShortcutRow(SimpIcons.AutoGraph, stringResource(Res.string.analytics)) {
+                                    navController.navigate(AnalyticsDestination)
+                                }
+                            }
+                        }
                     }
 
                     if (!listCanvasSong.data.isNullOrEmpty()) {
@@ -537,6 +569,10 @@ fun LibraryScreen(
                 if (type == LibraryChipType.YOUTUBE_MUSIC_PLAYLIST && !loggedIn) {
                     return@forEach
                 }
+                // Songs only: podcasts are not offered anywhere in the app.
+                if (type == LibraryChipType.FAVORITE_PODCAST) {
+                    return@forEach
+                }
                 // Nothing to recap without the plays — gated exactly as the YouTube chip above
                 // is gated on being logged in.
                 if (type == LibraryChipType.WRAPPED && !localTrackingEnabled) {
@@ -601,5 +637,43 @@ fun LibraryScreen(
                 onYTPlaylistClick = {},
             )
         }
+    }
+}
+/** One row of the Library list: icon, label, chevron — YouTube Music's library entry form. */
+@Composable
+private fun LibraryShortcutRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier =
+                Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
+        }
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = label,
+            style = typo().titleSmall,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            SimpIcons.ArrowForwardIos,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

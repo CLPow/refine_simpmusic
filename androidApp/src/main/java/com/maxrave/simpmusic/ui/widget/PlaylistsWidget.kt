@@ -117,25 +117,13 @@ class PlaylistsWidget :
 
     private val sharedViewModel by inject<SharedViewModel>()
     private val commonRepository by inject<CommonRepository>()
-    private val serviceScope by inject<CoroutineScope>(named(Config.SERVICE_SCOPE))
 
     @SuppressLint("RestrictedApi")
     override suspend fun provideGlance(
         context: Context,
         id: GlanceId,
     ) {
-        serviceScope.launch {
-            val controllerJob =
-                launch {
-                    sharedViewModel.controllerState.collectLatest { updateWidget(context) }
-                }
-            val nowPlayingJob =
-                launch {
-                    sharedViewModel.nowPlayingScreenData.collectLatest { updateWidget(context) }
-                }
-            controllerJob.join()
-            nowPlayingJob.join()
-        }
+        WidgetUpdater.ensureStarted(context)
 
         provideContent {
             GlanceTheme {
@@ -148,8 +136,6 @@ class PlaylistsWidget :
                 var tiles by remember { mutableStateOf<List<PlaylistTile>>(emptyList()) }
 
                 val thumbUrl by remember { derivedStateOf { screenDataState.thumbnailURL } }
-
-                LaunchedEffect(bgColor) { updateWidget(context) }
 
                 LaunchedEffect(artwork) {
                     artwork?.asImageBitmap()?.let { paletteState.generate(it) }
@@ -182,7 +168,8 @@ class PlaylistsWidget :
                     modifier =
                         GlanceModifier
                             .fillMaxSize()
-                            .background(ColorProvider(bgColor.darkened()))
+                            .cornerRadius(android.R.dimen.system_app_widget_background_radius)
+                            .background(ColorProvider(WidgetStyle.surfaceFor(bgColor).darkened()))
                             // The whole widget opens the app. Only the artwork and the five
                             // covers used to be tappable, so a press on the title, on the label
                             // or on any gap between them fell straight through to the launcher.
@@ -202,7 +189,7 @@ class PlaylistsWidget :
                             GlanceModifier
                                 .fillMaxWidth()
                                 .defaultWeight()
-                                .background(ColorProvider(bgColor))
+                                .background(ColorProvider(WidgetStyle.surfaceFor(bgColor)))
                                 .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -305,7 +292,7 @@ class PlaylistsWidget :
                             GlanceModifier
                                 .fillMaxWidth()
                                 .defaultWeight()
-                                .background(ColorProvider(bgColor.darkened()))
+                                .background(ColorProvider(WidgetStyle.surfaceFor(bgColor).darkened()))
                                 .padding(horizontal = 12.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

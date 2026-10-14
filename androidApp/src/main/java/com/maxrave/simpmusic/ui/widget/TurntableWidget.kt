@@ -3,29 +3,29 @@ package com.maxrave.simpmusic.ui.widget
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
 import androidx.glance.Image
 import androidx.glance.ImageProvider
+import androidx.glance.LocalSize
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.SizeMode
-import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.background
@@ -35,6 +35,7 @@ import androidx.glance.layout.Column
 import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.fillMaxHeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -45,232 +46,287 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
-import coil3.ImageLoader
-import coil3.request.CachePolicy
-import coil3.request.ImageRequest
-import coil3.request.SuccessResult
-import coil3.request.allowHardware
-import coil3.request.error
-import coil3.request.placeholder
-import coil3.toBitmap
 import com.kmpalette.rememberPaletteState
-import com.maxrave.common.Config
 import com.maxrave.simpmusic.MainActivity
 import com.maxrave.simpmusic.R
 import com.maxrave.simpmusic.extension.getColorFromPalette
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
-import org.koin.core.qualifier.named
 
 /**
- * A compact 2x2 widget: the artwork fills the tile with previous / play / next on a translucent
- * bar over its lower edge.
+ * The Now Playing widget. The class name is kept from its earlier "turntable" form so widgets
+ * already placed on a home screen carry over through the update.
  *
- * The bar and the disc behind play are drawable backgrounds, not shapes painted into the
- * artwork. Two reasons: a drawable keeps its alpha through RemoteViews where a colour
- * background would come out opaque, and it scales with the layout — painting into the bitmap
- * tied it to the artwork's own scale, so resizing the widget pulled it away from the buttons.
+ * Three layouts, picked by the size the launcher actually grants:
+ * - small (about 2x2): the artwork, with play/pause floating on it;
+ * - bar (about 4x1): artwork, title and artist, then previous / play / next;
+ * - full (4x2 and up): artwork beside title, artist and the transport row with like.
+ *
+ * Title and artist are always the track's own — never a lyric line. There is no progress bar on
+ * purpose: keeping one live would mean re-rendering the widget every second, which is exactly the
+ * battery cost widgets exist to avoid.
  */
 class TurntableWidget :
     GlanceAppWidget(),
     KoinComponent {
-    // Exact, not the default Single: with Single the composition is laid out against the
-    // XML min sizes and the launcher then squeezes that rendering into whatever cells it
-    // actually granted — non-uniformly on grids whose cells have a different aspect, which
-    // is how every square in these widgets came out a rectangle on some launchers. Exact
-    // re-composes per granted size, so the layout works with the truth.
-    override val sizeMode: SizeMode = SizeMode.Exact
+    override val sizeMode: SizeMode = SizeMode.Responsive(setOf(SMALL, BAR, FULL))
 
     private val sharedViewModel by inject<SharedViewModel>()
-    private val serviceScope by inject<CoroutineScope>(named(Config.SERVICE_SCOPE))
 
     @SuppressLint("RestrictedApi")
     override suspend fun provideGlance(
         context: Context,
         id: GlanceId,
     ) {
-        serviceScope.launch {
-            val controllerJob =
-                launch {
-                    sharedViewModel.controllerState.collectLatest { updateWidget(context) }
-                }
-            val nowPlayingJob =
-                launch {
-                    sharedViewModel.nowPlayingScreenData.collectLatest { updateWidget(context) }
-                }
-            controllerJob.join()
-            nowPlayingJob.join()
-        }
-
+        WidgetUpdater.ensureStarted(context)
         provideContent {
             GlanceTheme {
                 val controllerState by sharedViewModel.controllerState.collectAsState()
-                val screenDataState by sharedViewModel.nowPlayingScreenData.collectAsState()
+                val screenData by sharedViewModel.nowPlayingScreenData.collectAsState()
 
-                val paletteState = rememberPaletteState()
                 var artwork by remember { mutableStateOf<Bitmap?>(null) }
+                var palette by remember { mutableStateOf(Color(0xFF2A2A2A)) }
+                val paletteState = rememberPaletteState()
 
-                // Kept apart from [artwork] on purpose: the palette has to come from the
-                // untouched cover. Running it on a cropped or round-cornered copy reads the
-                // transparent corners as part of the image and lands on a different colour.
-                var rawArtwork by remember { mutableStateOf<Bitmap?>(null) }
-                var bgColor by remember { mutableStateOf(Color.Black) }
-
-                val thumbUrl by remember { derivedStateOf { screenDataState.thumbnailURL } }
-
-                LaunchedEffect(bgColor) { updateWidget(context) }
-
-                LaunchedEffect(rawArtwork) {
-                    rawArtwork?.asImageBitmap()?.let { paletteState.generate(it) }
+                LaunchedEffect(screenData.thumbnailURL) {
+                    artwork = context.loadWidgetArtwork(screenData.thumbnailURL)
+                    artwork?.asImageBitmap()?.let { paletteState.generate(it) }
+                }
+                LaunchedEffect(paletteState.palette) {
+                    paletteState.palette?.let { palette = it.getColorFromPalette() }
                 }
 
-                LaunchedEffect(Unit) {
-                    snapshotFlow { paletteState.palette }
-                        .distinctUntilChanged()
-                        .collectLatest { bgColor = it.getColorFromPalette() }
-                }
-
-                LaunchedEffect(thumbUrl) {
-                    val request =
-                        ImageRequest
-                            .Builder(context)
-                            .data(thumbUrl)
-                            .diskCachePolicy(CachePolicy.ENABLED)
-                            // Shared cache key across the widgets so they all read the identical
-                            // decoded bitmap; a separate key can hand back a differently scaled
-                            // copy, which is enough for the palette to pick another colour.
-                            .diskCacheKey(thumbUrl + "BIGGER")
-                            .placeholder(R.drawable.holder)
-                            .error(R.drawable.holder)
-                            .allowHardware(false)
-                            .build()
-                    val loaded =
-                        (ImageLoader(context).execute(request) as? SuccessResult)
-                            ?.image
-                            ?.toBitmap()
-                    rawArtwork = loaded
-                    artwork = loaded
-                }
-
-                Box(
-                    modifier =
-                        GlanceModifier
-                            .fillMaxSize()
-                            .background(ColorProvider(bgColor))
-                            .padding(6.dp)
-                            .clickable(actionStartActivity<MainActivity>(), rippleOverride = R.drawable.no_ripple),
-                ) {
-                    artwork?.let {
-                        Image(
-                            provider = ImageProvider(it),
-                            contentDescription = screenDataState.nowPlayingTitle,
-                            contentScale = ContentScale.Crop,
-                            modifier =
-                                GlanceModifier
-                                    .fillMaxSize()
-                                    .cornerRadius(android.R.dimen.system_app_widget_background_radius),
-                        )
-                    }
-                    // Bottom stack: scrim + text + transport. Scrim keeps type legible on light covers.
-                    Column(
-                        modifier =
-                            GlanceModifier
-                                .fillMaxWidth()
-                                .background(ImageProvider(R.drawable.widget_scrim_bottom))
-                                .padding(start = 12.dp, end = 12.dp, top = 28.dp, bottom = 10.dp),
-                    ) {
-                        Text(
-                            text = screenDataState.nowPlayingTitle.ifBlank { "—" },
-                            maxLines = 1,
-                            style =
-                                TextStyle(
-                                    color = ColorProvider(Color.White),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                ),
-                        )
-                        Text(
-                            text = screenDataState.artistName.ifBlank { " " },
-                            maxLines = 1,
-                            style =
-                                TextStyle(
-                                    color = ColorProvider(Color.White.copy(alpha = 0.75f)),
-                                    fontSize = 11.sp,
-                                ),
-                        )
-                        Spacer(GlanceModifier.height(8.dp))
-                        Row(
-                            modifier = GlanceModifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Image(
-                                provider = ImageProvider(R.drawable.rounded_skip_previous_24),
-                                contentDescription = "Previous",
-                                colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
-                                modifier =
-                                    GlanceModifier
-                                        .size(30.dp)
-                                        .padding(3.dp)
-                                        .clickable(rippleOverride = R.drawable.no_ripple) {
-                                            sharedViewModel.onUIEvent(UIEvent.Previous)
-                                        },
-                            )
-                            Spacer(GlanceModifier.width(14.dp))
-                            Box(
-                                modifier =
-                                    GlanceModifier
-                                        .size(40.dp)
-                                        .background(ImageProvider(R.drawable.widget_media_fab)),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Image(
-                                    provider =
-                                        if (controllerState.isPlaying) {
-                                            ImageProvider(R.drawable.rounded_pause_24)
-                                        } else {
-                                            ImageProvider(R.drawable.rounded_play_arrow_24)
-                                        },
-                                    contentDescription = if (controllerState.isPlaying) "Pause" else "Play",
-                                    colorFilter = ColorFilter.tint(ColorProvider(Color.Black)),
-                                    modifier =
-                                        GlanceModifier
-                                            .size(22.dp)
-                                            .clickable(rippleOverride = R.drawable.no_ripple) {
-                                                sharedViewModel.onUIEvent(UIEvent.PlayPause)
-                                            },
-                                )
-                            }
-                            Spacer(GlanceModifier.width(14.dp))
-                            Image(
-                                provider = ImageProvider(R.drawable.rounded_skip_next_24),
-                                contentDescription = "Next",
-                                colorFilter = ColorFilter.tint(ColorProvider(Color.White)),
-                                modifier =
-                                    GlanceModifier
-                                        .size(30.dp)
-                                        .padding(3.dp)
-                                        .clickable(rippleOverride = R.drawable.no_ripple) {
-                                            sharedViewModel.onUIEvent(UIEvent.Next)
-                                        },
-                            )
-                        }
-                    }
+                val state =
+                    NowPlayingWidgetState(
+                        title = screenData.nowPlayingTitle,
+                        artist = screenData.artistName,
+                        artwork = artwork,
+                        isPlaying = controllerState.isPlaying,
+                        isLiked = controllerState.isLiked,
+                        surface = WidgetStyle.surfaceFor(palette),
+                    )
+                val actions =
+                    NowPlayingWidgetActions(
+                        onPlayPause = { sharedViewModel.onUIEvent(UIEvent.PlayPause) },
+                        onNext = { sharedViewModel.onUIEvent(UIEvent.Next) },
+                        onPrevious = { sharedViewModel.onUIEvent(UIEvent.Previous) },
+                        onLike = { sharedViewModel.onUIEvent(UIEvent.ToggleLike) },
+                    )
+                val size = LocalSize.current
+                when {
+                    size.height < BAR_MAX_HEIGHT -> BarLayout(state, actions)
+                    size.width < FULL_MIN_WIDTH -> SmallLayout(state, actions)
+                    else -> FullLayout(state, actions)
                 }
             }
         }
     }
 
-    private suspend fun updateWidget(context: Context) {
-        val manager = GlanceAppWidgetManager(context)
-        manager.getGlanceIds(this@TurntableWidget.javaClass).forEach { glanceId ->
-            this@TurntableWidget.update(context, glanceId)
+    private companion object {
+        val SMALL = DpSize(110.dp, 110.dp)
+        val BAR = DpSize(250.dp, 60.dp)
+        val FULL = DpSize(250.dp, 110.dp)
+        val BAR_MAX_HEIGHT = 100.dp
+        val FULL_MIN_WIDTH = 200.dp
+    }
+}
+
+private data class NowPlayingWidgetState(
+    val title: String,
+    val artist: String,
+    val artwork: Bitmap?,
+    val isPlaying: Boolean,
+    val isLiked: Boolean,
+    val surface: Color,
+) {
+    val isEmpty: Boolean get() = title.isBlank()
+}
+
+private class NowPlayingWidgetActions(
+    val onPlayPause: () -> Unit,
+    val onNext: () -> Unit,
+    val onPrevious: () -> Unit,
+    val onLike: () -> Unit,
+)
+
+private val openApp = actionStartActivity<MainActivity>()
+
+@SuppressLint("RestrictedApi")
+@Composable
+private fun SmallLayout(
+    state: NowPlayingWidgetState,
+    actions: NowPlayingWidgetActions,
+) {
+    Box(
+        modifier =
+            GlanceModifier
+                .fillMaxSize()
+                .background(ColorProvider(state.surface))
+                .cornerRadius(android.R.dimen.system_app_widget_background_radius)
+                .clickable(openApp, rippleOverride = R.drawable.no_ripple),
+        contentAlignment = Alignment.BottomEnd,
+    ) {
+        Artwork(state, GlanceModifier.fillMaxSize())
+        Box(GlanceModifier.padding(10.dp)) {
+            PlayButton(state, actions, 44.dp)
         }
     }
+}
+
+@SuppressLint("RestrictedApi")
+@Composable
+private fun BarLayout(
+    state: NowPlayingWidgetState,
+    actions: NowPlayingWidgetActions,
+) {
+    Row(
+        modifier =
+            GlanceModifier
+                .fillMaxSize()
+                .background(ColorProvider(state.surface))
+                .cornerRadius(android.R.dimen.system_app_widget_background_radius)
+                .padding(8.dp)
+                .clickable(openApp, rippleOverride = R.drawable.no_ripple),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Artwork(state, GlanceModifier.size(44.dp).cornerRadius(8.dp))
+        Spacer(GlanceModifier.width(10.dp))
+        TitleBlock(state, GlanceModifier.defaultWeight())
+        TransportButton(R.drawable.rounded_skip_previous_24, "Previous", actions.onPrevious)
+        PlayButton(state, actions, 38.dp)
+        TransportButton(R.drawable.rounded_skip_next_24, "Next", actions.onNext)
+    }
+}
+
+@SuppressLint("RestrictedApi")
+@Composable
+private fun FullLayout(
+    state: NowPlayingWidgetState,
+    actions: NowPlayingWidgetActions,
+) {
+    val artSide = (LocalSize.current.height - 24.dp).coerceAtMost(140.dp)
+    Row(
+        modifier =
+            GlanceModifier
+                .fillMaxSize()
+                .background(ColorProvider(state.surface))
+                .cornerRadius(android.R.dimen.system_app_widget_background_radius)
+                .padding(12.dp)
+                .clickable(openApp, rippleOverride = R.drawable.no_ripple),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Artwork(state, GlanceModifier.size(artSide).cornerRadius(12.dp))
+        Spacer(GlanceModifier.width(14.dp))
+        Column(modifier = GlanceModifier.defaultWeight().fillMaxHeight()) {
+            TitleBlock(state, GlanceModifier.fillMaxWidth())
+            Spacer(GlanceModifier.defaultWeight())
+            Row(
+                modifier = GlanceModifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TransportButton(
+                    if (state.isLiked) R.drawable.baseline_favorite_24 else R.drawable.baseline_favorite_border_24,
+                    "Like",
+                    actions.onLike,
+                )
+                Spacer(GlanceModifier.defaultWeight())
+                TransportButton(R.drawable.rounded_skip_previous_24, "Previous", actions.onPrevious)
+                Spacer(GlanceModifier.width(6.dp))
+                PlayButton(state, actions, 44.dp)
+                Spacer(GlanceModifier.width(6.dp))
+                TransportButton(R.drawable.rounded_skip_next_24, "Next", actions.onNext)
+            }
+        }
+    }
+}
+
+@SuppressLint("RestrictedApi")
+@Composable
+private fun Artwork(
+    state: NowPlayingWidgetState,
+    modifier: GlanceModifier,
+) {
+    val art = state.artwork
+    if (art != null) {
+        Image(
+            provider = ImageProvider(art),
+            contentDescription = state.title,
+            contentScale = ContentScale.Crop,
+            modifier = modifier,
+        )
+    } else {
+        Box(modifier = modifier.background(ImageProvider(R.drawable.widget_shortcut_tile)), contentAlignment = Alignment.Center) {
+            Image(
+                provider = ImageProvider(R.drawable.mono),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(ColorProvider(WidgetStyle.OnSurfaceMuted)),
+                modifier = GlanceModifier.size(28.dp),
+            )
+        }
+    }
+}
+
+@SuppressLint("RestrictedApi")
+@Composable
+private fun TitleBlock(
+    state: NowPlayingWidgetState,
+    modifier: GlanceModifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = if (state.isEmpty) "Refine Music" else state.title,
+            maxLines = 1,
+            style = TextStyle(color = ColorProvider(WidgetStyle.OnSurface), fontSize = WidgetStyle.TitleSize, fontWeight = FontWeight.Bold),
+        )
+        Text(
+            text = if (state.isEmpty) "Tap to play" else state.artist,
+            maxLines = 1,
+            style = TextStyle(color = ColorProvider(WidgetStyle.OnSurfaceMuted), fontSize = WidgetStyle.BodySize),
+        )
+    }
+}
+
+@SuppressLint("RestrictedApi")
+@Composable
+private fun PlayButton(
+    state: NowPlayingWidgetState,
+    actions: NowPlayingWidgetActions,
+    side: Dp,
+) {
+    Box(
+        modifier =
+            GlanceModifier
+                .size(side)
+                .background(ImageProvider(R.drawable.widget_media_fab))
+                .clickable(rippleOverride = R.drawable.no_ripple) { actions.onPlayPause() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            provider = ImageProvider(if (state.isPlaying) R.drawable.rounded_pause_24 else R.drawable.rounded_play_arrow_24),
+            contentDescription = if (state.isPlaying) "Pause" else "Play",
+            colorFilter = ColorFilter.tint(ColorProvider(Color.Black)),
+            modifier = GlanceModifier.size(side * 0.55f),
+        )
+    }
+}
+
+@SuppressLint("RestrictedApi")
+@Composable
+private fun TransportButton(
+    icon: Int,
+    description: String,
+    onClick: () -> Unit,
+) {
+    Image(
+        provider = ImageProvider(icon),
+        contentDescription = description,
+        colorFilter = ColorFilter.tint(ColorProvider(WidgetStyle.OnSurface)),
+        modifier =
+            GlanceModifier
+                .size(36.dp)
+                .padding(6.dp)
+                .clickable(rippleOverride = R.drawable.no_ripple) { onClick() },
+    )
 }

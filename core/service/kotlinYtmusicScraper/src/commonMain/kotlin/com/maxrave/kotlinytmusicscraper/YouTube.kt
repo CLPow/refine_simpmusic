@@ -2,6 +2,7 @@ package com.maxrave.kotlinytmusicscraper
 
 import com.eygraber.uri.toKmpUri
 import com.maxrave.common.ITAG
+import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.kotlinytmusicscraper.YouTube.Companion.DEFAULT_VISITOR_DATA
 import com.maxrave.kotlinytmusicscraper.extension.toListFormat
 import com.maxrave.kotlinytmusicscraper.extractor.ExtractSource
@@ -1613,7 +1614,7 @@ class YouTube {
                                 title = playlistPanelRenderer.title,
                                 items =
                                     playlistPanelRenderer.contents.mapNotNull {
-                                        it.track?.let { renderer ->
+                                        it.songTrack?.let { renderer ->
                                             NextPage.fromPlaylistPanelVideoRenderer(renderer)
                                         }
                                     } + result.items,
@@ -1637,7 +1638,7 @@ class YouTube {
                                         )?.tabRenderer
                                         ?.endpoint
                                         ?.browseEndpoint,
-                                currentIndex = playlistPanelRenderer.currentIndex,
+                                currentIndex = playlistPanelRenderer.songIndexOf(playlistPanelRenderer.currentIndex),
                                 endpoint =
                                     playlistPanelRenderer.contents
                                         .lastOrNull()
@@ -1656,9 +1657,9 @@ class YouTube {
                     title = playlistPanelRenderer.title,
                     items =
                         playlistPanelRenderer.contents.mapNotNull {
-                            it.track?.let(NextPage::fromPlaylistPanelVideoRenderer)
+                            it.songTrack?.let(NextPage::fromPlaylistPanelVideoRenderer)
                         },
-                    currentIndex = playlistPanelRenderer.currentIndex,
+                    currentIndex = playlistPanelRenderer.songIndexOf(playlistPanelRenderer.currentIndex),
                     lyricsEndpoint =
                         response.contents.singleColumnMusicWatchNextResultsRenderer
                             ?.tabbedRenderer
@@ -1686,11 +1687,12 @@ class YouTube {
                 val musicPlaylistShelfContinuation = response.continuationContents?.musicPlaylistShelfContinuation!!
                 return@runCatching NextResult(
                     items =
-                        musicPlaylistShelfContinuation.contents.mapNotNull {
-                            it.musicResponsiveListItemRenderer?.let { renderer ->
-                                NextPage.fromMusicResponsiveListItemRenderer(renderer)
-                            }
-                        },
+                        musicPlaylistShelfContinuation.contents
+                            .mapNotNull {
+                                it.musicResponsiveListItemRenderer?.let { renderer ->
+                                    NextPage.fromMusicResponsiveListItemRenderer(renderer)
+                                }
+                            }.filter { MusicVideoType.isPlayableSong(it.musicVideoType) },
                     continuation =
                         musicPlaylistShelfContinuation.continuations
                             ?.firstOrNull()
@@ -1733,7 +1735,7 @@ class YouTube {
                 .body<GetQueueResponse>()
                 .queueDatas
                 .mapNotNull {
-                    it.content.playlistPanelVideoRenderer?.let { renderer ->
+                    it.content.songTrack?.let { renderer ->
                         NextPage.fromPlaylistPanelVideoRenderer(renderer)
                     }
                 }
