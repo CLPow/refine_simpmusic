@@ -105,6 +105,9 @@ import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.theme.seed
 import com.maxrave.simpmusic.ui.theme.typo
+import com.maxrave.simpmusic.ui.theme.LocalIsYtmTheme
+import com.maxrave.simpmusic.ui.component.YtmCollectionHeader
+import com.maxrave.simpmusic.ui.component.YtmRoundAction
 import com.maxrave.simpmusic.viewModel.AlbumViewModel
 import com.maxrave.simpmusic.viewModel.LocalPlaylistState
 import com.maxrave.simpmusic.viewModel.SharedViewModel
@@ -156,6 +159,8 @@ fun AlbumScreen(
     }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
+    val controllerPlaying = controllerState.isPlaying
 
     var showBottomSheet by rememberSaveable { mutableStateOf(false) }
     var albumBottomSheetShow by rememberSaveable { mutableStateOf(false) }
@@ -224,6 +229,8 @@ fun AlbumScreen(
     // dividers, the blurred top bar — is shared by both.
     val screenInfo = getScreenSizeInfo()
     val isPortrait = screenInfo.wDP < screenInfo.hDP
+    // YouTube Music's own header on phones under its theme; the Apple Music headers otherwise.
+    val useYtmHeader = isPortrait && LocalIsYtmTheme.current
     val dominantColor = uiState.colors.firstOrNull() ?: Color.Black
     // Apple Music-style page background from the artwork's dominant tone (see UIExt.toImmersiveBackground).
     val mutedPaletteBg = paletteState.palette.toImmersiveBackground()
@@ -254,7 +261,48 @@ fun AlbumScreen(
                                 Column(
                                     horizontalAlignment = Alignment.Start,
                                 ) {
-                                    if (isPortrait) {
+                                    if (useYtmHeader) {
+                                        val isThisPlaying =
+                                            playingVideoId.isNotEmpty() &&
+                                                playingPlaylistId == browseId.replaceFirst("VL", "")
+                                        YtmCollectionHeader(
+                                            thumbnail = uiState.thumbnail,
+                                            title = uiState.title,
+                                            subtitle = uiState.artist.name,
+                                            meta = stringResource(Res.string.year_and_category, uiState.year, stringResource(Res.string.album)),
+                                            isPlaying = isThisPlaying && controllerPlaying,
+                                            onBack = { navController.navigateUp() },
+                                            onMore = { albumBottomSheetShow = true },
+                                            onPlay = {
+                                                if (isThisPlaying) {
+                                                    sharedViewModel.onUIEvent(UIEvent.PlayPause)
+                                                } else {
+                                                    uiState.listTrack.firstOrNull()?.let { viewModel.playTrack(it) }
+                                                }
+                                            },
+                                            onShuffle = { viewModel.shuffle() },
+                                            onSubtitleClick = {
+                                                uiState.artist.id?.let { channelId -> navController.navigate(ArtistDestination(channelId = channelId)) }
+                                            },
+                                            onArtworkLoaded = { bitmap = it },
+                                            leadingAction = {
+                                                YtmRoundAction(
+                                                    icon = SimpIcons.DownloadForOffline,
+                                                    tint = if (uiState.downloadState == DownloadState.STATE_DOWNLOADED) Color(0xFF00A0CB) else Color.White,
+                                                    onClick = {
+                                                        when (uiState.downloadState) {
+                                                            DownloadState.STATE_DOWNLOADED -> viewModel.makeToast(runBlocking { getString(Res.string.downloaded) })
+                                                            DownloadState.STATE_DOWNLOADING -> viewModel.makeToast(runBlocking { getString(Res.string.downloading) })
+                                                            else -> viewModel.downloadFullAlbum()
+                                                        }
+                                                    },
+                                                )
+                                            },
+                                            secondAction = {
+                                                HeartCheckBox(size = 28, checked = uiState.liked, onStateChange = { viewModel.setAlbumLike() })
+                                            },
+                                        )
+                                    } else if (isPortrait) {
                                         // Apple Music-style: edge-to-edge artwork (taller than square,
                                         // ~half screen height) with title overlay + liquid glass buttons.
                                         // Glass buttons MUST be siblings of the backdrop source (not children)
@@ -697,7 +745,7 @@ fun AlbumScreen(
                                             // [Shuffle][Play pill][Download] (cluster centered, all 48dp matching size).
                                             // The landscape header carries its own copy of this cluster beside the
                                             // artwork, so it only belongs here in portrait.
-                                            if (isPortrait) {
+                                            if (isPortrait && !useYtmHeader) {
                                                 val isThisPlaying =
                                                     playingVideoId.isNotEmpty() &&
                                                         playingPlaylistId == browseId.replaceFirst("VL", "")

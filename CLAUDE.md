@@ -762,6 +762,8 @@ if (getPlatform() == Platform.Android) {
   - **Widgets**: `WidgetUpdater` (in `ui/widget/WidgetKit.kt`) is the single, debounced subscription that updates all widgets; `provideGlance` must never launch collectors (each new Glance session used to add one forever). Now Playing widget (`TurntableWidget`, class name kept for placed widgets) is responsive: small / bar / full.
   - **Diagnostics**: `CrashLog` (androidApp) writes uncaught exceptions to `filesDir/crash-log.txt`; release builds log WARN+ only (`Logger.setMinLevel`), Koin logs ERROR only.
 
+- **Refine 2.1.16 — YouTube Music look (2026-10-15)**: theme mode `THEME_MODE_YTM` (near-black #030303, #AAAAAA secondary, red `YtmRed` accent, system font via `fontFamily(ytm)`) is the default under the new key `theme_mode_v2`; other themes remain. `LocalIsYtmTheme` gates YTM-only chrome. Now Playing is `NowPlayingContentYtm` (cover pager, like/save/lyrics/info pills, white seek bar, white play disc, UP NEXT · LYRICS · RELATED; Related = `SongRepository.getRelatedData`). `YtmCollectionHeader` serves Album and Playlist on phones; Artist gets Subscribe/Shuffle/Radio pills; mini player is a flush #212121 bar; nav has no pill; song rows are one-line ellipsised "Artist • Album". Now Playing widget (`TurntableWidget`) follows YouTube Music's widget in Material You colours: 2×2 cover with scrim and play, 4×1 bar, 4×2 cover beside title and controls.
+
 ## 🔄 CLAUDE.md Auto-Update Rule (MANDATORY)
 
 After completing any of the following types of changes, the AI agent **MUST** update this CLAUDE.md file:

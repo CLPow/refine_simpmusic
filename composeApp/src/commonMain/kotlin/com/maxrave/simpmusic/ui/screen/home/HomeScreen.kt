@@ -141,6 +141,11 @@ import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.login.LoginDestination
 import com.maxrave.simpmusic.ui.screen.library.LibraryDynamicPlaylistType
 import com.maxrave.simpmusic.ui.theme.LocalIsBoomingTheme
+import com.maxrave.simpmusic.ui.theme.LocalIsYtmTheme
+import com.maxrave.simpmusic.ui.theme.YtmRed
+import androidx.compose.material3.Icon
+import androidx.compose.ui.unit.sp
+import simpmusic.composeapp.generated.resources.mono
 import com.maxrave.simpmusic.ui.theme.desktopPanelDark
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.HomeViewModel
@@ -871,6 +876,24 @@ fun HomeTopAppBar(navController: NavController) {
                 TopAppBarDefaults.windowInsets.only(WindowInsetsSides.Start),
             ),
         title = {
+            // YouTube Music's header: the red mark and the wordmark, no greeting under it.
+            if (LocalIsYtmTheme.current) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        painter = painterResource(Res.drawable.mono),
+                        contentDescription = null,
+                        tint = YtmRed,
+                        modifier = Modifier.size(28.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "Refine",
+                        style = typo().titleLarge.copy(fontSize = 22.sp, letterSpacing = (-0.5).sp),
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                }
+                return@TopAppBar
+            }
             Column {
                 val boomingAccent = LocalIsBoomingTheme.current
                 Text(

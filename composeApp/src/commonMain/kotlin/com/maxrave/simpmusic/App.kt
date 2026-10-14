@@ -463,11 +463,13 @@ fun App(viewModel: SharedViewModel = koinInject()) {
                                 enter = fadeIn() + slideInHorizontally(),
                                 exit = fadeOut(),
                             ) {
+                                // YouTube Music's mini player runs edge to edge, flush on the nav bar.
+                                val ytmShell = themeMode == DataStoreManager.THEME_MODE_YTM
                                 MiniPlayer(
                                     Modifier
-                                        .padding(horizontal = 8.dp)
-                                        .padding(bottom = 6.dp)
-                                        .height(60.dp)
+                                        .padding(horizontal = if (ytmShell) 0.dp else 8.dp)
+                                        .padding(bottom = if (ytmShell) 0.dp else 6.dp)
+                                        .height(if (ytmShell) 64.dp else 60.dp)
                                         .fillMaxWidth(),
                                     backdrop = backdrop,
                                     onClick = {

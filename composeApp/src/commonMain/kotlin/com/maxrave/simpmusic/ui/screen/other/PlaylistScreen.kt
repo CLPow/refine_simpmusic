@@ -128,6 +128,9 @@ import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.theme.LocalIsDarkTheme
 import com.maxrave.simpmusic.ui.theme.seed
 import com.maxrave.simpmusic.ui.theme.typo
+import com.maxrave.simpmusic.ui.theme.LocalIsYtmTheme
+import com.maxrave.simpmusic.ui.component.YtmCollectionHeader
+import com.maxrave.simpmusic.ui.component.YtmRoundAction
 import com.maxrave.simpmusic.viewModel.ListState
 import com.maxrave.simpmusic.viewModel.PlaylistUIEvent
 import com.maxrave.simpmusic.viewModel.PlaylistUIState
@@ -350,6 +353,7 @@ fun PlaylistScreen(
     // dividers, the blurred top bar — is shared by both.
     val screenInfo = getScreenSizeInfo()
     val isPortrait = screenInfo.wDP < screenInfo.hDP
+    val useYtmHeader = isPortrait && LocalIsYtmTheme.current
     val dominantColor = listColors.firstOrNull() ?: Color.Black
     // Apple Music-style page background from the artwork's dominant tone (see UIExt.toImmersiveBackground).
     val mutedPaletteBg = paletteState.palette.toImmersiveBackground()
@@ -401,7 +405,42 @@ fun PlaylistScreen(
                                     Column(
                                         horizontalAlignment = Alignment.Start,
                                     ) {
-                                        if (isPortrait) {
+                                        if (useYtmHeader) {
+                                            val isThisPlaying = isPlaying && playingPlaylistId == data.id
+                                            val kind =
+                                                if (data.isRadio) stringResource(Res.string.radio) else stringResource(Res.string.playlist)
+                                            YtmCollectionHeader(
+                                                thumbnail = data.thumbnail,
+                                                title = data.title,
+                                                subtitle = data.author.name,
+                                                meta = listOf(kind, data.year).filter { it.isNotBlank() }.joinToString(" • "),
+                                                isPlaying = isThisPlaying,
+                                                onBack = { navController.navigateUp() },
+                                                onMore = { playlistBottomSheetShow = true },
+                                                onPlay = {
+                                                    if (playingPlaylistId == data.id) {
+                                                        sharedViewModel.onUIEvent(UIEvent.PlayPause)
+                                                    } else {
+                                                        viewModel.onUIEvent(PlaylistUIEvent.PlayAll)
+                                                    }
+                                                },
+                                                onShuffle = { viewModel.onUIEvent(PlaylistUIEvent.Shuffle) },
+                                                onSubtitleClick = {
+                                                    if (data.author.id.isNotEmpty()) navController.navigate(ArtistDestination(data.author.id))
+                                                },
+                                                onArtworkLoaded = { bitmap = it },
+                                                leadingAction = {
+                                                    YtmRoundAction(
+                                                        icon = SimpIcons.DownloadForOffline,
+                                                        tint = if (downloadState == DownloadState.STATE_DOWNLOADED) Color(0xFF00A0CB) else Color.White,
+                                                        onClick = { viewModel.onUIEvent(PlaylistUIEvent.Download) },
+                                                    )
+                                                },
+                                                secondAction = {
+                                                    HeartCheckBox(size = 28, checked = liked, onStateChange = { viewModel.onUIEvent(PlaylistUIEvent.Favorite) })
+                                                },
+                                            )
+                                        } else if (isPortrait) {
                                             // Apple Music-style: edge-to-edge artwork + liquid glass buttons.
                                             // Glass buttons MUST be siblings of the backdrop source (not children)
                                             // to avoid render feedback loop / RuntimeShader crash.
@@ -875,7 +914,7 @@ fun PlaylistScreen(
                                                     .wrapContentHeight(),
                                         ) {
                                             Column(Modifier.padding(horizontal = 32.dp)) {
-                                                if (isPortrait) {
+                                                if (isPortrait && !useYtmHeader) {
                                                     // Apple Music-style action row:
                                                     // [Shuffle][Play pill][Download/More] (cluster centered, all 48dp matching size)
                                                     val isThisPlaying = isPlaying && playingPlaylistId == data.id

@@ -6,7 +6,7 @@
 -->
 <resources>
     <string name="widget_turntable_label">Now playing</string>
-    <string name="widget_turntable_description">What is playing, with play, skip and like. Resize for a compact, bar or full layout</string>
+    <string name="widget_turntable_description">YouTube Music style player. Resize to 2×2, 4×1 or 4×2</string>
     <string name="widget_playlists_label">Playlists</string>
     <string name="widget_playlists_description">Now playing with controls, over your recently added</string>
     <string name="widget_insights_label">Listening insights</string>

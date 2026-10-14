@@ -120,6 +120,8 @@ import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.MoreAlbumsDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
 import com.maxrave.simpmusic.ui.theme.typo
+import com.maxrave.simpmusic.ui.theme.LocalIsYtmTheme
+import com.maxrave.simpmusic.ui.theme.YtmRed
 import com.maxrave.simpmusic.viewModel.ArtistScreenState
 import com.maxrave.simpmusic.viewModel.ArtistViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
@@ -446,6 +448,23 @@ fun ArtistScreen(
                                     }
                                 }
 
+                                // YouTube Music's artist actions: the red Subscribe pill, then Shuffle and Radio.
+                                if (LocalIsYtmTheme.current) {
+                                    YtmArtistActions(
+                                        isFollowed = isFollowed,
+                                        onFollow = {
+                                            state.data.channelId?.let { viewModel.updateFollowed(if (isFollowed) 0 else 1, it) }
+                                        },
+                                        onShuffle = {
+                                            val param = state.data.shuffleParam
+                                            if (param != null) viewModel.onShuffleClick(param) else viewModel.makeToast(runBlocking { getString(Res.string.error) })
+                                        },
+                                        onRadio = {
+                                            val param = state.data.radioParam
+                                            if (param != null) viewModel.onRadioClick(param) else viewModel.makeToast(runBlocking { getString(Res.string.error) })
+                                        },
+                                    )
+                                } else
                                 // Apple Music-style action row: [Radio][Shuffle pill][Follow] centered.
                                 // In SimpMusic "play" an artist == shuffle, so the big middle button is Shuffle.
                                 Row(
@@ -1139,5 +1158,53 @@ private fun ArtistSections(
             )
         }
         EndOfPage()
+    }
+}
+@Composable
+private fun YtmArtistActions(
+    isFollowed: Boolean,
+    onFollow: () -> Unit,
+    onShuffle: () -> Unit,
+    onRadio: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        YtmPill(
+            text = if (isFollowed) "Subscribed" else "Subscribe",
+            container = if (isFollowed) Color.White.copy(alpha = 0.12f) else YtmRed,
+            content = Color.White,
+            onClick = onFollow,
+        )
+        Spacer(Modifier.weight(1f))
+        YtmPill(text = "Shuffle", icon = SimpIcons.Shuffle, container = Color.White, content = Color.Black, onClick = onShuffle)
+        YtmPill(text = "Radio", icon = SimpIcons.Sensors, container = Color.White.copy(alpha = 0.12f), content = Color.White, onClick = onRadio)
+    }
+}
+
+@Composable
+private fun YtmPill(
+    text: String,
+    container: Color,
+    content: Color,
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+) {
+    Row(
+        modifier =
+            Modifier
+                .clip(CircleShape)
+                .background(container)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.size(6.dp))
+        }
+        Text(text, style = typo().bodyMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), color = content)
     }
 }

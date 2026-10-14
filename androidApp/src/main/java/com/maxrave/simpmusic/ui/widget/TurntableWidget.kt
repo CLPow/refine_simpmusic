@@ -11,10 +11,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.glance.ColorFilter
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
@@ -46,27 +46,26 @@ import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import androidx.glance.unit.ColorProvider
-import com.kmpalette.rememberPaletteState
 import com.maxrave.simpmusic.MainActivity
 import com.maxrave.simpmusic.R
-import com.maxrave.simpmusic.extension.getColorFromPalette
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
 /**
- * The Now Playing widget. The class name is kept from its earlier "turntable" form so widgets
- * already placed on a home screen carry over through the update.
+ * The Now Playing widget, in YouTube Music's widget form. The class name is kept from its
+ * earlier "turntable" form so widgets already on a home screen carry over through the update.
  *
- * Three layouts, picked by the size the launcher actually grants:
- * - small (about 2x2): the artwork, with play/pause floating on it;
- * - bar (about 4x1): artwork, title and artist, then previous / play / next;
- * - full (4x2 and up): artwork beside title, artist and the transport row with like.
+ * Like YouTube Music's own widget it is drawn in Material You colours (the wallpaper palette on
+ * Android 12+, through [GlanceTheme]), with the play control as a filled circle in the primary
+ * container colour. Three layouts, picked from the size the launcher grants:
+ * - 2×2: the cover fills the tile; title, artist and play sit on a scrim along its bottom;
+ * - 4×1: cover · title and artist · previous, play, next;
+ * - 4×2: the cover beside the title, artist and app mark, with like · previous · play · next below.
  *
- * Title and artist are always the track's own — never a lyric line. There is no progress bar on
- * purpose: keeping one live would mean re-rendering the widget every second, which is exactly the
- * battery cost widgets exist to avoid.
+ * No progress bar: a live one means re-rendering the widget every second, the battery cost
+ * widgets are meant to avoid (YouTube Music's widget has none either).
  */
 class TurntableWidget :
     GlanceAppWidget(),
@@ -87,15 +86,8 @@ class TurntableWidget :
                 val screenData by sharedViewModel.nowPlayingScreenData.collectAsState()
 
                 var artwork by remember { mutableStateOf<Bitmap?>(null) }
-                var palette by remember { mutableStateOf(Color(0xFF2A2A2A)) }
-                val paletteState = rememberPaletteState()
-
                 LaunchedEffect(screenData.thumbnailURL) {
                     artwork = context.loadWidgetArtwork(screenData.thumbnailURL)
-                    artwork?.asImageBitmap()?.let { paletteState.generate(it) }
-                }
-                LaunchedEffect(paletteState.palette) {
-                    paletteState.palette?.let { palette = it.getColorFromPalette() }
                 }
 
                 val state =
@@ -105,7 +97,6 @@ class TurntableWidget :
                         artwork = artwork,
                         isPlaying = controllerState.isPlaying,
                         isLiked = controllerState.isLiked,
-                        surface = WidgetStyle.surfaceFor(palette),
                     )
                 val actions =
                     NowPlayingWidgetActions(
@@ -117,7 +108,7 @@ class TurntableWidget :
                 val size = LocalSize.current
                 when {
                     size.height < BAR_MAX_HEIGHT -> BarLayout(state, actions)
-                    size.width < FULL_MIN_WIDTH -> SmallLayout(state, actions)
+                    size.width < FULL_MIN_WIDTH -> SquareLayout(state, actions)
                     else -> FullLayout(state, actions)
                 }
             }
@@ -126,7 +117,7 @@ class TurntableWidget :
 
     private companion object {
         val SMALL = DpSize(110.dp, 110.dp)
-        val BAR = DpSize(250.dp, 60.dp)
+        val BAR = DpSize(250.dp, 56.dp)
         val FULL = DpSize(250.dp, 110.dp)
         val BAR_MAX_HEIGHT = 100.dp
         val FULL_MIN_WIDTH = 200.dp
@@ -139,7 +130,6 @@ private data class NowPlayingWidgetState(
     val artwork: Bitmap?,
     val isPlaying: Boolean,
     val isLiked: Boolean,
-    val surface: Color,
 ) {
     val isEmpty: Boolean get() = title.isBlank()
 }
@@ -153,9 +143,10 @@ private class NowPlayingWidgetActions(
 
 private val openApp = actionStartActivity<MainActivity>()
 
+/** 2×2 — the cover is the widget. */
 @SuppressLint("RestrictedApi")
 @Composable
-private fun SmallLayout(
+private fun SquareLayout(
     state: NowPlayingWidgetState,
     actions: NowPlayingWidgetActions,
 ) {
@@ -163,18 +154,39 @@ private fun SmallLayout(
         modifier =
             GlanceModifier
                 .fillMaxSize()
-                .background(ColorProvider(state.surface))
+                .background(GlanceTheme.colors.widgetBackground)
                 .cornerRadius(android.R.dimen.system_app_widget_background_radius)
                 .clickable(openApp, rippleOverride = R.drawable.no_ripple),
-        contentAlignment = Alignment.BottomEnd,
+        contentAlignment = Alignment.BottomStart,
     ) {
         Artwork(state, GlanceModifier.fillMaxSize())
-        Box(GlanceModifier.padding(10.dp)) {
-            PlayButton(state, actions, 44.dp)
+        Row(
+            modifier =
+                GlanceModifier
+                    .fillMaxWidth()
+                    .background(ImageProvider(R.drawable.widget_scrim_bottom))
+                    .padding(start = 12.dp, end = 8.dp, top = 24.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(GlanceModifier.defaultWeight()) {
+                Text(
+                    text = if (state.isEmpty) "Refine Music" else state.title,
+                    maxLines = 1,
+                    style = TextStyle(color = ColorProvider(Color.White), fontSize = 13.sp, fontWeight = FontWeight.Medium),
+                )
+                Text(
+                    text = if (state.isEmpty) "Tap to play" else state.artist,
+                    maxLines = 1,
+                    style = TextStyle(color = ColorProvider(Color.White.copy(alpha = 0.75f)), fontSize = 11.sp),
+                )
+            }
+            Spacer(GlanceModifier.width(6.dp))
+            PlayButton(state, actions, 40.dp)
         }
     }
 }
 
+/** 4×1 — one row, YouTube Music's slim widget. */
 @SuppressLint("RestrictedApi")
 @Composable
 private fun BarLayout(
@@ -185,58 +197,67 @@ private fun BarLayout(
         modifier =
             GlanceModifier
                 .fillMaxSize()
-                .background(ColorProvider(state.surface))
+                .background(GlanceTheme.colors.widgetBackground)
                 .cornerRadius(android.R.dimen.system_app_widget_background_radius)
-                .padding(8.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
                 .clickable(openApp, rippleOverride = R.drawable.no_ripple),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Artwork(state, GlanceModifier.size(44.dp).cornerRadius(8.dp))
+        Artwork(state, GlanceModifier.size(44.dp).cornerRadius(10.dp))
         Spacer(GlanceModifier.width(10.dp))
-        TitleBlock(state, GlanceModifier.defaultWeight())
-        TransportButton(R.drawable.rounded_skip_previous_24, "Previous", actions.onPrevious)
-        PlayButton(state, actions, 38.dp)
-        TransportButton(R.drawable.rounded_skip_next_24, "Next", actions.onNext)
+        TitleBlock(state, GlanceModifier.defaultWeight(), titleSize = 14)
+        ControlIcon(R.drawable.rounded_skip_previous_24, "Previous", actions.onPrevious)
+        PlayButton(state, actions, 40.dp)
+        ControlIcon(R.drawable.rounded_skip_next_24, "Next", actions.onNext)
     }
 }
 
+/** 4×2 — cover on the left, everything else beside it. */
 @SuppressLint("RestrictedApi")
 @Composable
 private fun FullLayout(
     state: NowPlayingWidgetState,
     actions: NowPlayingWidgetActions,
 ) {
-    val artSide = (LocalSize.current.height - 24.dp).coerceAtMost(140.dp)
+    val artSide = (LocalSize.current.height - 24.dp).coerceAtMost(150.dp)
     Row(
         modifier =
             GlanceModifier
                 .fillMaxSize()
-                .background(ColorProvider(state.surface))
+                .background(GlanceTheme.colors.widgetBackground)
                 .cornerRadius(android.R.dimen.system_app_widget_background_radius)
                 .padding(12.dp)
                 .clickable(openApp, rippleOverride = R.drawable.no_ripple),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Artwork(state, GlanceModifier.size(artSide).cornerRadius(12.dp))
+        Artwork(state, GlanceModifier.size(artSide).cornerRadius(16.dp))
         Spacer(GlanceModifier.width(14.dp))
         Column(modifier = GlanceModifier.defaultWeight().fillMaxHeight()) {
-            TitleBlock(state, GlanceModifier.fillMaxWidth())
+            Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                TitleBlock(state, GlanceModifier.defaultWeight(), titleSize = 16)
+                Image(
+                    provider = ImageProvider(R.drawable.mono),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(GlanceTheme.colors.primary),
+                    modifier = GlanceModifier.size(20.dp),
+                )
+            }
             Spacer(GlanceModifier.defaultWeight())
             Row(
                 modifier = GlanceModifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TransportButton(
+                ControlIcon(
                     if (state.isLiked) R.drawable.baseline_favorite_24 else R.drawable.baseline_favorite_border_24,
                     "Like",
                     actions.onLike,
                 )
                 Spacer(GlanceModifier.defaultWeight())
-                TransportButton(R.drawable.rounded_skip_previous_24, "Previous", actions.onPrevious)
-                Spacer(GlanceModifier.width(6.dp))
-                PlayButton(state, actions, 44.dp)
-                Spacer(GlanceModifier.width(6.dp))
-                TransportButton(R.drawable.rounded_skip_next_24, "Next", actions.onNext)
+                ControlIcon(R.drawable.rounded_skip_previous_24, "Previous", actions.onPrevious)
+                Spacer(GlanceModifier.width(4.dp))
+                PlayButton(state, actions, 48.dp)
+                Spacer(GlanceModifier.width(4.dp))
+                ControlIcon(R.drawable.rounded_skip_next_24, "Next", actions.onNext)
             }
         }
     }
@@ -257,11 +278,11 @@ private fun Artwork(
             modifier = modifier,
         )
     } else {
-        Box(modifier = modifier.background(ImageProvider(R.drawable.widget_shortcut_tile)), contentAlignment = Alignment.Center) {
+        Box(modifier = modifier.background(GlanceTheme.colors.secondaryContainer), contentAlignment = Alignment.Center) {
             Image(
                 provider = ImageProvider(R.drawable.mono),
                 contentDescription = null,
-                colorFilter = ColorFilter.tint(ColorProvider(WidgetStyle.OnSurfaceMuted)),
+                colorFilter = ColorFilter.tint(GlanceTheme.colors.onSecondaryContainer),
                 modifier = GlanceModifier.size(28.dp),
             )
         }
@@ -273,21 +294,24 @@ private fun Artwork(
 private fun TitleBlock(
     state: NowPlayingWidgetState,
     modifier: GlanceModifier,
+    titleSize: Int,
 ) {
     Column(modifier = modifier) {
         Text(
             text = if (state.isEmpty) "Refine Music" else state.title,
             maxLines = 1,
-            style = TextStyle(color = ColorProvider(WidgetStyle.OnSurface), fontSize = WidgetStyle.TitleSize, fontWeight = FontWeight.Bold),
+            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = titleSize.sp, fontWeight = FontWeight.Medium),
         )
+        Spacer(GlanceModifier.height(2.dp))
         Text(
             text = if (state.isEmpty) "Tap to play" else state.artist,
             maxLines = 1,
-            style = TextStyle(color = ColorProvider(WidgetStyle.OnSurfaceMuted), fontSize = WidgetStyle.BodySize),
+            style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp),
         )
     }
 }
 
+/** The filled circle YouTube Music's widget uses for play/pause, in the primary container colour. */
 @SuppressLint("RestrictedApi")
 @Composable
 private fun PlayButton(
@@ -299,14 +323,16 @@ private fun PlayButton(
         modifier =
             GlanceModifier
                 .size(side)
-                .background(ImageProvider(R.drawable.widget_media_fab))
-                .clickable(rippleOverride = R.drawable.no_ripple) { actions.onPlayPause() },
+                .background(
+                    ImageProvider(R.drawable.widget_media_fab),
+                    colorFilter = ColorFilter.tint(GlanceTheme.colors.primaryContainer),
+                ).clickable(rippleOverride = R.drawable.no_ripple) { actions.onPlayPause() },
         contentAlignment = Alignment.Center,
     ) {
         Image(
             provider = ImageProvider(if (state.isPlaying) R.drawable.rounded_pause_24 else R.drawable.rounded_play_arrow_24),
             contentDescription = if (state.isPlaying) "Pause" else "Play",
-            colorFilter = ColorFilter.tint(ColorProvider(Color.Black)),
+            colorFilter = ColorFilter.tint(GlanceTheme.colors.onPrimaryContainer),
             modifier = GlanceModifier.size(side * 0.55f),
         )
     }
@@ -314,7 +340,7 @@ private fun PlayButton(
 
 @SuppressLint("RestrictedApi")
 @Composable
-private fun TransportButton(
+private fun ControlIcon(
     icon: Int,
     description: String,
     onClick: () -> Unit,
@@ -322,11 +348,11 @@ private fun TransportButton(
     Image(
         provider = ImageProvider(icon),
         contentDescription = description,
-        colorFilter = ColorFilter.tint(ColorProvider(WidgetStyle.OnSurface)),
+        colorFilter = ColorFilter.tint(GlanceTheme.colors.onSurface),
         modifier =
             GlanceModifier
-                .size(36.dp)
-                .padding(6.dp)
+                .size(40.dp)
+                .padding(8.dp)
                 .clickable(rippleOverride = R.drawable.no_ripple) { onClick() },
     )
 }

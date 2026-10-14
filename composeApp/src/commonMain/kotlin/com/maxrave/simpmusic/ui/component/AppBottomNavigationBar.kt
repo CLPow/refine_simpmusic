@@ -32,6 +32,7 @@ import com.maxrave.simpmusic.ui.navigation.destination.home.HomeDestination
 import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDestination
 import com.maxrave.simpmusic.ui.navigation.destination.library.MixForYouDestination
 import com.maxrave.simpmusic.ui.navigation.destination.search.SearchDestination
+import com.maxrave.simpmusic.ui.theme.LocalIsYtmTheme
 import com.maxrave.simpmusic.ui.theme.typo
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
@@ -87,6 +88,7 @@ fun AppBottomNavigationBar(
         }
     }
 
+    val isYtm = LocalIsYtmTheme.current
     val barColor = MaterialTheme.colorScheme.background.copy(alpha = if (isTranslucentBackground) 0.88f else 1f)
     Column(Modifier.fillMaxWidth().background(barColor)) {
         HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
@@ -120,7 +122,8 @@ fun AppBottomNavigationBar(
                             Modifier
                                 .size(width = pillWidth, height = PillHeight)
                                 .clip(RoundedCornerShape(PillHeight / 2))
-                                .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
+                                // YouTube Music marks the tab by colour alone; the pill is for the other themes.
+                                .background(if (selected && !isYtm) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
                         contentAlignment = Alignment.Center,
                     ) {
                         CompositionLocalProvider(LocalContentColor provides contentColor) {

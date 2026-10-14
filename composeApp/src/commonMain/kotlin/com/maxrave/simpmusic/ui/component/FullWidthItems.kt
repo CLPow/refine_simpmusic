@@ -56,6 +56,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.CachePolicy
@@ -233,11 +235,10 @@ fun SongFullWidthItems(
         ) {
             Row(
                 Modifier
-                    .padding(vertical = 6.dp, horizontal = 15.dp)
+                    .padding(vertical = 8.dp, horizontal = 16.dp)
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Spacer(modifier = Modifier.width(8.dp))
                 AnimatedVisibility(
                     visible = selectionMode,
                     enter = fadeIn() + expandHorizontally(),
@@ -320,19 +321,15 @@ fun SongFullWidthItems(
                         .align(Alignment.CenterVertically),
                     verticalArrangement = Arrangement.SpaceEvenly,
                 ) {
+                    // YouTube Music row: one line each, ellipsised (a marquee on every row of a
+                    // long list was both noisy and a constant redraw).
                     Text(
                         text = track?.title ?: songEntity?.title ?: "",
-                        style = typo().titleSmall,
+                        style = typo().bodyLarge.copy(fontSize = 15.sp),
                         maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         color = contentColor,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .wrapContentHeight(align = Alignment.CenterVertically)
-                                .basicMarquee(
-                                    iterations = Int.MAX_VALUE,
-                                    animationMode = MarqueeAnimationMode.Immediately,
-                                ).focusable(),
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AnimatedVisibility(
@@ -367,21 +364,16 @@ fun SongFullWidthItems(
                         }
                         Text(
                             text =
-                                (
-                                    track?.artists?.toListName()?.connectArtists()
-                                        ?: songEntity?.artistName?.connectArtists()
-                                ) ?: "",
-                            style = typo().bodySmall,
+                                listOfNotNull(
+                                    (track?.artists?.toListName()?.connectArtists() ?: songEntity?.artistName?.connectArtists())
+                                        ?.takeIf { it.isNotBlank() },
+                                    (track?.album?.name ?: songEntity?.albumName)?.takeIf { it.isNotBlank() },
+                                ).joinToString(" • "),
+                            style = typo().bodyMedium,
                             maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             color = subtitleColor,
-                            modifier =
-                                Modifier
-                                    .fillMaxWidth()
-                                    .wrapContentHeight(align = Alignment.CenterVertically)
-                                    .basicMarquee(
-                                        iterations = Int.MAX_VALUE,
-                                        animationMode = MarqueeAnimationMode.Immediately,
-                                    ).focusable(),
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
