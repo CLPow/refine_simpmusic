@@ -2,6 +2,10 @@ package com.maxrave.simpmusic.ui.widget
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.sp
@@ -115,7 +119,10 @@ internal object WidgetStyle {
  * The "BIGGER" disk key is shared with the player so every surface reads the identical decode,
  * which keeps the palette — and so the widget colour — consistent across them.
  */
-internal suspend fun Context.loadWidgetArtwork(url: String?): Bitmap? {
+internal suspend fun Context.loadWidgetArtwork(
+    url: String?,
+    px: Int = WIDGET_ART_PX,
+): Bitmap? {
     if (url.isNullOrBlank()) return null
     val request =
         ImageRequest
@@ -124,9 +131,24 @@ internal suspend fun Context.loadWidgetArtwork(url: String?): Bitmap? {
             .diskCachePolicy(CachePolicy.ENABLED)
             .diskCacheKey(url + "BIGGER")
             .allowHardware(false)
-            .size(WIDGET_ART_PX, WIDGET_ART_PX)
+            .size(px, px)
             .build()
     return (ImageLoader(this).execute(request) as? SuccessResult)?.image?.toBitmap()
 }
 
 private const val WIDGET_ART_PX = 360
+
+/**
+ * The bitmap cut to a circle, centre-cropped. Done on the bitmap rather than with a corner radius
+ * because Glance only clips views from Android 12, and the 2×2 widget's round cover is its shape.
+ */
+internal fun Bitmap.toCircle(): Bitmap {
+    val side = minOf(width, height)
+    val out = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(out)
+    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    canvas.drawCircle(side / 2f, side / 2f, side / 2f, paint)
+    paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+    canvas.drawBitmap(this, (side - width) / 2f, (side - height) / 2f, paint)
+    return out
+}

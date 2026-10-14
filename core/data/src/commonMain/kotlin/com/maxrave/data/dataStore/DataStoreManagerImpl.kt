@@ -31,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -969,10 +970,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val translucentBottomBar =
-        settingsDataStore.data.map { preferences ->
-            preferences[TRANSLUCENT_BOTTOM_BAR] ?: TRUE
-        }
+    // The YouTube Music look is the only look: its nav bar is solid, so this is fixed off.
+    override val translucentBottomBar: Flow<String> = flowOf(FALSE)
 
     override suspend fun setTranslucentBottomBar(translucent: Boolean) {
         withContext(Dispatchers.IO) {
@@ -988,11 +987,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val themeMode =
-        settingsDataStore.data.map { preferences ->
-            // v2 key: every install starts once on the YouTube Music look (2.1.16); a later pick sticks.
-            preferences[THEME_MODE_V2] ?: DataStoreManager.THEME_MODE_YTM
-        }
+    // YouTube Music is the only theme (2.1.17). Whatever an older version stored is ignored.
+    override val themeMode: Flow<String> = flowOf(DataStoreManager.THEME_MODE_YTM)
 
     override suspend fun setThemeMode(mode: String) {
         withContext(Dispatchers.IO) {
@@ -1647,11 +1643,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val enableLiquidGlass: Flow<String>
-        get() =
-            settingsDataStore.data.map { preferences ->
-                preferences[LIQUID_GLASS] ?: FALSE
-            }
+    // Liquid glass is not part of the YouTube Music look, so it stays off.
+    override val enableLiquidGlass: Flow<String> = flowOf(FALSE)
 
     override suspend fun setEnableLiquidGlass(enable: Boolean) {
         withContext(Dispatchers.IO) {

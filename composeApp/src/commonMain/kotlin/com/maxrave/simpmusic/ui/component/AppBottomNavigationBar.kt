@@ -2,6 +2,9 @@ package com.maxrave.simpmusic.ui.component
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationRailItemDefaults
+import com.maxrave.simpmusic.ui.theme.YtmRed
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
@@ -157,14 +160,9 @@ fun AppNavigationRail(
 ) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     // See the note in AppBottomNavigationBar: `ordinal` is the tab's identity, not its position.
-    val bottomNavScreens =
-        listOfNotNull(
-            BottomNavScreen.Home,
-            BottomNavScreen.MixForYou.takeIf { showMixForYouTab },
-            BottomNavScreen.Analytics.takeIf { showAnalyticsTab },
-            BottomNavScreen.Library,
-            BottomNavScreen.Search,
-        )
+    // The same three tabs as the phone bar, in the same order: YouTube Music's Home · Explore · Library.
+    // Mix for you and Analytics live inside Library.
+    val bottomNavScreens = listOf(BottomNavScreen.Home, BottomNavScreen.Search, BottomNavScreen.Library)
     var selectedIndex by rememberSaveable {
         mutableIntStateOf(
             when (startDestination) {
@@ -189,24 +187,13 @@ fun AppNavigationRail(
     }
     NavigationRail {
         Spacer(Modifier.height(16.dp))
-        Box(Modifier.padding(horizontal = 16.dp)) {
-            Box(
-                Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(
-                    painter = painterResource(Res.drawable.mono),
-                    contentDescription = null,
-                    modifier =
-                        Modifier
-                            .height(32.dp)
-                            .clip(CircleShape),
-                )
-            }
-        }
+        // YouTube Music's mark: the logo in red, no tile behind it.
+        Icon(
+            painter = painterResource(Res.drawable.mono),
+            contentDescription = null,
+            tint = YtmRed,
+            modifier = Modifier.padding(horizontal = 16.dp).size(36.dp),
+        )
         Spacer(Modifier.weight(1f))
         bottomNavScreens.forEach { screen ->
             NavigationRailItem(
@@ -223,6 +210,12 @@ fun AppNavigationRail(
                     )
                 },
                 selected = selectedIndex == screen.ordinal,
+                colors =
+                    NavigationRailItemDefaults.colors(
+                        indicatorColor = Color.Transparent,
+                        selectedIconColor = MaterialTheme.colorScheme.onSurface,
+                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
                 onClick = {
                     if (selectedIndex == screen.ordinal) {
                         if (currentBackStackEntry?.destination?.hierarchy?.any {

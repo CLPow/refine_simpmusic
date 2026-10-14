@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Colours of the Now Playing widget's picker preview, matching what the widget draws (fixed dark fallback). -->
+<resources>
+    <color name="wp_background">#1E1E24</color>
+    <color name="wp_strip">#2C2C34</color>
+    <color name="wp_on_surface">#F2F2F7</color>
+    <color name="wp_on_surface_variant">#C4C4CF</color>
+    <color name="wp_primary">#B8C4FF</color>
+    <color name="wp_on_primary">#1A2B6E</color>
+    <color name="wp_tertiary_container">#5C3E5F</color>
+    <color name="wp_on_tertiary_container">#FFD8F6</color>
+    <color name="wp_art">#4A4A58</color>
+</resources>

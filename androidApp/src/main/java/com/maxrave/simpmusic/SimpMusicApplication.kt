@@ -20,6 +20,8 @@ import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.di.viewModelModule
 import com.maxrave.simpmusic.service.backup.AutoBackupScheduler
+import com.maxrave.simpmusic.ui.widget.TurntableWidget
+import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -74,6 +76,12 @@ class SimpMusicApplication :
         autoBackupScheduler = AutoBackupScheduler(this, dataStoreManager)
         applicationScope.launch {
             autoBackupScheduler.observeAndSchedule()
+        }
+
+        // Redraw the Now Playing widgets already on the home screen once per process start, so an
+        // app update shows the new widget layout straight away instead of after the next track.
+        applicationScope.launch {
+            runCatching { TurntableWidget().updateAll(this@SimpMusicApplication) }
         }
 
         CaocConfig.Builder
