@@ -634,6 +634,9 @@ interface DataStoreManager {
          */
         const val THEME_MODE_BOOMING = "BOOMING"
 
+        /** YouTube Music's own look: near-black surfaces, white text, one red accent. The default. */
+        const val THEME_MODE_YTM = "YTM"
+
         const val THEME_COLOR_DEFAULT = "DEFAULT"
         const val THEME_COLOR_WALLPAPER = "WALLPAPER"
         const val THEME_COLOR_CUSTOM = "CUSTOM"

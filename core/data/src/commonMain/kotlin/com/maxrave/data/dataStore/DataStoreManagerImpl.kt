@@ -990,13 +990,14 @@ internal class DataStoreManagerImpl(
 
     override val themeMode =
         settingsDataStore.data.map { preferences ->
-            preferences[THEME_MODE] ?: DataStoreManager.THEME_MODE_DARK
+            // v2 key: every install starts once on the YouTube Music look (2.1.16); a later pick sticks.
+            preferences[THEME_MODE_V2] ?: DataStoreManager.THEME_MODE_YTM
         }
 
     override suspend fun setThemeMode(mode: String) {
         withContext(Dispatchers.IO) {
             settingsDataStore.edit { settings ->
-                settings[THEME_MODE] = mode
+                settings[THEME_MODE_V2] = mode
             }
         }
     }
@@ -1896,7 +1897,7 @@ internal class DataStoreManagerImpl(
         val HOME_LIMIT = intPreferencesKey("home_limit")
         val CHART_KEY = stringPreferencesKey("chart_key")
         val TRANSLUCENT_BOTTOM_BAR = stringPreferencesKey("translucent_bottom_bar")
-        val THEME_MODE = stringPreferencesKey("theme_mode")
+        val THEME_MODE_V2 = stringPreferencesKey("theme_mode_v2")
         val THEME_COLOR_SOURCE = stringPreferencesKey("theme_color_source")
         val CUSTOM_THEME_COLOR = stringPreferencesKey("custom_theme_color")
         val NOW_PLAYING_STYLE = stringPreferencesKey("now_playing_style")

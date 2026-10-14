@@ -446,6 +446,7 @@ import simpmusic.composeapp.generated.resources.theme_color_wallpaper
 import simpmusic.composeapp.generated.resources.theme_mode_dark
 import simpmusic.composeapp.generated.resources.theme_mode_light
 import simpmusic.composeapp.generated.resources.theme_mode_booming
+import simpmusic.composeapp.generated.resources.theme_mode_ytm
 import simpmusic.composeapp.generated.resources.theme_mode_system
 import simpmusic.composeapp.generated.resources.third_party_libraries
 import simpmusic.composeapp.generated.resources.thumbnail_cache
@@ -723,6 +724,7 @@ fun SettingScreen(
                 Text(text = stringResource(Res.string.user_interface), style = typo().labelMedium, color = MaterialTheme.colorScheme.onBackground)
                 val themeModeLabels =
                     listOf(
+                        DataStoreManager.THEME_MODE_YTM to stringResource(Res.string.theme_mode_ytm),
                         DataStoreManager.THEME_MODE_SYSTEM to stringResource(Res.string.theme_mode_system),
                         DataStoreManager.THEME_MODE_DARK to stringResource(Res.string.theme_mode_dark),
                         DataStoreManager.THEME_MODE_LIGHT to stringResource(Res.string.theme_mode_light),

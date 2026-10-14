@@ -17,10 +17,16 @@ import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.poppins_medium
 
 @Composable
-fun fontFamily(): FontFamily =
-    FontFamily(
-        Font(Res.font.poppins_medium, FontWeight.Normal, FontStyle.Normal),
-    )
+fun fontFamily(ytm: Boolean = LocalIsYtmTheme.current): FontFamily =
+    // YouTube Music sets its UI in the platform sans (Roboto on Android); Poppins stays for the
+    // other themes.
+    if (ytm) {
+        FontFamily.Default
+    } else {
+        FontFamily(
+            Font(Res.font.poppins_medium, FontWeight.Normal, FontStyle.Normal),
+        )
+    }
 
 /**
  * When true, [typo] keeps the original always-light text colors (pure white titles, #A8A8A8 body)
@@ -33,8 +39,9 @@ val LocalForceDarkText = staticCompositionLocalOf { false }
 fun typo(
     colorScheme: ColorScheme = MaterialTheme.colorScheme,
     forceDark: Boolean = LocalForceDarkText.current,
+    ytm: Boolean = LocalIsYtmTheme.current,
 ): Typography {
-    val fontFamily = fontFamily()
+    val fontFamily = fontFamily(ytm)
 
     // Titles were pure white, everything else muted gray (#A8A8A8) in the old dark-only palette.
     // forceDark keeps that; otherwise both come from the scheme (theme-aware light/dark).

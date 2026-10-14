@@ -37,6 +37,7 @@
     <string name="search">Search</string>
     <string name="explore">Explore</string>
     <string name="history">History</string>
+    <string name="theme_mode_ytm">YouTube Music</string>
     <string name="settings_cat_appearance">Appearance</string>
     <string name="settings_cat_appearance_desc">Theme, colours, player and lyrics look</string>
     <string name="settings_cat_playback">Playback &amp; audio</string>

@@ -60,7 +60,7 @@ import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.player.FullscreenDestination
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentActions
-import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentAppleMusic
+import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentYtm
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentState
 import com.maxrave.simpmusic.ui.screen.player.content.PlayerBackdropColor
 import com.maxrave.simpmusic.ui.screen.player.content.toAudioCodecLabel
@@ -729,9 +729,8 @@ fun NowPlayingScreenContent(
                 mediaPlayerHandler.removeMediaItem(index)
             },
         )
-    // One player. Refine used to ship four interchangeable styles; they are consolidated into the
-    // artwork-led one (big cover, title/artist, transport, and a Lyrics · Queue dock).
-    NowPlayingContentAppleMusic(
+    // One player, in YouTube Music's layout (2.1.16).
+    NowPlayingContentYtm(
         state = state,
         actions = actions,
     )

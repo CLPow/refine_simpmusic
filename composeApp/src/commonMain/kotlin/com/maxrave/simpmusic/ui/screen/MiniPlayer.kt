@@ -137,6 +137,7 @@ import com.maxrave.simpmusic.ui.icon.SkipNext
 import com.maxrave.simpmusic.ui.icon.VolumeOff
 import com.maxrave.simpmusic.ui.icon.VolumeUp
 import com.maxrave.simpmusic.ui.theme.LocalIsDarkTheme
+import com.maxrave.simpmusic.ui.theme.LocalIsYtmTheme
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
@@ -312,12 +313,23 @@ fun MiniPlayer(
         // One shape for both the Card and the clip below. They must not diverge: the clip wraps
         // the Card's own background draw, so the larger radius wins and silently becomes the
         // visible one.
+        val isYtm = LocalIsYtmTheme.current
         val miniPlayerShape =
-            if (isLiquidGlassEnabled == DataStoreManager.TRUE) CircleShape else RoundedCornerShape(8.dp)
+            when {
+                isLiquidGlassEnabled == DataStoreManager.TRUE -> CircleShape
+                // YouTube Music's mini player is a flat bar sitting flush on the navigation bar.
+                isYtm -> RoundedCornerShape(0.dp)
+                else -> RoundedCornerShape(8.dp)
+            }
         // A dark bar tinted by the artwork, as in YouTube Music — the raw palette colour made a
         // pastel slab that fought the page and the white text on it.
         val surface = MaterialTheme.colorScheme.surfaceContainerHigh
-        val cardColor = if (isLiquidGlassEnabled == DataStoreManager.TRUE) Color.Transparent else lerp(background.value, surface, 0.6f)
+        val cardColor =
+            when {
+                isLiquidGlassEnabled == DataStoreManager.TRUE -> Color.Transparent
+                isYtm -> surface
+                else -> lerp(background.value, surface, 0.6f)
+            }
         Card(
             shape = miniPlayerShape,
             colors =

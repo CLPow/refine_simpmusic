@@ -12,6 +12,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.RippleConfiguration
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -66,6 +67,53 @@ private fun boomingColorScheme(): ColorScheme =
     )
 
 /**
+ * YouTube Music's palette: near-black page (#030303), stepped greys for raised surfaces, white
+ * text with #AAAAAA secondary text, and a single red accent. Red is reserved for what YTM paints
+ * red — the progress, the active tab marker, toggled states — so everything else stays neutral.
+ */
+val YtmRed = Color(0xFFFF0033)
+
+private fun ytmColorScheme(): ColorScheme =
+    darkColorScheme(
+        primary = YtmRed,
+        onPrimary = Color.White,
+        primaryContainer = Color(0xFF3A0010),
+        onPrimaryContainer = Color.White,
+        secondary = Color.White,
+        onSecondary = Color.Black,
+        secondaryContainer = Color(0xFF2E2E2E),
+        onSecondaryContainer = Color.White,
+        tertiary = YtmRed,
+        onTertiary = Color.White,
+        tertiaryContainer = Color(0xFF2E2E2E),
+        onTertiaryContainer = Color.White,
+        error = Color(0xFFFF6E6E),
+        onError = Color.Black,
+        errorContainer = Color(0xFF5C1111),
+        onErrorContainer = Color.White,
+        background = Color(0xFF030303),
+        onBackground = Color.White,
+        surface = Color(0xFF030303),
+        onSurface = Color.White,
+        surfaceVariant = Color(0xFF212121),
+        onSurfaceVariant = Color(0xFFAAAAAA),
+        surfaceTint = Color.Transparent,
+        outline = Color(0xFF717171),
+        outlineVariant = Color(0xFF303030),
+        scrim = Color.Black,
+        inverseSurface = Color.White,
+        inverseOnSurface = Color.Black,
+        inversePrimary = YtmRed,
+        surfaceBright = Color(0xFF2E2E2E),
+        surfaceDim = Color(0xFF030303),
+        surfaceContainerLowest = Color(0xFF000000),
+        surfaceContainerLow = Color(0xFF0F0F0F),
+        surfaceContainer = Color(0xFF181818),
+        surfaceContainerHigh = Color(0xFF212121),
+        surfaceContainerHighest = Color(0xFF2E2E2E),
+    )
+
+/**
  * Semantic colors that sit outside the Material 3 ColorScheme.
  * Read them via [LocalAppColors] inside composables.
  */
@@ -103,6 +151,9 @@ val LocalIsDarkTheme = staticCompositionLocalOf { true }
 
 /** True when the Booming Music–influenced theme is active (fixed indigo scheme, no seed). */
 val LocalIsBoomingTheme = staticCompositionLocalOf { false }
+
+/** True when the YouTube Music theme is active; also switches the type to the system sans (Roboto). */
+val LocalIsYtmTheme = staticCompositionLocalOf { false }
 
 /**
  * Whether liquid-glass surfaces may actually draw glass.
@@ -175,8 +226,9 @@ fun AppTheme(
 ) {
     val isDark = isDarkTheme(themeMode)
     val booming = themeMode == DataStoreManager.THEME_MODE_BOOMING
+    val ytm = themeMode == DataStoreManager.THEME_MODE_YTM
     val wallpaperScheme =
-        if (themeColorSource == DataStoreManager.THEME_COLOR_WALLPAPER && !booming) {
+        if (themeColorSource == DataStoreManager.THEME_COLOR_WALLPAPER && !booming && !ytm) {
             platformDynamicColorScheme(isDark)
         } else {
             null
@@ -192,6 +244,7 @@ fun AppTheme(
     // BOOMING ignores the seed and wallpaper: it is a fixed Material 3 look from Booming Music.
     val colorScheme =
         when {
+            ytm -> remember { ytmColorScheme() }
             booming -> boomingColorScheme()
             wallpaperScheme != null -> wallpaperScheme
             else ->
@@ -206,7 +259,7 @@ fun AppTheme(
     // Immersive screens stay dark even at light theme (see [ForceDarkContent]). Resolve their scheme
     // once here instead of letting every such subtree build a palette of its own.
     val forcedDarkScheme =
-        if (isDark) {
+        if (isDark || ytm) {
             colorScheme
         } else {
             rememberDynamicColorScheme(
@@ -226,12 +279,13 @@ fun AppTheme(
                 LocalAppColors provides if (isDark) DarkAppColors else LightAppColors,
                 LocalIsDarkTheme provides isDark,
                 LocalIsBoomingTheme provides booming,
+                LocalIsYtmTheme provides ytm,
                 LocalForcedDarkColorScheme provides forcedDarkScheme,
                 LocalLiquidGlassEnabled provides liquidGlassEnabled,
                 content = content,
             )
         },
-        typography = typo(colorScheme),
+        typography = typo(colorScheme, ytm = ytm),
     )
 }
 
@@ -314,5 +368,6 @@ fun isDarkTheme(themeMode: String): Boolean =
         DataStoreManager.THEME_MODE_LIGHT -> false
         DataStoreManager.THEME_MODE_SYSTEM -> isSystemInDarkTheme()
         DataStoreManager.THEME_MODE_BOOMING -> true
+        DataStoreManager.THEME_MODE_YTM -> true
         else -> true
     }
