@@ -16,7 +16,6 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
-    <uses-permission android:name="androidx.car.app.MEDIA_TEMPLATES" />
 
     <uses-feature
         android:name="android.hardware.type.automotive"
@@ -72,14 +71,6 @@
 
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.APP_MUSIC" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-
-            <!-- Car App Library: host asks to surface the media playback screen
-                 (minimized control panel tap, system media surfaces) -->
-            <intent-filter>
-                <action android:name="androidx.car.app.media.action.SHOW_MEDIA_PLAYBACK" />
-
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
@@ -251,12 +242,14 @@
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
 
-        <meta-data
-            android:name="androidx.car.app.minCarApiLevel"
-            android:value="8" />
-
+        <!-- Disabled, as YouTube Music ships its own MusicCarAppService. While enabled, Android
+             Auto treated Refine as a Car App Library "templated media" app, gated by host API
+             level 8 and AA's rollout of templated media, and when that gate failed AA hid the app
+             instead of falling back to the media browser above, so Refine came and went from the
+             launcher. Android Auto now lists it through SimpleMediaService only. -->
         <service
             android:name="com.maxrave.media3.carapp.SimpMusicCarAppService"
+            android:enabled="false"
             android:exported="true"
             tools:ignore="ExportedService">
             <intent-filter>

@@ -218,7 +218,8 @@ internal class SimpleMediaSessionCallback(
                         MediaMetadata
                             .Builder()
                             .setIsPlayable(false)
-                            .setIsBrowsable(false)
+                            // A media root has to be browsable: it is what Android Auto opens.
+                            .setIsBrowsable(true)
                             .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
                             .build(),
                     ).build(),
@@ -229,6 +230,8 @@ internal class SimpleMediaSessionCallback(
                     .setExtras(
                         Bundle().apply {
                             putBoolean(CONTENT_STYLE_SUPPORTED, true)
+                            // Home · Recent · Library as AA's tabs, opted in as YouTube Music does.
+                            putBoolean(AUTO_TABS_OPT_IN_HINT, true)
                             putInt(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_GRID_ITEM)
                             putInt(CONTENT_STYLE_PLAYABLE_HINT, CONTENT_STYLE_LIST_ITEM)
                         },
@@ -1182,6 +1185,7 @@ internal class SimpleMediaSessionCallback(
          * Names and values are fixed by the platform contract, not by us.
          */
         const val CONTENT_STYLE_SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED"
+        const val AUTO_TABS_OPT_IN_HINT = "android.media.browse.AUTO_TABS_OPT_IN_HINT"
         const val CONTENT_STYLE_BROWSABLE_HINT = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
         const val CONTENT_STYLE_PLAYABLE_HINT = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
         const val CONTENT_STYLE_GROUP_TITLE_HINT = "android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT"
