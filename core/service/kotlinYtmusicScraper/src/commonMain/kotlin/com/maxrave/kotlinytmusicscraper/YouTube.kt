@@ -93,6 +93,9 @@ import io.ktor.http.URLBuilder
 import io.ktor.http.parseQueryString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
@@ -131,6 +134,9 @@ private const val TAG = "YouTubeScraper"
 
 class YouTube {
     private val ytMusic = Ytmusic()
+
+    // Runs the blocking stream extraction alongside the player request (see [player]).
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val tidalTokenMutex = Mutex()
     private var tidalAccessToken: String? = null
@@ -1224,6 +1230,7 @@ class YouTube {
     suspend fun newPipePlayer(
         videoId: String,
         tempRes: PlayerResponse,
+        extracted: (suspend () -> List<Pair<Int, String>>)? = null,
     ): PlayerResponse? {
         val listUrlSig = mutableListOf<String>()
         var decodedSigResponse: PlayerResponse?
@@ -1234,7 +1241,7 @@ class YouTube {
         } else {
             sigResponse = tempRes
         }
-        val streamsList = ytMusic.getNewPipePlayer(videoId)
+        val streamsList = extracted?.invoke() ?: ytMusic.getNewPipePlayer(videoId)
         if (streamsList.isEmpty()) return null
 
         decodedSigResponse =
@@ -1344,6 +1351,14 @@ class YouTube {
                     }.joinToString("")
 
             var decodedSigResponse: PlayerResponse? = null
+            // The stream extraction (several requests plus the player-script decode) does not need
+            // the WEB_REMIX response, so it starts now and runs while that request is in flight.
+            // It used to start only after the response arrived, adding one full round trip to the
+            // time before every uncached song could begin.
+            val extraction =
+                ioScope.async {
+                    ytMusic.getNewPipePlayer(videoId)
+                }
             val tempRes =
                 ytMusic
                     .player(
@@ -1415,7 +1430,12 @@ class YouTube {
                         )
                     }
 
-            val response = newPipePlayer(videoId, tempRes)
+            val response =
+                try {
+                    newPipePlayer(videoId, tempRes) { extraction.await() }
+                } finally {
+                    extraction.cancel()
+                }
             if (response != null) {
                 decodedSigResponse = response
                 Logger.d(TAG, "YouTube Player found URL")

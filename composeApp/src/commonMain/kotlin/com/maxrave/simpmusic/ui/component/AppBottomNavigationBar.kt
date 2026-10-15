@@ -1,246 +1,157 @@
 package com.maxrave.simpmusic.ui.component
 
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.Image
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationRailItemDefaults
-import com.maxrave.simpmusic.ui.theme.YtmRed
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBarDefaults
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.currentBackStackEntryAsState
-import com.maxrave.simpmusic.extension.greyScale
-import com.maxrave.simpmusic.ui.navigation.destination.home.AnalyticsDestination
+import com.maxrave.simpmusic.ui.icon.Explore
+import com.maxrave.simpmusic.ui.icon.Home
+import com.maxrave.simpmusic.ui.icon.LibraryMusic
+import com.maxrave.simpmusic.ui.icon.SimpIcons
+import com.maxrave.simpmusic.ui.navigation.destination.home.ExploreDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.HomeDestination
 import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDestination
-import com.maxrave.simpmusic.ui.navigation.destination.library.MixForYouDestination
-import com.maxrave.simpmusic.ui.navigation.destination.search.SearchDestination
-import com.maxrave.simpmusic.ui.theme.LocalIsYtmTheme
 import com.maxrave.simpmusic.ui.theme.typo
-import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
-import simpmusic.composeapp.generated.resources.*
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.explore
+import simpmusic.composeapp.generated.resources.home
+import simpmusic.composeapp.generated.resources.library
 import kotlin.reflect.KClass
 
+private val BarColor = Color(0xFF030303)
+private val Unselected = Color(0xFFAAAAAA)
+
+/** YouTube Music's three tabs (Samples is left out: Refine is songs only). */
+enum class YtmTab(
+    val destination: Any,
+    val title: StringResource,
+    val icon: ImageVector,
+) {
+    Home(HomeDestination, Res.string.home, SimpIcons.Home),
+    Explore(ExploreDestination, Res.string.explore, SimpIcons.Explore),
+    Library(LibraryDestination, Res.string.library, SimpIcons.LibraryMusic),
+}
+
+/** The tab whose page is on screen, read from the back stack so deep links and back presses agree. */
+@Composable
+private fun currentTab(navController: NavController): YtmTab? {
+    val entry by navController.currentBackStackEntryAsState()
+    val hierarchy = entry?.destination?.hierarchy ?: return YtmTab.Home
+    return YtmTab.entries.firstOrNull { tab -> hierarchy.any { it.hasRoute(tab.destination::class) } }
+}
+
+private fun NavController.selectTab(
+    tab: YtmTab,
+    current: YtmTab?,
+    reload: (KClass<*>) -> Unit,
+) {
+    if (tab == current) {
+        // A tap on the open tab scrolls it to the top or reloads it, as in YouTube Music.
+        reload(tab.destination::class)
+        return
+    }
+    navigate(tab.destination) {
+        popUpTo(graph.startDestinationId) { saveState = true }
+        launchSingleTop = true
+        restoreState = true
+    }
+}
+
 /**
- * The phone bottom bar with liquid glass off, laid out like YouTube Music's: a full-width flat bar
- * on the page colour, a hairline above it, three equal tabs — Home · Explore · Library — with the
- * label always shown and the selected tab marked by a filled pill behind its icon.
- *
- * Mix for you and Analytics no longer take tab slots (four or five tabs squeezed every label);
- * they live inside Library. [showAnalyticsTab] and [showMixForYouTab] are kept for the rail and
- * the glass bar, which still read them.
+ * YouTube Music's bottom bar: Home · Explore · Library on the page's near-black, the label always
+ * shown, the open tab in white and the others grey. No indicator pill.
  */
 @Composable
 fun AppBottomNavigationBar(
-    startDestination: Any = HomeDestination,
     navController: NavController,
-    isTranslucentBackground: Boolean = false,
-    showAnalyticsTab: Boolean = false,
-    showMixForYouTab: Boolean = false,
     reloadDestinationIfNeeded: (KClass<*>) -> Unit = { _ -> },
 ) {
-    val currentBackStackEntry by navController.currentBackStackEntryAsState()
-    val tabs = listOf(BottomNavScreen.Home, BottomNavScreen.Search, BottomNavScreen.Library)
-    var selectedIndex by rememberSaveable {
-        mutableIntStateOf(
-            when (startDestination) {
-                is SearchDestination -> BottomNavScreen.Search.ordinal
-                is LibraryDestination -> BottomNavScreen.Library.ordinal
-                else -> BottomNavScreen.Home.ordinal
-            },
-        )
-    }
-    // Follow the back stack, so a deep link or a back press lands the highlight on the right tab.
-    LaunchedEffect(currentBackStackEntry) {
-        val hierarchy = currentBackStackEntry?.destination?.hierarchy ?: return@LaunchedEffect
-        tabs.firstOrNull { tab -> hierarchy.any { it.hasRoute(tab.destination::class) } }?.let { selectedIndex = it.ordinal }
-    }
-    val selectTab: (BottomNavScreen) -> Unit = { screen ->
-        if (selectedIndex == screen.ordinal &&
-            currentBackStackEntry?.destination?.hierarchy?.any { it.hasRoute(screen.destination::class) } == true
-        ) {
-            reloadDestinationIfNeeded(screen.destination::class)
-        } else {
-            selectedIndex = screen.ordinal
-            navController.navigate(screen.destination) {
-                popUpTo(navController.graph.startDestinationId) { saveState = true }
-                launchSingleTop = true
-                restoreState = true
-            }
-        }
-    }
-
-    val isYtm = LocalIsYtmTheme.current
-    val barColor = MaterialTheme.colorScheme.background.copy(alpha = if (isTranslucentBackground) 0.88f else 1f)
-    Column(Modifier.fillMaxWidth().background(barColor)) {
-        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-        Row(
-            modifier =
+    val current = currentTab(navController)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(BarColor)
+            .windowInsetsPadding(NavigationBarDefaults.windowInsets)
+            .height(64.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        YtmTab.entries.forEach { tab ->
+            val color = if (tab == current) Color.White else Unselected
+            Column(
                 Modifier
-                    .fillMaxWidth()
-                    .windowInsetsPadding(NavigationBarDefaults.windowInsets)
-                    .height(BarHeight),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            tabs.forEach { screen ->
-                val selected = selectedIndex == screen.ordinal
-                val contentColor =
-                    if (selected) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
-                val pillWidth by animateDpAsState(if (selected) PillWidth else PillHeight, label = "navPill")
-                Column(
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .fillMaxHeight()
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                            ) { selectTab(screen) },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(width = pillWidth, height = PillHeight)
-                                .clip(RoundedCornerShape(PillHeight / 2))
-                                // YouTube Music marks the tab by colour alone; the pill is for the other themes.
-                                .background(if (selected && !isYtm) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        CompositionLocalProvider(LocalContentColor provides contentColor) {
-                            screen.icon()
-                        }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        stringResource(screen.title),
-                        style = typo().bodySmall,
-                        color = contentColor,
-                        maxLines = 1,
-                    )
-                }
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                        navController.selectTab(tab, current, reloadDestinationIfNeeded)
+                    },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                Icon(tab.icon, contentDescription = null, tint = color, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.height(4.dp))
+                Text(stringResource(tab.title), style = typo().bodySmall.copy(fontSize = 12.sp), color = color, maxLines = 1)
             }
         }
     }
 }
 
-private val BarHeight = 68.dp
-private val PillHeight = 32.dp
-private val PillWidth = 60.dp
-
+/**
+ * The same tabs as a side rail, for tablets and Desktop: YouTube Music's web layout keeps them in
+ * a column on the left, icon above label.
+ */
 @Composable
 fun AppNavigationRail(
-    startDestination: Any = HomeDestination,
     navController: NavController,
-    showAnalyticsTab: Boolean = false,
-    showMixForYouTab: Boolean = false,
     reloadDestinationIfNeeded: (KClass<*>) -> Unit = { _ -> },
 ) {
-    val currentBackStackEntry by navController.currentBackStackEntryAsState()
-    // See the note in AppBottomNavigationBar: `ordinal` is the tab's identity, not its position.
-    // The same three tabs as the phone bar, in the same order: YouTube Music's Home · Explore · Library.
-    // Mix for you and Analytics live inside Library.
-    val bottomNavScreens = listOf(BottomNavScreen.Home, BottomNavScreen.Search, BottomNavScreen.Library)
-    var selectedIndex by rememberSaveable {
-        mutableIntStateOf(
-            when (startDestination) {
-                is HomeDestination -> BottomNavScreen.Home.ordinal
-                is SearchDestination -> BottomNavScreen.Search.ordinal
-                is LibraryDestination -> BottomNavScreen.Library.ordinal
-                is AnalyticsDestination -> BottomNavScreen.Analytics.ordinal
-                is MixForYouDestination -> BottomNavScreen.MixForYou.ordinal
-                else -> BottomNavScreen.Home.ordinal // Default to Home if not recognized
-            },
-        )
-    }
-    // A tab can disappear from the list under the user: tracking gets turned off while Analytics is
-    // selected, or the YouTube session ends while Mix for you is. Fall back to Home in both cases so
-    // nothing is left highlighted.
-    LaunchedEffect(showAnalyticsTab, showMixForYouTab) {
-        if ((!showAnalyticsTab && selectedIndex == BottomNavScreen.Analytics.ordinal) ||
-            (!showMixForYouTab && selectedIndex == BottomNavScreen.MixForYou.ordinal)
-        ) {
-            selectedIndex = BottomNavScreen.Home.ordinal
+    val current = currentTab(navController)
+    Column(
+        Modifier.fillMaxHeight().width(80.dp).background(BarColor).padding(top = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        YtmTab.entries.forEach { tab ->
+            val selected = tab == current
+            Column(
+                Modifier
+                    .padding(horizontal = 6.dp, vertical = 4.dp)
+                    .fillMaxWidth()
+                    .background(if (selected) Color.White.copy(alpha = 0.1f) else Color.Transparent, androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                    .clickable { navController.selectTab(tab, current, reloadDestinationIfNeeded) }
+                    .padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Icon(tab.icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+                Spacer(Modifier.height(4.dp))
+                Text(stringResource(tab.title), style = typo().bodySmall.copy(fontSize = 11.sp), color = Color.White, maxLines = 1)
+            }
         }
-    }
-    NavigationRail {
-        Spacer(Modifier.height(16.dp))
-        // YouTube Music's mark: the logo in red, no tile behind it.
-        Icon(
-            painter = painterResource(Res.drawable.mono),
-            contentDescription = null,
-            tint = YtmRed,
-            modifier = Modifier.padding(horizontal = 16.dp).size(36.dp),
-        )
-        Spacer(Modifier.weight(1f))
-        bottomNavScreens.forEach { screen ->
-            NavigationRailItem(
-                icon = screen.icon,
-                label = {
-                    Text(
-                        stringResource(screen.title),
-                        style =
-                            if (selectedIndex == screen.ordinal) {
-                                typo().bodySmall
-                            } else {
-                                typo().bodySmall.greyScale()
-                            },
-                    )
-                },
-                selected = selectedIndex == screen.ordinal,
-                colors =
-                    NavigationRailItemDefaults.colors(
-                        indicatorColor = Color.Transparent,
-                        selectedIconColor = MaterialTheme.colorScheme.onSurface,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                onClick = {
-                    if (selectedIndex == screen.ordinal) {
-                        if (currentBackStackEntry?.destination?.hierarchy?.any {
-                                it.hasRoute(screen.destination::class)
-                            } == true
-                        ) {
-                            reloadDestinationIfNeeded(
-                                screen.destination::class,
-                            )
-                        } else {
-                            navController.navigate(screen.destination)
-                        }
-                    } else {
-                        selectedIndex = screen.ordinal
-                        navController.navigate(screen.destination) {
-                            popUpTo(navController.graph.startDestinationId) {
-                                saveState = true
-                            }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                },
-            )
-        }
-        Spacer(Modifier.height(32.dp))
     }
 }

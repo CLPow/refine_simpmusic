@@ -191,6 +191,9 @@ kotlin {
             implementation(libs.sentry.jvm)
             implementation(libs.native.tray)
             implementation(projects.mediaJvmUi)
+            // Windows taskbar buttons and progress, media keys, start on boot (WindowsIntegration).
+            implementation(libs.jna)
+            implementation(libs.jna.platform)
         }
     }
 }

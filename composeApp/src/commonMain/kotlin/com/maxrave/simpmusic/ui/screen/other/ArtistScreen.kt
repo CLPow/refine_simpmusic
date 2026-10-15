@@ -1,20 +1,11 @@
 package com.maxrave.simpmusic.ui.screen.other
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.MarqueeAnimationMode
 import androidx.compose.foundation.background
-import androidx.compose.foundation.basicMarquee
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -22,96 +13,53 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
-import coil3.compose.LocalPlatformContext
-import coil3.request.CachePolicy
-import coil3.request.ImageRequest
-import coil3.request.crossfade
-import com.kyant.backdrop.highlight.Highlight
 import com.maxrave.common.Config
 import com.maxrave.domain.data.model.browse.album.Track
-import com.maxrave.domain.data.model.home.Content
-import com.maxrave.domain.data.model.searchResult.songs.Artist
 import com.maxrave.domain.mediaservice.handler.PlaylistType
 import com.maxrave.domain.mediaservice.handler.QueueData
 import com.maxrave.domain.utils.toSongEntity
-import com.maxrave.simpmusic.Platform
-import com.maxrave.simpmusic.expect.ui.MediaPlayerView
-import com.maxrave.simpmusic.expect.ui.layerBackdrop
-import com.maxrave.simpmusic.expect.ui.rememberBackdrop
-import com.maxrave.simpmusic.expect.ui.toImageBitmap
-import com.maxrave.simpmusic.extension.artworkScrimBrush
-import com.maxrave.simpmusic.extension.getColorFromPalette
-import com.maxrave.simpmusic.extension.getScreenSizeInfo
-import com.maxrave.simpmusic.extension.getStringBlocking
-import com.maxrave.simpmusic.extension.hexToColorOrNull
-import com.maxrave.simpmusic.extension.rgbFactor
-import com.maxrave.simpmusic.extension.toImmersiveBackground
-import com.maxrave.simpmusic.extension.toSquareThumbnailUrl
-import com.maxrave.simpmusic.getPlatform
-import com.maxrave.simpmusic.ui.component.AddToPlaylistModalBottomSheet
-import com.maxrave.simpmusic.ui.component.CenterLoadingBox
-import com.maxrave.simpmusic.ui.component.rememberHolderPainter
-import com.maxrave.simpmusic.ui.component.DescriptionView
-import com.maxrave.simpmusic.ui.component.EndOfPage
-import com.maxrave.simpmusic.ui.component.HomeItemArtist
-import com.maxrave.simpmusic.ui.component.HomeItemContentPlaylist
-import com.maxrave.simpmusic.ui.component.HomeItemVideo
-import com.maxrave.simpmusic.ui.component.LiquidGlassIconButton
 import com.maxrave.simpmusic.ui.component.NowPlayingBottomSheet
-import com.maxrave.simpmusic.ui.component.SongFullWidthItems
-import com.maxrave.simpmusic.ui.component.selection.SelectedSongsBottomSheet
-import com.maxrave.simpmusic.ui.component.selection.SongSelectionState
-import com.maxrave.simpmusic.ui.component.selection.SongSelectionTopAppBar
-import com.maxrave.simpmusic.ui.component.selection.rememberSongSelectionState
+import com.maxrave.simpmusic.ui.component.ytm.Thumb
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
+import com.maxrave.simpmusic.ui.component.ytm.YtmShelfHeader
+import com.maxrave.simpmusic.ui.component.ytm.YtmSongRow
 import com.maxrave.simpmusic.ui.icon.ArrowBackIosNew
-import com.maxrave.simpmusic.ui.icon.Check
-import com.maxrave.simpmusic.ui.icon.PersonAdd
 import com.maxrave.simpmusic.ui.icon.Sensors
 import com.maxrave.simpmusic.ui.icon.Shuffle
 import com.maxrave.simpmusic.ui.icon.SimpIcons
@@ -119,1092 +67,258 @@ import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.MoreAlbumsDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
-import com.maxrave.simpmusic.ui.theme.typo
-import com.maxrave.simpmusic.ui.theme.LocalIsYtmTheme
 import com.maxrave.simpmusic.ui.theme.YtmRed
+import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.ArtistScreenState
 import com.maxrave.simpmusic.viewModel.ArtistViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
-import com.maxrave.simpmusic.viewModel.SongSelectionViewModel
-import dev.chrisbanes.haze.HazeProgressive
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
-import org.jetbrains.compose.resources.getString
-import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
-import simpmusic.composeapp.generated.resources.Res
-import simpmusic.composeapp.generated.resources.albums
-import simpmusic.composeapp.generated.resources.description
-import simpmusic.composeapp.generated.resources.error
-import simpmusic.composeapp.generated.resources.featured_inArtist
-import simpmusic.composeapp.generated.resources.more
-import simpmusic.composeapp.generated.resources.no_description
-import simpmusic.composeapp.generated.resources.popular
-import simpmusic.composeapp.generated.resources.related_artists
-import simpmusic.composeapp.generated.resources.singles
-import simpmusic.composeapp.generated.resources.unknown
-import simpmusic.composeapp.generated.resources.videos
 
+/**
+ * YouTube Music's artist page: the artist's picture across the top, fading into the page, the
+ * name in large type over its foot, the audience line, then Shuffle, Radio and Subscribe. Below:
+ * Top songs, Albums, Singles & EPs, Featured on, Fans might also like and About.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-@ExperimentalMaterial3Api
 fun ArtistScreen(
     channelId: String,
     viewModel: ArtistViewModel = koinViewModel(),
     sharedViewModel: SharedViewModel = koinInject(),
     navController: NavController,
 ) {
-    val artistScreenState by viewModel.artistScreenState.collectAsStateWithLifecycle()
-    val isFollowed by viewModel.followed.collectAsStateWithLifecycle()
-    val canvasUrl by viewModel.canvasUrl.collectAsStateWithLifecycle()
-    val artistLogo by viewModel.artistLogo.collectAsStateWithLifecycle()
+    val state by viewModel.artistScreenState.collectAsStateWithLifecycle()
+    val followed by viewModel.followed.collectAsStateWithLifecycle()
+    val playingVideoId by viewModel.nowPlayingVideoId.collectAsStateWithLifecycle()
+    var menuTrack by remember { mutableStateOf<Track?>(null) }
 
-    val playingTrack by remember {
-        sharedViewModel.nowPlayingState.map { it?.track?.videoId }
-    }.collectAsState(null)
+    LaunchedEffect(channelId) { if (channelId != state.data.channelId) viewModel.browseArtist(channelId) }
+    menuTrack?.let { NowPlayingBottomSheet(onDismiss = { menuTrack = null }, navController = navController, song = it.toSongEntity()) }
 
-    // Choosing song to show Bottom sheet
-    var choosingTrack by remember {
-        mutableStateOf<Track?>(null)
-    }
-    var showBottomSheet by remember {
-        mutableStateOf(false)
-    }
-
-    val selectionState = rememberSongSelectionState()
-    val selectionViewModel: SongSelectionViewModel = koinViewModel()
-    var showSelectionSheet by rememberSaveable { mutableStateOf(false) }
-    var showSelectionAddToPlaylist by rememberSaveable { mutableStateOf(false) }
-
-    LaunchedEffect(channelId) {
-        if (channelId != artistScreenState.data.channelId) {
-            viewModel.browseArtist(channelId)
-        }
-    }
-
-    // Apple Music-inspired immersive treatment. The header adapts to the window's aspect ratio
-    // alone, not to the platform: a portrait window keeps the square artwork frame, a landscape
-    // one (including every desktop window) uses a half-viewport-tall frame instead.
-    val screenInfo = getScreenSizeInfo()
-    val isPortrait = screenInfo.wDP < screenInfo.hDP
-
-    // Palette extraction from the artist artwork (portrait Apple-style only).
-    val paletteState = com.kmpalette.rememberPaletteState()
-    var bitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-    var paletteGeneratedFor by remember { mutableStateOf<String?>(null) }
-    val currentImageUrl = (artistScreenState as? ArtistScreenState.Success)?.data?.imageUrl
-
-    LaunchedEffect(bitmap) {
-        val bm = bitmap
-        if (bm != null && currentImageUrl != null && paletteGeneratedFor != currentImageUrl) {
-            paletteState.generate(bm)
-            paletteGeneratedFor = currentImageUrl
-        }
-    }
-
-    // Apple Music-style page background from the artwork's dominant tone (see UIExt.toImmersiveBackground).
-    val mutedPaletteBg = paletteState.palette.toImmersiveBackground()
-    // Tint for the description card, matching the non-portrait CollapsingToolbar color.
-    val sectionTint = paletteState.palette.getColorFromPalette()
-
-    // Accent color for the action buttons, sourced from the artist name-logo image's dominant
-    // color (hidden catalog). Falls back to white until the logo loads (or if none exists).
-    val artistAccent = artistLogo?.bgColorHex?.hexToColorOrNull() ?: Color.White
-
-    val hazeState = rememberHazeState(blurEnabled = true)
-    val lazyState = rememberLazyListState()
-    val firstItemVisible by remember {
-        derivedStateOf { lazyState.firstVisibleItemIndex == 0 }
-    }
-    var shouldHideTopBar by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(firstItemVisible) {
-        shouldHideTopBar = !firstItemVisible
-    }
-
-    Crossfade(artistScreenState) { state ->
-        when (state) {
-            is ArtistScreenState.Loading -> {
-                Box(Modifier.fillMaxSize()) {
-                    CenterLoadingBox(
-                        Modifier
-                            .align(Alignment.Center),
-                    )
-                }
-            }
-
+    Box(Modifier.fillMaxSize().background(Ytm.Background)) {
+        when (val s = state) {
+            is ArtistScreenState.Loading ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
+            is ArtistScreenState.Error -> LaunchedEffect(Unit) { navController.navigateUp() }
             is ArtistScreenState.Success -> {
-                // ---- Apple Music style (mobile portrait only) ----
-                Box(Modifier.fillMaxSize()) {
-                    LazyColumn(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .background(mutedPaletteBg)
-                                .hazeSource(hazeState),
-                        state = lazyState,
-                    ) {
-                        item(contentType = "header") {
-                            Column(
-                                // Negative spacing pulls the action row up into the header AND
-                                // shrinks the layout, so there's no leftover gap before "Popular"
-                                // (unlike Modifier.offset, which only moves pixels, not layout).
-                                verticalArrangement = Arrangement.spacedBy((-36).dp),
-                            ) {
-                                // Edge-to-edge artwork (canvas plays on top of it when available).
-                                // Glass back button MUST be a sibling of the backdrop source
-                                // (not a child) to avoid render feedback loop / RuntimeShader crash.
-                                val artworkBackdrop = rememberBackdrop(Color.Black)
-                                // Haze state for the bottom progressive-blur fade (source = media layer).
-                                val headerHaze = rememberHazeState(blurEnabled = true)
-                                // Clamp the artist thumbnail URL to a square size (logic from
-                                // commit 5e596c5b) so it fills the square frame with FillWidth.
-                                val headerImageUrl = state.data.imageUrl?.toSquareThumbnailUrl()
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .then(
-                                                if (isPortrait) {
-                                                    Modifier.aspectRatio(1f)
-                                                } else {
-                                                    // Half the viewport, matching Album/Playlist/LocalPlaylist.
-                                                    // A square frame only works while the frame is roughly as
-                                                    // wide as a phone; on a landscape window aspectRatio(1f)
-                                                    // makes this as tall as the window is wide and the artwork
-                                                    // (or a playing canvas) swallows the entire page.
-                                                    Modifier.height((screenInfo.hDP / 2).dp)
-                                                },
-                                            ),
-                                ) {
-                                    // Inner Box — backdrop SOURCE (artwork + canvas + overlays, NO glass)
-                                    Box(modifier = Modifier.fillMaxSize().clipToBounds().layerBackdrop(artworkBackdrop)) {
-                                        // Media layer (artwork + canvas) — Haze SOURCE for the bottom blur.
-                                        Box(modifier = Modifier.fillMaxSize().hazeSource(headerHaze)) {
-                                            AsyncImage(
-                                                model =
-                                                    ImageRequest
-                                                        .Builder(LocalPlatformContext.current)
-                                                        .data(headerImageUrl)
-                                                        .diskCachePolicy(CachePolicy.ENABLED)
-                                                        .memoryCachePolicy(CachePolicy.ENABLED)
-                                                        .diskCacheKey(headerImageUrl)
-                                                        .memoryCacheKey(headerImageUrl)
-                                                        .crossfade(false)
-                                                        .build(),
-                                                placeholder = rememberHolderPainter(),
-                                                error = rememberHolderPainter(),
-                                                contentDescription = null,
-                                                // FillWidth fits the square source into the square portrait
-                                                // frame. In landscape the frame is no longer square, and
-                                                // FillWidth would scale the source to the frame's width and
-                                                // show only its top slice — so Crop takes over there.
-                                                contentScale =
-                                                    if (isPortrait) ContentScale.FillWidth else ContentScale.Crop,
-                                                // Always decoded so the page background color can be extracted
-                                                // from the artwork palette, even when a canvas is playing.
-                                                onSuccess = {
-                                                    bitmap = it.result.image.toImageBitmap()
-                                                },
-                                                // Hidden (but still decoded above) while a canvas is present —
-                                                // the canvas is shown instead. No canvas -> artwork is shown.
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxSize()
-                                                        .alpha(if (canvasUrl != null) 0f else 1f),
-                                            )
-                                            // Canvas (Spotify) plays AS the background when present;
-                                            // otherwise the static artwork above is the fallback.
-                                            canvasUrl?.let { canvas ->
-                                                // Canvas is a tall/portrait video. cropToBounds center
-                                                // scale-to-covers it into the header frame (ContentScale.Crop):
-                                                // true video aspect ratio, no stretch, overflow clipped.
-                                                MediaPlayerView(
-                                                    url = canvas.first,
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    cropToBounds = true,
-                                                )
-                                            }
-                                        } // end media layer (Haze source)
-                                        // Bottom fade — progressive blur (Haze) over the media layer, so the
-                                        // canvas/artwork edge melts into the page bg.
-                                        // ANDROID ONLY. On skiko this kills the process: haze 1.7.2's
-                                        // progressive path calls ShaderBrush.createShader(Size), whose
-                                        // mangled signature does not match the Compose this build pins
-                                        // (material3-multiplatform 1.12.0-alpha01 / skiko 0.148.1), so it
-                                        // throws NoSuchMethodError from inside the draw pass —
-                                        // RenderEffect.skiko.kt:234. Only the progressive path is affected;
-                                        // plain hazeEffect is used on Desktop elsewhere and is fine.
-                                        // Dropping it costs Desktop only the blur: the colour scrim below
-                                        // is a separate box and still fades the artwork edge.
-                                        if (getPlatform() == Platform.Android) {
-                                            Box(
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxWidth()
-                                                        .height(200.dp)
-                                                        .align(Alignment.BottomCenter)
-                                                        .hazeEffect(headerHaze) {
-                                                            blurRadius = 32.dp
-                                                            progressive =
-                                                                HazeProgressive.verticalGradient(
-                                                                    startIntensity = 0f,
-                                                                    endIntensity = 1f,
-                                                                )
-                                                        },
-                                            )
-                                        }
-                                        // Color scrim is a SEPARATE, taller box: the blur stays at 200dp so
-                                        // its cost doesn't grow, while the color gets 70% of the artwork
-                                        // to ramp over. A short ramp means a steep alpha, and a steep
-                                        // alpha is what reads as a visible edge. Both figures are 70% of
-                                        // the frame's own height: the portrait frame is square so that is
-                                        // 70% of the width, the landscape one is hDP/2 so it is 35% of hDP.
-                                        // Measuring off the width in landscape would make the scrim taller
-                                        // than the artwork itself.
-                                        Box(
-                                            modifier =
-                                                Modifier
-                                                    .fillMaxWidth()
-                                                    .height(
-                                                        if (isPortrait) {
-                                                            (screenInfo.wDP * 0.7f).dp
-                                                        } else {
-                                                            (screenInfo.hDP * 0.35f).dp
-                                                        },
-                                                    )
-                                                    .align(Alignment.BottomCenter)
-                                                    .background(artworkScrimBrush(mutedPaletteBg)),
-                                        )
-                                        // Artist name (TEXT for now — logo image is roadmap) + subscriber · view
-                                        Column(
-                                            modifier =
-                                                Modifier
-                                                    .align(Alignment.BottomCenter)
-                                                    // Lift the name + subtitle together with the action row.
-                                                    .offset(y = (-36).dp)
-                                                    .fillMaxWidth()
-                                                    .padding(horizontal = 20.dp)
-                                                    .padding(bottom = 16.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                        ) {
-                                            val logo = artistLogo
-                                            if (logo != null) {
-                                                // Artist name rendered as a logo image (hidden catalog),
-                                                // in place of the plain-text title.
-                                                AsyncImage(
-                                                    model = logo.logoUrl,
-                                                    contentDescription = state.data.title,
-                                                    contentScale = ContentScale.Fit,
-                                                    modifier =
-                                                        Modifier
-                                                            .fillMaxWidth(0.7f)
-                                                            .heightIn(max = 84.dp),
-                                                )
-                                            } else {
-                                                Text(
-                                                    text = state.data.title ?: stringResource(Res.string.unknown),
-                                                    style = typo().titleLarge,
-                                                    color = Color.White,
-                                                    maxLines = 2,
-                                                    textAlign = TextAlign.Center,
-                                                )
-                                            }
-                                            val meta =
-                                                listOfNotNull(
-                                                    state.data.subscribers?.takeIf { it.isNotBlank() },
-                                                    state.data.playCount?.takeIf { it.isNotBlank() },
-                                                ).joinToString(" · ")
-                                            if (meta.isNotBlank()) {
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Text(
-                                                    text = meta,
-                                                    style = typo().bodyMedium,
-                                                    color = Color(0xC4FFFFFF),
-                                                    textAlign = TextAlign.Center,
-                                                )
-                                            }
-                                        }
-                                    }
-                                    // Back button — liquid glass, sibling of the backdrop source.
-                                    LiquidGlassIconButton(
-                                        backdrop = artworkBackdrop,
-                                        imageVector = SimpIcons.ArrowBackIosNew,
-                                        shape = RoundedCornerShape(24.dp),
-                                        // Matching the other three headers: the pill-style directional rim, thickened
-                                        // from the 0.5.dp default so it stays visible around a 48dp circle.
-                                        highlight = Highlight(width = 1.dp),
-                                        modifier =
-                                            Modifier
-                                                .align(Alignment.TopStart)
-                                                .padding(12.dp)
-                                                .windowInsetsPadding(WindowInsets.statusBars)
-                                                .size(48.dp),
-                                    ) {
-                                        navController.navigateUp()
-                                    }
-                                }
-
-                                // YouTube Music's artist actions: the red Subscribe pill, then Shuffle and Radio.
-                                if (LocalIsYtmTheme.current) {
-                                    YtmArtistActions(
-                                        isFollowed = isFollowed,
-                                        onFollow = {
-                                            state.data.channelId?.let { viewModel.updateFollowed(if (isFollowed) 0 else 1, it) }
-                                        },
-                                        onShuffle = {
-                                            val param = state.data.shuffleParam
-                                            if (param != null) viewModel.onShuffleClick(param) else viewModel.makeToast(runBlocking { getString(Res.string.error) })
-                                        },
-                                        onRadio = {
-                                            val param = state.data.radioParam
-                                            if (param != null) viewModel.onRadioClick(param) else viewModel.makeToast(runBlocking { getString(Res.string.error) })
-                                        },
-                                    )
-                                } else
-                                // Apple Music-style action row: [Radio][Shuffle pill][Follow] centered.
-                                // In SimpMusic "play" an artist == shuffle, so the big middle button is Shuffle.
-                                Row(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 32.dp)
-                                            .padding(vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    // Radio — side button: outlined accent (yellow) circle with an
-                                    // accent-tinted icon over a transparent fill, matching the reference.
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .size(48.dp)
-                                                .clip(CircleShape)
-                                                .border(1.5.dp, artistAccent, CircleShape)
-                                                .clickable {
-                                                    val param = state.data.radioParam
-                                                    if (param != null) {
-                                                        viewModel.onRadioClick(param)
-                                                    } else {
-                                                        viewModel.makeToast(runBlocking { getString(Res.string.error) })
-                                                    }
-                                                },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            imageVector = SimpIcons.Sensors,
-                                            contentDescription = "Radio",
-                                            tint = artistAccent,
-                                            modifier = Modifier.size(22.dp),
-                                        )
-                                    }
-                                    // Shuffle — primary "play" for an artist. Circular icon button filled
-                                    // with the artist accent (white fallback); icon uses the dark page
-                                    // background color so it stays legible on a bright accent.
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .size(64.dp)
-                                                .clip(CircleShape)
-                                                .background(artistAccent)
-                                                .clickable {
-                                                    val param = state.data.shuffleParam
-                                                    if (param != null) {
-                                                        viewModel.onShuffleClick(param)
-                                                    } else {
-                                                        viewModel.makeToast(runBlocking { getString(Res.string.error) })
-                                                    }
-                                                },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            imageVector = SimpIcons.Shuffle,
-                                            contentDescription = "Shuffle",
-                                            tint = mutedPaletteBg,
-                                            modifier = Modifier.size(28.dp),
-                                        )
-                                    }
-                                    // Follow — side button matching Radio: outlined accent (yellow)
-                                    // circle when not following; fills with the accent (icon flips to
-                                    // the dark page bg) once followed, so the state reads at a glance.
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .size(48.dp)
-                                                .clip(CircleShape)
-                                                .background(if (isFollowed) artistAccent else Color.Transparent)
-                                                .border(1.5.dp, artistAccent, CircleShape)
-                                                .clickable {
-                                                    viewModel.updateFollowed(
-                                                        if (isFollowed) 0 else 1,
-                                                        state.data.channelId ?: return@clickable,
-                                                    )
-                                                },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            imageVector = if (isFollowed) SimpIcons.Check else SimpIcons.PersonAdd,
-                                            contentDescription = if (isFollowed) "Followed" else "Follow",
-                                            tint = if (isFollowed) mutedPaletteBg else artistAccent,
-                                            modifier = Modifier.size(22.dp),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        item(contentType = "sections") {
-                            ArtistSections(
-                                state = state,
-                                selectionState = selectionState,
-                                playingTrack = playingTrack,
-                                descriptionTint = sectionTint,
-                                navController = navController,
-                                viewModel = viewModel,
-                                sharedViewModel = sharedViewModel,
-                                onTrackMore = { track ->
-                                    choosingTrack = track
-                                    showBottomSheet = true
-                                },
+                val data = s.data
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
+                    item(key = "hero") {
+                        Box(Modifier.fillMaxWidth().aspectRatio(1.1f)) {
+                            AsyncImage(
+                                model = data.imageUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            Box(
+                                Modifier.fillMaxSize().background(
+                                    Brush.verticalGradient(
+                                        0f to Color.Black.copy(alpha = 0.35f),
+                                        0.3f to Color.Transparent,
+                                        0.75f to Ytm.Background.copy(alpha = 0.6f),
+                                        1f to Ytm.Background,
+                                    ),
+                                ),
+                            )
+                            Text(
+                                data.title.orEmpty(),
+                                style = typo().displaySmall.copy(fontSize = 44.sp, lineHeight = 48.sp, fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.align(Alignment.BottomStart).padding(horizontal = 16.dp, vertical = 8.dp),
                             )
                         }
                     }
-
-                    // Haze top bar appears once the header scrolls away.
-                    AnimatedVisibility(
-                        visible = shouldHideTopBar && !selectionState.isActive,
-                        enter = fadeIn() + slideInVertically(),
-                        exit = fadeOut() + slideOutVertically(),
-                    ) {
-                        TopAppBar(
-                            title = {
-                                Text(
-                                    text = state.data.title ?: "",
-                                    style = typo().titleMedium,
-                                    maxLines = 1,
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .wrapContentHeight(align = Alignment.CenterVertically)
-                                            .basicMarquee(
-                                                iterations = Int.MAX_VALUE,
-                                                animationMode = MarqueeAnimationMode.Immediately,
-                                            ).focusable(),
-                                )
-                            },
-                            navigationIcon = {
-                                Box(Modifier.padding(horizontal = 5.dp)) {
-                                    IconButton(onClick = { navController.navigateUp() }) {
-                                        Icon(
-                                            imageVector = SimpIcons.ArrowBackIosNew,
-                                            contentDescription = "Back",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(20.dp),
-                                        )
-                                    }
+                    item(key = "actions") {
+                        Column(Modifier.padding(horizontal = 16.dp)) {
+                            val audience = listOfNotNull(data.playCount, data.subscribers).firstOrNull { it.isNotBlank() }
+                            if (audience != null) {
+                                Text(audience, style = typo().bodyMedium, color = Ytm.TextSecondary)
+                                Spacer(Modifier.height(16.dp))
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                data.shuffleParam?.let { endpoint ->
+                                    ArtistPill(SimpIcons.Shuffle, "Shuffle", filled = true) { viewModel.onShuffleClick(endpoint) }
                                 }
-                            },
-                            colors =
-                                TopAppBarDefaults.topAppBarColors(
-                                    containerColor = Color.Transparent,
-                                ),
-                            modifier =
-                                Modifier.hazeEffect(hazeState) {
-                                    blurEnabled = true
-                                    blurRadius = 24.dp
-                                    backgroundColor = mutedPaletteBg
-                                    tints = listOf(HazeTint(mutedPaletteBg.copy(alpha = 0.55f)))
-                                },
-                        )
-                    }
-                }
-
-                AnimatedVisibility(
-                    visible = selectionState.isActive,
-                    enter = fadeIn() + slideInVertically(),
-                    exit = fadeOut() + slideOutVertically(),
-                ) {
-                    SongSelectionTopAppBar(
-                        state = selectionState,
-                        onSelectAll = {
-                            selectionState.toggleSelectAll(
-                                (artistScreenState as? ArtistScreenState.Success)
-                                    ?.data
-                                    ?.popularSongs
-                                    ?.map { it.videoId }
-                                    ?: emptyList(),
-                            )
-                        },
-                        onOpenActions = { showSelectionSheet = true },
-                        containerColor = Color.Black,
-                    )
-                }
-                if (showSelectionSheet) {
-                    val selectedIds = selectionState.selected.toList()
-                    SelectedSongsBottomSheet(
-                        count = selectedIds.size,
-                        onDismiss = { showSelectionSheet = false },
-                        onPlayNext = {
-                            selectionViewModel.playNext(selectedIds)
-                            selectionState.exit()
-                        },
-                        onAddToQueue = {
-                            selectionViewModel.addToQueue(selectedIds)
-                            selectionState.exit()
-                        },
-                        onAddToPlaylist = { showSelectionAddToPlaylist = true },
-                        onDownload = {
-                            selectionViewModel.download(selectedIds)
-                            selectionState.exit()
-                        },
-                        onAddToFavorite = {
-                            selectionViewModel.addToFavorite(selectedIds)
-                            selectionState.exit()
-                        },
-                    )
-                }
-                if (showSelectionAddToPlaylist) {
-                    val selectedIds = selectionState.selected.toList()
-                    val localPlaylists by selectionViewModel.listLocalPlaylist.collectAsStateWithLifecycle()
-                    AddToPlaylistModalBottomSheet(
-                        isBottomSheetVisible = true,
-                        listLocalPlaylist = localPlaylists,
-                        listYouTubePlaylist = emptyList(),
-                        onDismiss = { showSelectionAddToPlaylist = false },
-                        onClick = { playlist ->
-                            selectionViewModel.addToPlaylist(playlist.id, selectedIds)
-                            selectionState.exit()
-                        },
-                        onYTPlaylistClick = {},
-                    )
-                }
-                if (showBottomSheet && choosingTrack != null) {
-                    NowPlayingBottomSheet(
-                        onDismiss = {
-                            showBottomSheet = false
-                            choosingTrack = null
-                        },
-                        navController = navController,
-                        song = choosingTrack?.toSongEntity(),
-                    )
-                }
-            }
-
-            is ArtistScreenState.Error -> {
-                viewModel.makeToast(state.message ?: stringResource(Res.string.error))
-                navController.navigateUp()
-            }
-        }
-    }
-}
-
-/**
- * Shared artist body (Popular → Description). Used by both the portrait Apple-Music layout
- * and the existing CollapsingToolbar layout, so the sections themselves stay untouched.
- */
-@Composable
-private fun ArtistSections(
-    state: ArtistScreenState.Success,
-    selectionState: SongSelectionState,
-    playingTrack: String?,
-    descriptionTint: Color,
-    navController: NavController,
-    viewModel: ArtistViewModel,
-    sharedViewModel: SharedViewModel,
-    onTrackMore: (Track) -> Unit,
-) {
-    Column {
-        // Popular Songs
-        AnimatedVisibility(state.data.popularSongs.isNotEmpty()) {
-            Column {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                ) {
-                    Text(
-                        text = stringResource(Res.string.popular),
-                        style = typo().labelMedium,
-                        color = Color.White,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick = {
-                            val id = state.data.listSongParam
-                            if (id != null) {
-                                navController.navigate(PlaylistDestination(id))
-                            } else {
-                                viewModel.makeToast(runBlocking { getString(Res.string.error) })
+                                data.radioParam?.let { endpoint ->
+                                    ArtistPill(SimpIcons.Sensors, "Radio", filled = false) { viewModel.onRadioClick(endpoint) }
+                                }
+                                Spacer(Modifier.weight(1f))
+                                SubscribeButton(followed) {
+                                    data.channelId?.let { viewModel.updateFollowed(if (followed) 0 else 1, it) }
+                                }
                             }
-                        },
-                        colors =
-                            ButtonDefaults
-                                .textButtonColors()
-                                .copy(
-                                    contentColor = Color.White,
-                                ),
-                    ) {
-                        Text(stringResource(Res.string.more), style = typo().bodySmall)
+                        }
                     }
-                }
-                state.data.popularSongs.forEach { song ->
-                    SongFullWidthItems(
-                        forceDark = true,                        track = song,
-                        isPlaying = song.videoId == playingTrack,
-                        modifier = Modifier.fillMaxWidth(),
-                        onMoreClickListener = {
-                            onTrackMore(song)
-                        },
-                        onClickListener = {
-                            val firstQueue: Track = song
-                            viewModel.setQueueData(
-                                QueueData.Data(
-                                    listTracks = arrayListOf(firstQueue),
-                                    firstPlayedTrack = firstQueue,
-                                    playlistId = "RDAMVM${song.videoId}",
-                                    playlistName = "\"${state.data.title ?: ""}\" ${getStringBlocking(Res.string.popular)}",
-                                    playlistType = PlaylistType.RADIO,
-                                    continuation = null,
-                                ),
+                    if (data.popularSongs.isNotEmpty()) {
+                        item(key = "songs-h") {
+                            YtmShelfHeader(
+                                title = "Top songs",
+                                actionLabel = if (data.listSongParam != null) "Show all" else null,
+                                onAction = data.listSongParam?.let { id -> { navController.navigate(PlaylistDestination(id)) } },
                             )
-                            viewModel.loadMediaItem(
-                                firstQueue,
-                                type = Config.SONG_CLICK,
-                            )
-                        },
-                        onAddToQueue = {
-                            sharedViewModel.addListToQueue(
-                                arrayListOf(song),
-                            )
-                        },
-                        selectionMode = selectionState.isActive,
-                        isSelected = selectionState.isSelected(song.videoId),
-                        onLongClick = { selectionState.start(it) },
-                        onSelectToggle = { selectionState.toggle(it) },
-                    )
-                }
-            }
-        }
-
-        // Singles
-        AnimatedVisibility(
-            state.data.singles != null &&
-                state.data.singles!!
-                    .results
-                    .isNotEmpty(),
-        ) {
-            Column {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                ) {
-                    Text(
-                        text = stringResource(Res.string.singles),
-                        style = typo().labelMedium,
-                        color = Color.White,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick = {
-                            if (state.data.channelId != null) {
-                                val id = "MPAD${state.data.channelId}"
-                                navController.navigate(
-                                    MoreAlbumsDestination(
-                                        id = id,
-                                        type = MoreAlbumsDestination.SINGLE_TYPE,
-                                    ),
-                                )
-                            } else {
-                                viewModel.makeToast(getStringBlocking(Res.string.error))
-                            }
-                        },
-                        colors =
-                            ButtonDefaults
-                                .textButtonColors()
-                                .copy(
-                                    contentColor = Color.White,
-                                ),
-                    ) {
-                        Text(stringResource(Res.string.more), style = typo().bodySmall)
-                    }
-                }
-                LazyRow(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    item {
-                        Spacer(Modifier.size(10.dp))
-                    }
-                    items(state.data.singles?.results ?: emptyList()) { single ->
-                        HomeItemContentPlaylist(
-                            forceDark = true,                            onClick = {
-                                navController.navigate(
-                                    AlbumDestination(
-                                        single.browseId,
-                                    ),
-                                )
-                            },
-                            data = single,
-                            thumbSize = 180.dp,
-                        )
-                    }
-                    item {
-                        Spacer(Modifier.size(10.dp))
-                    }
-                }
-            }
-        }
-
-        // Albums
-        AnimatedVisibility(
-            state.data.albums != null &&
-                state.data.albums!!
-                    .results
-                    .isNotEmpty(),
-        ) {
-            Column {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                ) {
-                    Text(
-                        text = stringResource(Res.string.albums),
-                        style = typo().labelMedium,
-                        color = Color.White,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick = {
-                            if (state.data.channelId != null) {
-                                val id = "MPAD${state.data.channelId}"
-                                navController.navigate(
-                                    MoreAlbumsDestination(
-                                        id = id,
-                                        type = MoreAlbumsDestination.ALBUM_TYPE,
-                                    ),
-                                )
-                            } else {
-                                viewModel.makeToast(getStringBlocking(Res.string.error))
-                            }
-                        },
-                        colors =
-                            ButtonDefaults
-                                .textButtonColors()
-                                .copy(
-                                    contentColor = Color.White,
-                                ),
-                    ) {
-                        Text(stringResource(Res.string.more), style = typo().bodySmall)
-                    }
-                }
-                LazyRow(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    item {
-                        Spacer(Modifier.size(10.dp))
-                    }
-                    items(state.data.albums?.results ?: emptyList()) { album ->
-                        HomeItemContentPlaylist(
-                            forceDark = true,                            onClick = {
-                                navController.navigate(
-                                    AlbumDestination(
-                                        browseId = album.browseId,
-                                    ),
-                                )
-                            },
-                            data = album,
-                            thumbSize = 180.dp,
-                        )
-                    }
-                    item {
-                        Spacer(Modifier.size(10.dp))
-                    }
-                }
-            }
-        }
-
-        // Videos
-        AnimatedVisibility(
-            state.data.video != null &&
-                state.data.video!!
-                    .video
-                    .isNotEmpty(),
-        ) {
-            Column {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                ) {
-                    Text(
-                        text = stringResource(Res.string.videos),
-                        style = typo().labelMedium,
-                        color = Color.White,
-                        modifier = Modifier.weight(1f),
-                    )
-                    TextButton(
-                        onClick = {
-                            val videoListParam = state.data.video?.videoListParam
-                            if (videoListParam != null) {
-                                navController.navigate(
-                                    PlaylistDestination(
-                                        videoListParam,
-                                    ),
-                                )
-                            } else {
-                                viewModel.makeToast(getStringBlocking(Res.string.error))
-                            }
-                        },
-                        colors =
-                            ButtonDefaults
-                                .textButtonColors()
-                                .copy(
-                                    contentColor = Color.White,
-                                ),
-                    ) {
-                        Text(stringResource(Res.string.more), style = typo().bodySmall)
-                    }
-                }
-                LazyRow(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    item {
-                        Spacer(Modifier.size(10.dp))
-                    }
-                    items(state.data.video?.video ?: emptyList()) { video ->
-                        HomeItemVideo(
-                            forceDark = true,                            onClick = {
-                                val firstQueue: Track = video
-                                viewModel.setQueueData(
-                                    QueueData.Data(
-                                        listTracks = arrayListOf(firstQueue),
-                                        firstPlayedTrack = firstQueue,
-                                        playlistId = "RDAMVM${video.videoId}",
-                                        playlistName = (state.data.title ?: "") + getStringBlocking(Res.string.videos),
-                                        playlistType = PlaylistType.RADIO,
-                                        continuation = null,
-                                    ),
-                                )
-                                viewModel.loadMediaItem(
-                                    firstQueue,
-                                    type = Config.VIDEO_CLICK,
-                                )
-                            },
-                            onLongClick = {
-                                onTrackMore(video)
-                            },
-                            data =
-                                Content(
-                                    album = null,
-                                    artists = video.artists,
-                                    description = null,
-                                    isExplicit = video.isExplicit,
-                                    playlistId = null,
-                                    browseId = null,
-                                    thumbnails = video.thumbnails ?: emptyList(),
-                                    title = video.title,
-                                    videoId = video.videoId,
-                                    views = video.views,
-                                ),
-                        )
-                    }
-                    item {
-                        Spacer(Modifier.size(10.dp))
-                    }
-                }
-            }
-        }
-
-        // Feature on
-        AnimatedVisibility(state.data.featuredOn.isNotEmpty()) {
-            Column {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                ) {
-                    Text(
-                        text = stringResource(Res.string.featured_inArtist),
-                        style = typo().labelMedium,
-                        color = Color.White,
-                        modifier =
-                            Modifier
-                                .weight(1f)
-                                .padding(vertical = 10.dp),
-                    )
-                }
-                LazyRow(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    item {
-                        Spacer(Modifier.size(10.dp))
-                    }
-                    items(state.data.featuredOn) { feature ->
-                        HomeItemContentPlaylist(
-                            forceDark = true,                            onClick = {
-                                navController.navigate(
-                                    PlaylistDestination(
-                                        feature.id,
-                                    ),
-                                )
-                            },
-                            data = feature,
-                            thumbSize = 180.dp,
-                        )
-                    }
-                    item {
-                        Spacer(Modifier.size(10.dp))
-                    }
-                }
-            }
-        }
-
-        // Related
-        AnimatedVisibility(
-            state.data.related != null &&
-                state.data.related!!
-                    .results
-                    .isNotEmpty(),
-        ) {
-            Column {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                ) {
-                    Text(
-                        text = stringResource(Res.string.related_artists),
-                        style = typo().labelMedium,
-                        color = Color.White,
-                        modifier =
-                            Modifier
-                                .weight(1f)
-                                .padding(vertical = 10.dp),
-                    )
-                }
-                LazyRow(
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    item {
-                        Spacer(Modifier.size(10.dp))
-                    }
-                    items(state.data.related?.results ?: emptyList()) { related ->
-                        HomeItemArtist(
-                            forceDark = true,                            onClick = {
-                                navController.navigate(
-                                    ArtistDestination(
-                                        channelId = related.browseId,
-                                    ),
-                                )
-                            },
-                            data =
-                                Content(
-                                    album = null,
-                                    artists =
-                                        listOf(
-                                            Artist(
-                                                id = related.browseId,
-                                                name = related.title,
-                                            ),
+                        }
+                        items(data.popularSongs.take(5), key = { "song-${it.videoId}" }) { song ->
+                            YtmSongRow(
+                                title = song.title,
+                                subtitle = listOfNotNull(song.artists?.joinToString(", ") { it.name }, song.album?.name).filter { it.isNotBlank() }.joinToString(" • "),
+                                thumbnail = song.thumbnails?.lastOrNull()?.url,
+                                isCurrent = song.videoId == playingVideoId,
+                                onClick = {
+                                    viewModel.setQueueData(
+                                        QueueData.Data(
+                                            listTracks = arrayListOf(song),
+                                            firstPlayedTrack = song,
+                                            playlistId = "RDAMVM${song.videoId}",
+                                            playlistName = "\"${song.title}\" Radio",
+                                            playlistType = PlaylistType.RADIO,
+                                            continuation = null,
                                         ),
-                                    description = related.subscribers,
-                                    isExplicit = null,
-                                    playlistId = null,
-                                    browseId = related.browseId,
-                                    thumbnails = related.thumbnails,
-                                    title = related.title,
-                                    videoId = null,
-                                    views = null,
-                                    durationSeconds = null,
-                                    radio = null,
-                                ),
-                        )
+                                    )
+                                    viewModel.loadMediaItem(song, type = Config.SONG_CLICK)
+                                },
+                                onMore = { menuTrack = song },
+                            )
+                        }
                     }
-                    item {
-                        Spacer(Modifier.size(10.dp))
+                    data.albums?.results?.takeIf { it.isNotEmpty() }?.let { albums ->
+                        item(key = "albums") {
+                            YtmShelfHeader(
+                                title = "Albums",
+                                actionLabel = "More",
+                                onAction = data.channelId?.let { id ->
+                                    { navController.navigate(MoreAlbumsDestination(id = "MPAD$id", type = MoreAlbumsDestination.ALBUM_TYPE)) }
+                                },
+                            )
+                            CardRow(albums.map { CardItem(it.title, listOf("Album", it.year).filter { y -> y.isNotBlank() }.joinToString(" • "), it.thumbnails.lastOrNull()?.url) { navController.navigate(AlbumDestination(it.browseId)) } })
+                        }
                     }
+                    data.singles?.results?.takeIf { it.isNotEmpty() }?.let { singles ->
+                        item(key = "singles") {
+                            YtmShelfHeader(
+                                title = "Singles & EPs",
+                                actionLabel = "More",
+                                onAction = data.channelId?.let { id ->
+                                    { navController.navigate(MoreAlbumsDestination(id = "MPAD$id", type = MoreAlbumsDestination.SINGLE_TYPE)) }
+                                },
+                            )
+                            CardRow(singles.map { CardItem(it.title, listOf("Single", it.year).filter { y -> y.isNotBlank() }.joinToString(" • "), it.thumbnails.lastOrNull()?.url) { navController.navigate(AlbumDestination(it.browseId)) } })
+                        }
+                    }
+                    if (data.featuredOn.isNotEmpty()) {
+                        item(key = "featured") {
+                            YtmShelfHeader(title = "Featured on")
+                            CardRow(data.featuredOn.map { CardItem(it.title, it.author, it.thumbnails.lastOrNull()?.url) { navController.navigate(PlaylistDestination(it.id)) } })
+                        }
+                    }
+                    data.related?.results?.takeIf { it.isNotEmpty() }?.let { related ->
+                        item(key = "related") {
+                            YtmShelfHeader(title = "Fans might also like")
+                            CardRow(
+                                related.map { CardItem(it.title, it.subscribers, it.thumbnails.lastOrNull()?.url, round = true) { navController.navigate(ArtistDestination(it.browseId)) } },
+                            )
+                        }
+                    }
+                    if (!data.description.isNullOrBlank()) {
+                        item(key = "about") {
+                            YtmShelfHeader(title = "About")
+                            var expanded by remember { mutableStateOf(false) }
+                            Text(
+                                data.description.orEmpty(),
+                                style = typo().bodyMedium,
+                                color = Ytm.TextSecondary,
+                                maxLines = if (expanded) Int.MAX_VALUE else 4,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 16.dp).clickable { expanded = !expanded },
+                            )
+                        }
+                    }
+                }
+                // The back button floats over the picture, as in YouTube Music.
+                IconButton(
+                    onClick = { navController.navigateUp() },
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(4.dp),
+                ) {
+                    Icon(SimpIcons.ArrowBackIosNew, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(22.dp))
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 20.dp),
-        ) {
-            Text(
-                text = stringResource(Res.string.description),
-                style = typo().labelMedium,
-                color = Color.White,
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .padding(vertical = 12.dp),
-            )
-        }
-        val urlHandler = LocalUriHandler.current
-        ElevatedCard(
-            modifier = Modifier.padding(horizontal = 20.dp),
-            shape = RoundedCornerShape(8.dp),
-            colors =
-                CardDefaults.elevatedCardColors().copy(
-                    containerColor = descriptionTint.rgbFactor(0.5f),
-                ),
-        ) {
-            DescriptionView(
-                modifier = Modifier.padding(16.dp),
-                text = state.data.description ?: stringResource(Res.string.no_description),
-                limitLine = 5,
-                onTimeClicked = {},
-                onURLClicked = { url ->
-                    urlHandler.openUri(url)
-                },
-            )
-        }
-        EndOfPage()
     }
 }
+
+private class CardItem(
+    val title: String,
+    val subtitle: String,
+    val thumbnail: String?,
+    val round: Boolean = false,
+    val onClick: () -> Unit,
+)
+
 @Composable
-private fun YtmArtistActions(
-    isFollowed: Boolean,
-    onFollow: () -> Unit,
-    onShuffle: () -> Unit,
-    onRadio: () -> Unit,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        YtmPill(
-            text = if (isFollowed) "Subscribed" else "Subscribe",
-            container = if (isFollowed) Color.White.copy(alpha = 0.12f) else YtmRed,
-            content = Color.White,
-            onClick = onFollow,
-        )
-        Spacer(Modifier.weight(1f))
-        YtmPill(text = "Shuffle", icon = SimpIcons.Shuffle, container = Color.White, content = Color.Black, onClick = onShuffle)
-        YtmPill(text = "Radio", icon = SimpIcons.Sensors, container = Color.White.copy(alpha = 0.12f), content = Color.White, onClick = onRadio)
+private fun CardRow(cards: List<CardItem>) {
+    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(cards) { card ->
+            Column(
+                Modifier.width(152.dp).clickable(onClick = card.onClick),
+                horizontalAlignment = if (card.round) Alignment.CenterHorizontally else Alignment.Start,
+            ) {
+                Thumb(card.thumbnail, 152.dp, if (card.round) CircleShape else RoundedCornerShape(4.dp))
+                Spacer(Modifier.height(8.dp))
+                Text(card.title, style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (card.subtitle.isNotBlank()) {
+                    Text(card.subtitle, style = typo().bodyMedium.copy(fontSize = 13.sp), color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun YtmPill(
-    text: String,
-    container: Color,
-    content: Color,
+private fun ArtistPill(
+    icon: ImageVector,
+    label: String,
+    filled: Boolean,
     onClick: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
 ) {
     Row(
-        modifier =
-            Modifier
-                .clip(CircleShape)
-                .background(container)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 9.dp),
+        Modifier
+            .height(36.dp)
+            .clip(CircleShape)
+            .background(if (filled) Color.White else Color.White.copy(alpha = 0.12f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (icon != null) {
-            Icon(icon, contentDescription = null, tint = content, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.size(6.dp))
-        }
-        Text(text, style = typo().bodyMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium), color = content)
+        val tint = if (filled) Color.Black else Color.White
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = tint)
+    }
+}
+
+/** YouTube Music's Subscribe button: red while not subscribed, grey "Subscribed" after. */
+@Composable
+private fun SubscribeButton(
+    subscribed: Boolean,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .height(36.dp)
+            .widthIn(min = 96.dp)
+            .clip(CircleShape)
+            .background(if (subscribed) Color.White.copy(alpha = 0.12f) else YtmRed)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (subscribed) "Subscribed" else "Subscribe",
+            style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium),
+            color = Color.White,
+        )
     }
 }

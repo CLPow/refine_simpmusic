@@ -565,6 +565,9 @@ internal fun parseMixedContent(
                             subtitle = subtitle,
                             thumbnail = thumbnail,
                             channelId = if (artistChannelId?.contains("UC") == true) artistChannelId else null,
+                            // Shelves of list rows ("Quick picks") are drawn as a grid of song rows
+                            // in YouTube Music, not as cards.
+                            isListShelf = contentList?.any { it.musicResponsiveListItemRenderer != null } == true,
                         ),
                     )
                 }

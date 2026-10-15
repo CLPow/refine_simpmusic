@@ -78,11 +78,6 @@ object WidgetUpdater : KoinComponent {
                 .collect { signature ->
                     try {
                         TurntableWidget().updateAll(appContext)
-                        PlaylistsWidget().updateAll(appContext)
-                        if (signature.title != lastInsightsTitle) {
-                            lastInsightsTitle = signature.title
-                            ListeningInsightsWidget().updateAll(appContext)
-                        }
                     } catch (e: Exception) {
                         Logger.w("WidgetUpdater", "Widget update failed: ${e.message}")
                     }
@@ -90,10 +85,6 @@ object WidgetUpdater : KoinComponent {
         }
     }
 
-    // Insights is rebuilt from database queries, so it follows track changes only — not every
-    // play/pause.
-    @Volatile
-    private var lastInsightsTitle: String? = null
 
     private const val UPDATE_DEBOUNCE_MS = 400L
 }

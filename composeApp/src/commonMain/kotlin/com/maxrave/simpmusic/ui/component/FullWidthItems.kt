@@ -136,7 +136,7 @@ fun SongFullWidthItems(
     forceDark: Boolean = LocalForceDarkText.current,
 ) {
     val contentColor = if (forceDark) Color.White else MaterialTheme.colorScheme.onSurface
-    val subtitleColor = if (forceDark) Color(0xC4FFFFFF) else MaterialTheme.colorScheme.onSurfaceVariant
+    val subtitleColor = if (forceDark) Color(0xFFAAAAAA) else MaterialTheme.colorScheme.onSurfaceVariant
     val maxOffset = 360f
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -383,7 +383,7 @@ fun SongFullWidthItems(
                 // Hidden while selecting: the per-item menu moves up to the selection app bar,
                 // so one tap cannot mean both "act on this song" and "pick this song".
                 if (onMoreClickListener != null && !selectionMode) {
-                    RippleIconButton(imageVector = SimpIcons.MoreVert, fillMaxSize = false, tint = contentColor) {
+                    RippleIconButton(imageVector = SimpIcons.MoreVert, fillMaxSize = false, tint = subtitleColor) {
                         if (itemVideoId.isNotBlank()) onMoreClickListener.invoke(itemVideoId)
                     }
                 }
@@ -413,7 +413,7 @@ fun SuggestItems(
     forceDark: Boolean = LocalForceDarkText.current,
 ) {
     val contentColor = if (forceDark) Color.White else MaterialTheme.colorScheme.onSurface
-    val subtitleColor = if (forceDark) Color(0xC4FFFFFF) else MaterialTheme.colorScheme.onSurfaceVariant
+    val subtitleColor = if (forceDark) Color(0xFFAAAAAA) else MaterialTheme.colorScheme.onSurfaceVariant
     val composition by rememberLottieComposition {
         LottieCompositionSpec.JsonString(
             Res.readBytes("files/audio_playing_animation.json").decodeToString(),
@@ -527,7 +527,7 @@ fun PlaylistFullWidthItems(
     forceDark: Boolean = LocalForceDarkText.current,
 ) {
     val contentColor = if (forceDark) Color.White else MaterialTheme.colorScheme.onSurface
-    val subtitleColor = if (forceDark) Color(0xC4FFFFFF) else MaterialTheme.colorScheme.onSurfaceVariant
+    val subtitleColor = if (forceDark) Color(0xFFAAAAAA) else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         modifier =
             modifier
@@ -703,7 +703,7 @@ fun ArtistFullWidthItems(
     forceDark: Boolean = LocalForceDarkText.current,
 ) {
     val contentColor = if (forceDark) Color.White else MaterialTheme.colorScheme.onSurface
-    val subtitleColor = if (forceDark) Color(0xC4FFFFFF) else MaterialTheme.colorScheme.onSurfaceVariant
+    val subtitleColor = if (forceDark) Color(0xFFAAAAAA) else MaterialTheme.colorScheme.onSurfaceVariant
     val (name: String, thumbnails: String?) =
         when (data) {
             is ArtistEntity -> Pair(data.name, data.thumbnails)

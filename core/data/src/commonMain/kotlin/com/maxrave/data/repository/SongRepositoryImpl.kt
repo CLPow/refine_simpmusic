@@ -21,11 +21,13 @@ import com.maxrave.domain.repository.SongRepository
 import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.domain.utils.Resource
 import com.maxrave.domain.utils.isRadioQueueId
+import com.maxrave.data.mapping.toTrack
 import com.maxrave.kotlinytmusicscraper.YouTube
 import com.maxrave.kotlinytmusicscraper.models.SongItem
 import com.maxrave.kotlinytmusicscraper.models.WatchEndpoint
 import com.maxrave.kotlinytmusicscraper.models.response.LikeStatus
 import com.maxrave.kotlinytmusicscraper.pages.NextPage
+import com.maxrave.kotlinytmusicscraper.pages.PlaylistPage
 import com.maxrave.kotlinytmusicscraper.parser.getPlaylistContinuation
 import com.maxrave.logger.Logger
 import kotlinx.coroutines.Dispatchers
@@ -496,6 +498,37 @@ internal class SongRepositoryImpl(
                     isDone = it.isDone,
                 )
             }
+
+    override fun getYouTubeHistory(): Flow<Resource<List<Pair<String, List<Track>>>>> =
+        flow {
+            youTube
+                .customQuery(browseId = "FEmusic_history")
+                .onSuccess { response ->
+                    val sections =
+                        response.contents
+                            ?.singleColumnBrowseResultsRenderer
+                            ?.tabs
+                            ?.firstOrNull()
+                            ?.tabRenderer
+                            ?.content
+                            ?.sectionListRenderer
+                            ?.contents
+                            .orEmpty()
+                    val groups =
+                        sections.mapNotNull { section ->
+                            val shelf = section.musicShelfRenderer ?: return@mapNotNull null
+                            val title = shelf.title?.runs?.joinToString("") { it.text }.orEmpty()
+                            val tracks =
+                                shelf.contents.orEmpty().mapNotNull { row ->
+                                    row.musicResponsiveListItemRenderer?.let { PlaylistPage.fromMusicResponsiveListItemRenderer(it)?.toTrack() }
+                                }
+                            if (tracks.isEmpty()) null else title to tracks
+                        }
+                    emit(Resource.Success(groups))
+                }.onFailure { error ->
+                    emit(Resource.Error<List<Pair<String, List<Track>>>>(error.message ?: "History unavailable"))
+                }
+        }.flowOn(Dispatchers.IO)
 
     override fun getRelatedData(videoId: String): Flow<Resource<Pair<List<Track>, String?>>> =
         flow {

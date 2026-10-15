@@ -14,14 +14,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import org.jetbrains.compose.resources.Font
 import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.google_sans_flex_bold
+import simpmusic.composeapp.generated.resources.google_sans_flex_medium
+import simpmusic.composeapp.generated.resources.google_sans_flex_regular
+import simpmusic.composeapp.generated.resources.google_sans_flex_semibold
 import simpmusic.composeapp.generated.resources.poppins_medium
 
 @Composable
 fun fontFamily(ytm: Boolean = LocalIsYtmTheme.current): FontFamily =
-    // YouTube Music sets its UI in the platform sans (Roboto on Android); Poppins stays for the
-    // other themes.
+    // YouTube Music sets its UI in Google Sans. Google Sans Flex is its open (SIL OFL 1.1) rebuild,
+    // bundled as four static cuts (licence: files/GoogleSansFlex-OFL.txt). The platform default is
+    // not used: on some phones (ColorOS with a custom system font) it resolves to a serif.
+    // Scripts the font does not cover (Korean, Japanese, Chinese) fall back to the system font.
     if (ytm) {
-        FontFamily.Default
+        FontFamily(
+            Font(Res.font.google_sans_flex_regular, FontWeight.Normal, FontStyle.Normal),
+            Font(Res.font.google_sans_flex_medium, FontWeight.Medium, FontStyle.Normal),
+            Font(Res.font.google_sans_flex_semibold, FontWeight.SemiBold, FontStyle.Normal),
+            Font(Res.font.google_sans_flex_bold, FontWeight.Bold, FontStyle.Normal),
+        )
     } else {
         FontFamily(
             Font(Res.font.poppins_medium, FontWeight.Normal, FontStyle.Normal),

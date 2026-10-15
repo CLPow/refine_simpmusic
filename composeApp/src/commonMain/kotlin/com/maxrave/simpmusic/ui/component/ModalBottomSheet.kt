@@ -1857,16 +1857,6 @@ fun NowPlayingBottomSheet(
                         )
                         hideModalBottomSheet()
                     }
-                    Crossfade(targetState = changeMainLyricsProviderEnable) {
-                        if (it) {
-                            ActionButton(
-                                icon = SimpIcons.Lyrics,
-                                text = Res.string.main_lyrics_provider,
-                            ) {
-                                mainLyricsProvider = true
-                            }
-                        }
-                    }
                     Crossfade(targetState = setSleepTimerEnable) {
                         val sleepTimerState = uiState.sleepTimer
                         if (it) {
@@ -1897,22 +1887,6 @@ fun NowPlayingBottomSheet(
                                         sleepTimer = true
                                     }
                                 }
-                            }
-                        }
-                    }
-                    Crossfade(targetState = setSleepTimerEnable) {
-                        if (it) {
-                            ActionButton(
-                                icon = SimpIcons.Speed,
-                                text =
-                                    if (crossfadeEnabled != DataStoreManager.TRUE) {
-                                        Res.string.playback_speed_pitch
-                                    } else {
-                                        Res.string.playback_speed_pitch_disabled
-                                    },
-                                enable = crossfadeEnabled != DataStoreManager.TRUE,
-                            ) {
-                                changePlaybackSpeedPitch = true
                             }
                         }
                     }

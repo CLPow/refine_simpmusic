@@ -8,4 +8,6 @@ data class HomeItem(
     val subtitle: String? = null,
     val thumbnail: List<Thumbnail>? = null,
     val channelId: String? = null,
+    /** True when YouTube sent the shelf as list rows (Quick picks), drawn as a grid of song rows. */
+    val isListShelf: Boolean = false,
 )

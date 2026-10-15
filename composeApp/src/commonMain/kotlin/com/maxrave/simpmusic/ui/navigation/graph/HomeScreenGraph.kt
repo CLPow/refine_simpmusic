@@ -5,31 +5,27 @@ import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
-import com.maxrave.simpmusic.ui.navigation.destination.home.CreditDestination
-import com.maxrave.simpmusic.ui.navigation.destination.home.ListenTogetherDestination
-import com.maxrave.simpmusic.ui.navigation.destination.home.ListenTogetherSettingsDestination
+import com.maxrave.simpmusic.ui.navigation.destination.home.ExploreSectionDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.MoodDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.NotificationDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.RecentlySongsDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsCategoryDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsDestination
-import com.maxrave.simpmusic.ui.screen.home.ListenTogetherScreen
-import com.maxrave.simpmusic.ui.screen.home.ListenTogetherSettingsScreen
+import com.maxrave.simpmusic.ui.screen.home.ExploreSectionScreen
 import com.maxrave.simpmusic.ui.screen.home.MoodScreen
 import com.maxrave.simpmusic.ui.screen.home.NotificationScreen
 import com.maxrave.simpmusic.ui.screen.home.RecentlySongsScreen
 import com.maxrave.simpmusic.ui.screen.home.SettingScreen
 import com.maxrave.simpmusic.ui.screen.home.SettingsCategory
 import com.maxrave.simpmusic.ui.screen.home.SettingsHomeScreen
-import com.maxrave.simpmusic.ui.screen.other.CreditScreen
 
 fun NavGraphBuilder.homeScreenGraph(
     innerPadding: PaddingValues,
     navController: NavController,
 ) {
-    composable<CreditDestination> {
-        CreditScreen(
-            paddingValues = innerPadding,
+    composable<ExploreSectionDestination> { entry ->
+        ExploreSectionScreen(
+            section = entry.toRoute<ExploreSectionDestination>().section,
             navController = navController,
         )
     }
@@ -38,18 +34,6 @@ fun NavGraphBuilder.homeScreenGraph(
         MoodScreen(
             navController = navController,
             params = params,
-        )
-    }
-    composable<ListenTogetherDestination> {
-        ListenTogetherScreen(
-            navController = navController,
-            innerPadding = innerPadding,
-        )
-    }
-    composable<ListenTogetherSettingsDestination> {
-        ListenTogetherSettingsScreen(
-            navController = navController,
-            innerPadding = innerPadding,
         )
     }
     composable<NotificationDestination> {

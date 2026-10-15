@@ -1,73 +1,56 @@
 package com.maxrave.simpmusic.ui.screen.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.maxrave.common.Config
-import com.maxrave.domain.data.entities.AlbumEntity
-import com.maxrave.domain.data.entities.ArtistEntity
-import com.maxrave.domain.data.entities.PlaylistEntity
 import com.maxrave.domain.data.entities.SongEntity
+import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.mediaservice.handler.PlaylistType
 import com.maxrave.domain.mediaservice.handler.QueueData
+import com.maxrave.domain.utils.connectArtists
+import com.maxrave.domain.utils.toListName
+import com.maxrave.domain.utils.toSongEntity
 import com.maxrave.domain.utils.toTrack
-import com.maxrave.simpmusic.ui.component.AddToPlaylistModalBottomSheet
-import com.maxrave.simpmusic.ui.component.ArtistFullWidthItems
-import com.maxrave.simpmusic.ui.component.CenterLoadingBox
-import com.maxrave.simpmusic.ui.component.EndOfPage
-import com.maxrave.simpmusic.ui.component.PlaylistFullWidthItems
-import com.maxrave.simpmusic.ui.component.RippleIconButton
-import com.maxrave.simpmusic.ui.component.SongFullWidthItems
-import com.maxrave.simpmusic.ui.component.selection.SelectedSongsBottomSheet
-import com.maxrave.simpmusic.ui.component.selection.SongSelectionTopAppBar
-import com.maxrave.simpmusic.ui.component.selection.rememberSongSelectionState
-import com.maxrave.simpmusic.ui.icon.ArrowBackIosNew
-import com.maxrave.simpmusic.ui.icon.SimpIcons
-import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
-import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
-import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
+import com.maxrave.simpmusic.ui.component.NowPlayingBottomSheet
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
+import com.maxrave.simpmusic.ui.component.ytm.YtmSongRow
+import com.maxrave.simpmusic.ui.component.ytm.YtmTopBar
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.RecentlySongsViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
-import com.maxrave.simpmusic.viewModel.SongSelectionViewModel
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
-import dev.chrisbanes.haze.rememberHazeState
-import kotlinx.coroutines.flow.map
-import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
-import simpmusic.composeapp.generated.resources.Res
-import simpmusic.composeapp.generated.resources.error
-import simpmusic.composeapp.generated.resources.recently_added
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
+/**
+ * YouTube Music's History: the account's YouTube history grouped Today, Yesterday, This week…
+ * When signed out there is no account history, so the songs played on this device stand in.
+ * A tap plays the song's radio.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecentlySongsScreen(
     innerPadding: PaddingValues,
@@ -75,245 +58,81 @@ fun RecentlySongsScreen(
     viewModel: RecentlySongsViewModel = koinViewModel(),
     sharedViewModel: SharedViewModel = koinInject(),
 ) {
-    val hazeState = rememberHazeState()
+    val signedIn by viewModel.signedIn.collectAsStateWithLifecycle()
+    val history by viewModel.youTubeHistory.collectAsStateWithLifecycle()
+    val local = viewModel.recentlySongs.collectAsLazyPagingItems()
+    var menuTrack by remember { mutableStateOf<Track?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
+    menuTrack?.let { NowPlayingBottomSheet(onDismiss = { menuTrack = null }, navController = navController, song = it.toSongEntity()) }
 
-    val selectionState = rememberSongSelectionState()
-    val selectionViewModel: SongSelectionViewModel = koinViewModel()
-    var showSelectionSheet by rememberSaveable { mutableStateOf(false) }
-    var showSelectionAddToPlaylist by rememberSaveable { mutableStateOf(false) }
+    fun play(track: Track) {
+        sharedViewModel.setQueueData(
+            QueueData.Data(
+                listTracks = arrayListOf(track),
+                firstPlayedTrack = track,
+                playlistId = "RDAMVM${track.videoId}",
+                playlistName = "\"${track.title}\" Radio",
+                playlistType = PlaylistType.RADIO,
+                continuation = null,
+            ),
+        )
+        sharedViewModel.loadMediaItem(track, Config.SONG_CLICK)
+    }
 
-    val recentlyItems = viewModel.recentlySongs.collectAsLazyPagingItems()
-    val playingTrack by sharedViewModel.nowPlayingState.map { it?.songEntity }.collectAsState(initial = null)
-    val isPlaying by sharedViewModel.controllerState.map { it.isPlaying }.collectAsState(initial = false)
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .hazeSource(state = hazeState),
+    Column(Modifier.fillMaxSize().background(Ytm.Background)) {
+        YtmTopBar(navController = navController, title = "History", onBack = { navController.navigateUp() })
+        PullToRefreshBox(
+            isRefreshing = refreshing && history == null,
+            onRefresh = {
+                refreshing = true
+                viewModel.refresh()
+                local.refresh()
+            },
+            modifier = Modifier.fillMaxSize(),
         ) {
-            item {
-                Spacer(
-                    Modifier.size(
-                        innerPadding.calculateTopPadding() + 64.dp,
-                    ),
-                )
-            }
-
-            items(
-                count = recentlyItems.itemCount,
-                key = { index ->
-                    val item = recentlyItems[index]
-                    when (item) {
-                        is SongEntity -> "song_${item.videoId}_$index"
-                        is AlbumEntity -> "album_${item.browseId}_$index"
-                        is PlaylistEntity -> "playlist_${item.id}_$index"
-                        is ArtistEntity -> "artist_${item.channelId}_$index"
-                        else -> index.toString()
-                    }
-                },
-            ) { index ->
-                val item = recentlyItems[index]
-                when (item) {
-                    is SongEntity -> {
-                        val recentlyAddedString = stringResource(Res.string.recently_added)
-                        SongFullWidthItems(
-                            songEntity = item,
-                            isPlaying = playingTrack?.videoId == item.videoId && isPlaying,
-                            onClickListener = { videoId ->
-                                val firstQueue = item.toTrack()
-                                viewModel.setQueueData(
-                                    QueueData.Data(
-                                        listTracks = arrayListOf(firstQueue),
-                                        firstPlayedTrack = firstQueue,
-                                        playlistId = "RDAMVM$videoId",
-                                        playlistName = recentlyAddedString,
-                                        playlistType = PlaylistType.RADIO,
-                                        continuation = null,
-                                    ),
+            when {
+                signedIn == true && history == null ->
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
+                signedIn == true ->
+                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                        history.orEmpty().forEach { (group, tracks) ->
+                            item(key = "g-$group") { GroupTitle(group) }
+                            items(tracks, key = { "$group-${it.videoId}" }) { track ->
+                                YtmSongRow(
+                                    title = track.title,
+                                    subtitle = listOfNotNull(track.artists?.toListName()?.connectArtists(), track.album?.name).filter { it.isNotBlank() }.joinToString(" • "),
+                                    thumbnail = track.thumbnails?.lastOrNull()?.url,
+                                    onClick = { play(track) },
+                                    onMore = { menuTrack = track },
                                 )
-                                viewModel.loadMediaItem(
-                                    firstQueue,
-                                    Config.SONG_CLICK,
-                                    0,
-                                )
-                            },
-                            onAddToQueue = {
-                                sharedViewModel.addListToQueue(
-                                    arrayListOf(item.toTrack()),
-                                )
-                            },
-                            selectionMode = selectionState.isActive,
-                            isSelected = selectionState.isSelected(item.videoId),
-                            onLongClick = { selectionState.start(it) },
-                            onSelectToggle = { selectionState.toggle(it) },
-                            modifier = Modifier.animateItem(),
-                        )
-                    }
-
-                    is AlbumEntity -> {
-                        PlaylistFullWidthItems(
-                            data = item,
-                            onClickListener = {
-                                navController.navigate(
-                                    AlbumDestination(
-                                        item.browseId,
-                                    ),
-                                )
-                            },
-                            modifier = Modifier.animateItem(),
-                        )
-                    }
-
-                    is PlaylistEntity -> {
-                        PlaylistFullWidthItems(
-                            data = item,
-                            onClickListener = {
-                                navController.navigate(
-                                    PlaylistDestination(
-                                        item.id,
-                                    ),
-                                )
-                            },
-                            modifier = Modifier.animateItem(),
-                        )
-                    }
-
-                    is ArtistEntity -> {
-                        ArtistFullWidthItems(
-                            data = item,
-                            onClickListener = {
-                                navController.navigate(
-                                    ArtistDestination(
-                                        item.channelId,
-                                    ),
-                                )
-                            },
-                            modifier = Modifier.animateItem(),
-                        )
-                    }
-                }
-            }
-
-            // Loading state
-            recentlyItems.apply {
-                when {
-                    loadState.refresh is LoadState.Loading || loadState.append is LoadState.Loading -> {
-                        item {
-                            CenterLoadingBox(
-                                modifier =
-                                    Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp),
-                            )
-                        }
-                    }
-
-                    loadState.refresh is LoadState.Error || loadState.append is LoadState.Error -> {
-                        item {
-                            val error =
-                                (loadState.refresh as? LoadState.Error)?.error?.message
-                                    ?: (loadState.append as? LoadState.Error)?.error?.message
-                                    ?: stringResource(Res.string.error)
-                            LaunchedEffect(error) {
-                                viewModel.makeToast(error)
                             }
                         }
                     }
-                }
-            }
-
-            item {
-                EndOfPage()
-            }
-        }
-
-        // Top App Bar with haze effect
-        TopAppBar(
-            modifier =
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .hazeEffect(state = hazeState, style = HazeMaterials.ultraThin()) {
-                        blurEnabled = true
-                    },
-            title = {
-                Text(
-                    text = stringResource(Res.string.recently_added),
-                    style = typo().titleMedium,
-                )
-            },
-            navigationIcon = {
-                Box(Modifier.padding(horizontal = 5.dp)) {
-                    RippleIconButton(
-                        SimpIcons.ArrowBackIosNew,
-                        Modifier.size(32.dp),
-                        true,
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    ) {
-                        navController.navigateUp()
+                else ->
+                    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                        item(key = "device") { GroupTitle("On this device") }
+                        items(count = local.itemCount, key = { index -> "l-$index" }) { index ->
+                            val song = local[index] as? SongEntity ?: return@items
+                            YtmSongRow(
+                                title = song.title,
+                                subtitle = listOfNotNull(song.artistName?.connectArtists(), song.albumName).filter { it.isNotBlank() }.joinToString(" • "),
+                                thumbnail = song.thumbnails,
+                                onClick = { play(song.toTrack()) },
+                                onMore = { menuTrack = song.toTrack() },
+                            )
+                        }
                     }
-                }
-            },
-            actions = {},
-            colors =
-                TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                ),
-        )
-        if (selectionState.isActive) {
-            SongSelectionTopAppBar(
-                state = selectionState,
-                onSelectAll = {
-                    selectionState.toggleSelectAll(
-                        (0 until recentlyItems.itemCount).mapNotNull {
-                            (recentlyItems.peek(it) as? SongEntity)?.videoId
-                        },
-                    )
-                },
-                onOpenActions = { showSelectionSheet = true },
-                modifier = Modifier.align(Alignment.TopCenter),
-                containerColor = Color.Black,
-            )
+            }
         }
     }
-    if (showSelectionSheet) {
-        val selectedIds = selectionState.selected.toList()
-        SelectedSongsBottomSheet(
-            count = selectedIds.size,
-            onDismiss = { showSelectionSheet = false },
-            onPlayNext = {
-                selectionViewModel.playNext(selectedIds)
-                selectionState.exit()
-            },
-            onAddToQueue = {
-                selectionViewModel.addToQueue(selectedIds)
-                selectionState.exit()
-            },
-            onAddToPlaylist = { showSelectionAddToPlaylist = true },
-            onDownload = {
-                selectionViewModel.download(selectedIds)
-                selectionState.exit()
-            },
-            onAddToFavorite = {
-                selectionViewModel.addToFavorite(selectedIds)
-                selectionState.exit()
-            },
-        )
-    }
-    if (showSelectionAddToPlaylist) {
-        val selectedIds = selectionState.selected.toList()
-        val localPlaylists by selectionViewModel.listLocalPlaylist.collectAsStateWithLifecycle()
-        AddToPlaylistModalBottomSheet(
-            isBottomSheetVisible = true,
-            listLocalPlaylist = localPlaylists,
-            listYouTubePlaylist = emptyList(),
-            onDismiss = { showSelectionAddToPlaylist = false },
-            onClick = { playlist ->
-                selectionViewModel.addToPlaylist(playlist.id, selectedIds)
-                selectionState.exit()
-            },
-            onYTPlaylistClick = {},
-        )
-    }
+}
+
+@Composable
+private fun GroupTitle(title: String) {
+    Text(
+        title,
+        style = typo().titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
+        color = Color.White,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 8.dp),
+    )
 }

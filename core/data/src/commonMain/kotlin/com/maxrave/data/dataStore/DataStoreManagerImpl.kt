@@ -255,10 +255,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val normalizeVolume: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[NORMALIZE_VOLUME] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val normalizeVolume: Flow<String> = flowOf(FALSE)
 
     override suspend fun setNormalizeVolume(normalize: Boolean) {
         withContext(Dispatchers.IO) {
@@ -274,10 +272,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val skipSilent: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[SKIP_SILENT] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val skipSilent: Flow<String> = flowOf(FALSE)
 
     override suspend fun setSkipSilent(skip: Boolean) {
         withContext(Dispatchers.IO) {
@@ -419,10 +415,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val sponsorBlockEnabled =
-        settingsDataStore.data.map { preferences ->
-            preferences[SPONSOR_BLOCK_ENABLED] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val sponsorBlockEnabled: Flow<String> = flowOf(FALSE)
 
     override suspend fun setSponsorBlockEnabled(enabled: Boolean) {
         withContext(Dispatchers.IO) {
@@ -462,10 +456,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val enableTranslateLyric =
-        settingsDataStore.data.map { preferences ->
-            preferences[USE_TRANSLATION_LANGUAGE] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val enableTranslateLyric: Flow<String> = flowOf(FALSE)
 
     override suspend fun setEnableTranslateLyric(enable: Boolean) {
         withContext(Dispatchers.IO) {
@@ -569,10 +561,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val skipShortTrackSeconds: Flow<Int> =
-        settingsDataStore.data.map { preferences ->
-            preferences[SKIP_SHORT_TRACK_SECONDS] ?: 20
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val skipShortTrackSeconds: Flow<Int> = flowOf(0)
 
     override suspend fun setSkipShortTrackSeconds(seconds: Int) {
         withContext(Dispatchers.IO) {
@@ -634,10 +624,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val checkForUpdates: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[CHECK_FOR_UPDATES] ?: TRUE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val checkForUpdates: Flow<String> = flowOf(FALSE)
 
     override suspend fun setCheckForUpdates(enabled: Boolean) {
         withContext(Dispatchers.IO) {
@@ -750,10 +738,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val equalizerEnabled: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[EQUALIZER_ENABLED] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val equalizerEnabled: Flow<String> = flowOf(FALSE)
 
     override suspend fun setEqualizerEnabled(enabled: Boolean) {
         withContext(Dispatchers.IO) {
@@ -809,10 +795,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val syncFollowToYouTube: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[SYNC_FOLLOW_TO_YOUTUBE] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val syncFollowToYouTube: Flow<String> = flowOf(TRUE)
 
     override suspend fun setSyncFollowToYouTube(enabled: Boolean) {
         withContext(Dispatchers.IO) {
@@ -822,10 +806,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val spotifyLyrics: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[SPOTIFY_LYRICS] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val spotifyLyrics: Flow<String> = flowOf(FALSE)
 
     override suspend fun setSpotifyLyrics(spotifyLyrics: Boolean) {
         withContext(Dispatchers.IO) {
@@ -841,10 +823,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val spotifyCanvas: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[SPOTIFY_CANVAS] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val spotifyCanvas: Flow<String> = flowOf(FALSE)
 
     override suspend fun setSpotifyCanvas(spotifyCanvas: Boolean) {
         withContext(Dispatchers.IO) {
@@ -1037,10 +1017,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val lyricsStyle =
-        settingsDataStore.data.map { preferences ->
-            preferences[LYRICS_STYLE] ?: DataStoreManager.LYRICS_STYLE_APPLE_MUSIC
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val lyricsStyle: Flow<String> = flowOf(DataStoreManager.LYRICS_STYLE_CLASSIC)
 
     override suspend fun setLyricsStyle(style: String) {
         withContext(Dispatchers.IO) {
@@ -1050,10 +1028,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val romanizationLanguages =
-        settingsDataStore.data.map { preferences ->
-            preferences[ROMANIZATION_LANGUAGES] ?: ""
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val romanizationLanguages: Flow<String> = flowOf("")
 
     override suspend fun setRomanizationLanguages(languages: String) {
         withContext(Dispatchers.IO) {
@@ -1063,10 +1039,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val usingProxy =
-        settingsDataStore.data.map { preferences ->
-            preferences[USING_PROXY] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val usingProxy: Flow<String> = flowOf(FALSE)
 
     override suspend fun setUsingProxy(usingProxy: Boolean) {
         withContext(Dispatchers.IO) {
@@ -1259,10 +1233,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val autoCheckForUpdates =
-        settingsDataStore.data.map { preferences ->
-            preferences[AUTO_CHECK_FOR_UPDATES] ?: TRUE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val autoCheckForUpdates: Flow<String> = flowOf(FALSE)
 
     override suspend fun setAutoCheckForUpdates(autoCheck: Boolean) {
         withContext(Dispatchers.IO) {
@@ -1369,10 +1341,8 @@ internal class DataStoreManagerImpl(
             preferences[AI_API_KEY] ?: ""
         }
 
-    override val useAITranslation: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[USE_AI_TRANSLATION] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val useAITranslation: Flow<String> = flowOf(FALSE)
 
     override suspend fun setUseAITranslation(use: Boolean) {
         withContext(Dispatchers.IO) {
@@ -1478,10 +1448,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val crossfadeEnabled: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[CROSSFADE_ENABLED] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val crossfadeEnabled: Flow<String> = flowOf(FALSE)
 
     override suspend fun setCrossfadeEnabled(enabled: Boolean) {
         withContext(Dispatchers.IO) {
@@ -1547,10 +1515,8 @@ internal class DataStoreManagerImpl(
     }
 
     // Defaults to FALSE: it spends storage and mobile data on the user's behalf.
-    override val autoDownloadLikedSongs: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[AUTO_DOWNLOAD_LIKED_SONGS] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val autoDownloadLikedSongs: Flow<String> = flowOf(FALSE)
 
     override suspend fun setAutoDownloadLikedSongs(enabled: Boolean) {
         withContext(Dispatchers.IO) {
@@ -1579,10 +1545,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val helpBuildLyricsDatabase: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[HELP_BUILD_LYRICS_DATABASE] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val helpBuildLyricsDatabase: Flow<String> = flowOf(FALSE)
 
     override suspend fun setHelpBuildLyricsDatabase(help: Boolean) {
         withContext(Dispatchers.IO) {
@@ -1692,10 +1656,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val richPresenceEnabled: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[RICH_PRESENCE] ?: FALSE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val richPresenceEnabled: Flow<String> = flowOf(FALSE)
 
     override suspend fun setRichPresenceEnabled(enabled: Boolean) {
         withContext(Dispatchers.IO) {
@@ -1734,10 +1696,8 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val lastfmScrobbleEnabled: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[LASTFM_SCROBBLE_ENABLED] ?: TRUE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val lastfmScrobbleEnabled: Flow<String> = flowOf(FALSE)
 
     override suspend fun setLastfmScrobbleEnabled(enabled: Boolean) {
         withContext(Dispatchers.IO) {
@@ -1755,10 +1715,8 @@ internal class DataStoreManagerImpl(
      * was no local signal to rank recommendations with. Unlike [sendBackToGoogle], nothing here is
      * transmitted anywhere.
      */
-    override val localTrackingEnabled: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[LOCAL_TRACKING_ENABLED] ?: TRUE
-        }
+    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
+    override val localTrackingEnabled: Flow<String> = flowOf(FALSE)
 
     override suspend fun setLocalTrackingEnabled(enabled: Boolean) {
         withContext(Dispatchers.IO) {

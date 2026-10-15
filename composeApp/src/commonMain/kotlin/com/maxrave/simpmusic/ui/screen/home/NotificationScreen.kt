@@ -1,5 +1,10 @@
 package com.maxrave.simpmusic.ui.screen.home
 
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.CircularProgressIndicator
+import com.maxrave.simpmusic.ui.component.ytm.YtmTopBar
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
+import com.maxrave.simpmusic.ui.component.ytm.Thumb
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -91,6 +96,10 @@ import simpmusic.composeapp.generated.resources.no_notification
 import simpmusic.composeapp.generated.resources.notification
 import simpmusic.composeapp.generated.resources.singles
 
+/**
+ * YouTube Music's notifications: one row per new release from an artist you subscribe to — the
+ * artist's picture, "New release from …", the release and how long ago, its cover on the right.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationScreen(
@@ -99,127 +108,51 @@ fun NotificationScreen(
     sharedViewModel: SharedViewModel = koinInject(),
 ) {
     val listNotification by viewModel.listNotification.collectAsStateWithLifecycle()
-    val glowNowPlaying by sharedViewModel.nowPlayingState.collectAsStateWithLifecycle()
-    val listState = rememberLazyListState()
-    val density = LocalDensity.current
-    val hazeState = rememberHazeState(blurEnabled = true)
-    var topAppBarHeight by remember { mutableStateOf(0.dp) }
-    // Home's rule: transparent only while pixel-0 is on screen; the frost itself stays light.
-    val isAtTop by remember {
-        derivedStateOf { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 }
-    }
-
-    // Home-family ambient ground — scrolls away with the list (see SettingScreen's note on the
-    // draw-phase translation).
-    AmbientThemeGlow(
-        tint = rememberNowPlayingGlowTint(glowNowPlaying?.songEntity?.thumbnails),
-        modifier =
-            Modifier.graphicsLayer {
-                translationY =
-                    if (listState.firstVisibleItemIndex == 0) {
-                        -listState.firstVisibleItemScrollOffset.toFloat()
-                    } else {
-                        -size.height
-                    }
-            },
-    )
-    Box(Modifier.fillMaxSize().hazeSource(hazeState)) {
-        Crossfade(targetState = listNotification) {
-            if (it == null) {
-                Box(
-                    Modifier.fillMaxSize(),
-                ) {
-                    CenterLoadingBox(modifier = Modifier.align(Alignment.Center))
+    Column(Modifier.fillMaxSize().background(Ytm.Background)) {
+        YtmTopBar(navController = navController, title = "Notifications", onBack = { navController.navigateUp() })
+        val list = listNotification?.filter { it.type != NotificationEntity.TYPE_BLOG }
+        when {
+            list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
+            list.isEmpty() ->
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No notifications", style = typo().bodyLarge, color = Ytm.TextSecondary)
                 }
-            } else if (it.isNotEmpty()) {
-                // contentPadding, not Modifier.padding: the bar floats now, and the list has to
-                // slide UNDER it for the frost to have anything to frost.
-                LazyColumn(
-                    state = listState,
-                    contentPadding =
-                        PaddingValues(
-                            start = 15.dp,
-                            end = 15.dp,
-                            top = topAppBarHeight + 15.dp,
-                            bottom = 15.dp,
-                        ),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    items(it) { notification ->
-                        NotificationItem(
-                            notification = notification,
-                            navController,
-                        )
-                    }
-                    item {
-                        EndOfPage()
-                    }
-                }
-            } else {
-                Box(
-                    Modifier.fillMaxSize(),
-                ) {
-                    Text(
-                        text = stringResource(Res.string.no_notification),
-                        style = typo().titleMedium,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                }
-            }
-        }
-    }
-    // The bar FLOATS over the list, Home style. It used to sit in-flow above the list, so once the
-    // glow scrolled away the transparent bar stood over nothing but the black window — which is
-    // exactly what "not transparent at all" looks like. Floating gives the list something to slide
-    // under and the frost something to frost.
-    val barTint = MaterialTheme.colorScheme.background
-    AnimatedContent(
-        targetState = isAtTop,
-        transitionSpec = {
-            fadeIn(tween(300)).togetherWith(fadeOut(tween(300)))
-        },
-    ) { atTop ->
-        Column(
-            Modifier
-                .then(
-                    if (atTop) {
-                        Modifier
-                    } else {
-                        // AlbumScreen's bar recipe, thinned to 0.3 — see SettingScreen.
-                        Modifier.hazeEffect(hazeState) {
-                            blurEnabled = true
-                            blurRadius = 24.dp
-                            backgroundColor = barTint
-                            tints = listOf(HazeTint(barTint.copy(alpha = 0.3f)))
+            else ->
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                    list.forEach { notification ->
+                        val releases = notification.album.map { it to true } + notification.single.map { it to false }
+                        items(releases) { (release, isAlbum) ->
+                            Row(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        val browseId = release["browseId"].orEmpty()
+                                        if (browseId.isNotEmpty()) navController.navigate(AlbumDestination(browseId = browseId))
+                                    }.padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Thumb(notification.thumbnail, 40.dp, CircleShape)
+                                Spacer(Modifier.width(16.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "New release from ${notification.name}: ${release["title"].orEmpty()}",
+                                        style = typo().bodyLarge.copy(fontSize = 14.sp),
+                                        color = Color.White,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    Text(
+                                        listOf(if (isAlbum) "Album" else "Single", notification.time.formatTimeAgo()).joinToString(" • "),
+                                        style = typo().bodyMedium,
+                                        color = Ytm.TextSecondary,
+                                    )
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Thumb(release["thumbnails"], 56.dp, RoundedCornerShape(4.dp))
+                            }
                         }
-                    },
-                ).onGloballyPositioned { coordinates ->
-                    topAppBarHeight = with(density) { coordinates.size.height.toDp() }
-                },
-        ) {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(Res.string.notification),
-                        style = typo().titleMedium,
-                    )
-                },
-                navigationIcon = {
-                    RippleIconButton(
-                        imageVector = SimpIcons.ArrowBackIosNew,
-                        tint = MaterialTheme.colorScheme.onSurface,
-                    ) {
-                        navController.navigateUp()
                     }
-                },
-                // Transparent, or the default surface container paints an opaque strip over the
-                // very top of AmbientThemeGlow — the one part of it that actually carries colour.
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                    ),
-            )
+                }
         }
     }
 }

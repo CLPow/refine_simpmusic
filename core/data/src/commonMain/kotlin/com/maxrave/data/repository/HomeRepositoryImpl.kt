@@ -233,6 +233,32 @@ internal class HomeRepositoryImpl(
             }
         }.flowOn(Dispatchers.IO)
 
+    override fun getExploreData(
+        viewString: String,
+        songString: String,
+    ): Flow<Resource<List<HomeItem>>> =
+        flow {
+            youTube
+                .customQuery(browseId = "FEmusic_explore")
+                .onSuccess { result ->
+                    val sections =
+                        result.contents
+                            ?.singleColumnBrowseResultsRenderer
+                            ?.tabs
+                            ?.firstOrNull()
+                            ?.tabRenderer
+                            ?.content
+                            ?.sectionListRenderer
+                            ?.contents
+                    val shelves =
+                        parseMixedContent(sections, viewString, songString)
+                            .filter { it.title.isNotBlank() && it.contents.isNotEmpty() }
+                    emit(Resource.Success(shelves))
+                }.onFailure { error ->
+                    emit(Resource.Error<List<HomeItem>>(error.message.toString()))
+                }
+        }.flowOn(Dispatchers.IO)
+
     override fun getHomeDataContinue(
         continueParam: String,
         viewString: String,

@@ -50,15 +50,12 @@ import com.maxrave.simpmusic.extension.getColorFromPalette
 import com.maxrave.simpmusic.extension.hsvToColor
 import com.maxrave.simpmusic.extension.rememberIsInPipMode
 import com.maxrave.simpmusic.ui.component.AddToPlaylistModalBottomSheet
-import com.maxrave.simpmusic.ui.component.FullscreenLyricsSheet
 import com.maxrave.simpmusic.ui.component.InfoPlayerBottomSheet
 import com.maxrave.simpmusic.ui.component.NowPlayingBottomSheet
 import com.maxrave.simpmusic.ui.component.QueueBottomSheet
-import com.maxrave.simpmusic.ui.component.VoteLyricsDialog
 import com.maxrave.simpmusic.ui.icon.KeyboardArrowDown
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
-import com.maxrave.simpmusic.ui.navigation.destination.player.FullscreenDestination
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentActions
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentYtm
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentState
@@ -110,6 +107,9 @@ fun NowPlayingScreen(
         },
         containerColor = Color.Black,
         dragHandle = {},
+        // Full window on every screen size: YouTube Music's player covers the whole window, and
+        // the default 640dp cap left desktop with a narrow strip instead of the wide layout.
+        sheetMaxWidth = androidx.compose.ui.unit.Dp.Unspecified,
         scrimColor = Color.Black.copy(alpha = .5f),
         sheetState = sheetState,
         contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
@@ -551,15 +551,6 @@ fun NowPlayingScreenContent(
         )
     }
 
-    if (showFullscreenLyrics) {
-        FullscreenLyricsSheet(
-            sharedViewModel = sharedViewModel,
-            navController = navController, // <-- ADD THIS LINE
-            color = startColor.value,
-        ) {
-            showFullscreenLyrics = false
-        }
-    }
 
     if (showQueueBottomSheet) {
         QueueBottomSheet(
@@ -604,36 +595,6 @@ fun NowPlayingScreenContent(
         )
     }
 
-    // Vote Dialog
-    if (showVoteDialog) {
-        val canVoteLyrics =
-            screenDataState.lyricsData?.lyricsProvider == LyricsProvider.SIMPMUSIC &&
-                screenDataState.lyricsData
-                    ?.lyrics
-                    ?.simpMusicLyrics != null
-        val canVoteTranslatedLyrics =
-            screenDataState.lyricsData?.translatedLyrics?.second == LyricsProvider.SIMPMUSIC &&
-                screenDataState.lyricsData
-                    ?.translatedLyrics
-                    ?.first
-                    ?.simpMusicLyrics != null
-
-        VoteLyricsDialog(
-            canVoteLyrics = canVoteLyrics,
-            canVoteTranslatedLyrics = canVoteTranslatedLyrics,
-            lyricsVoteState = lyricsVoteState,
-            translatedLyricsVoteState = translatedVoteState,
-            onVoteLyrics = { upvote ->
-                sharedViewModel.voteLyrics(upvote)
-            },
-            onVoteTranslatedLyrics = { upvote ->
-                sharedViewModel.voteTranslatedLyrics(upvote)
-            },
-            onDismiss = {
-                showVoteDialog = false
-            },
-        )
-    }
 
     if (screenDataState.lyricsData != null && controllerState.isPlaying) {
         KeepScreenOn()
@@ -714,10 +675,7 @@ fun NowPlayingScreenContent(
             onShowAddToPlaylist = { showAddToPlaylistDirectly = true },
             onShowFullscreenLyrics = { showFullscreenLyrics = true },
             onShowVoteDialog = { showVoteDialog = true },
-            onEnterFullscreenVideo = {
-                onDismiss()
-                navController.navigate(FullscreenDestination)
-            },
+            onEnterFullscreenVideo = {},
             onDismiss = onDismiss,
             onToolbarVisibilityChange = { shouldShowToolbar = it },
             onMoveQueueItem = { from, to ->

@@ -39,6 +39,12 @@ interface HomeRepository {
         songString: String,
     ): Flow<Resource<Pair<String?, List<HomeItem>>>>
 
+    /** YouTube Music's Explore page (FEmusic_explore): its shelves, songs-only filtered. */
+    fun getExploreData(
+        viewString: String,
+        songString: String,
+    ): Flow<Resource<List<HomeItem>>>
+
     fun getNewRelease(
         newReleaseString: String,
         musicVideoString: String,

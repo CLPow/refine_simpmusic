@@ -141,5 +141,8 @@ interface SongRepository {
 
     fun getRelatedData(videoId: String): Flow<Resource<Pair<List<Track>, String?>>>
 
+    /** The account's YouTube history (FEmusic_history), grouped as YouTube groups it: Today, Yesterday… */
+    fun getYouTubeHistory(): Flow<Resource<List<Pair<String, List<Track>>>>>
+
     fun getRadioFromEndpoint(endpoint: YouTubeWatchEndpoint): Flow<Resource<Pair<List<Track>, String?>>>
 }

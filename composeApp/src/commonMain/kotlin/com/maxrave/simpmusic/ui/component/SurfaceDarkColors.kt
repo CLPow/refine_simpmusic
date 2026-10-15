@@ -28,23 +28,13 @@ data class SurfaceDarkColors(
 )
 
 @Composable
-fun rememberSurfaceDarkColors(): SurfaceDarkColors {
-    val cs = MaterialTheme.colorScheme
-    return if (LocalForceDarkText.current) {
-        SurfaceDarkColors(
-            container = Color(0xFF242424),
-            handle = Color(0xFF474545),
-            content = Color.White,
-            subtitle = Color(0xFFB0B0A0),
-            disabled = Color.Gray,
-        )
-    } else {
-        SurfaceDarkColors(
-            container = cs.surfaceContainerLow,
-            handle = cs.outlineVariant,
-            content = cs.onSurface,
-            subtitle = cs.onSurfaceVariant,
-            disabled = cs.onSurfaceVariant.copy(alpha = 0.38f),
-        )
-    }
-}
+fun rememberSurfaceDarkColors(): SurfaceDarkColors =
+    // YouTube Music's sheets and dialogs: #212121, white text, #AAAAAA secondary. The app is always
+    // on the YouTube Music dark theme, so this holds whichever screen opened the sheet.
+    SurfaceDarkColors(
+        container = Color(0xFF212121),
+        handle = Color(0xFF5A5A5A),
+        content = Color.White,
+        subtitle = Color(0xFFAAAAAA),
+        disabled = Color(0xFF717171),
+    )

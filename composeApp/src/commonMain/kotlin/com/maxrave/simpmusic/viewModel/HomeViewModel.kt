@@ -81,6 +81,24 @@ class HomeViewModel(
     /** Ceiling on a home refresh before the spinner is released regardless of the sources. */
     private val HOME_LOAD_TIMEOUT_MS = 30_000L
 
+    /**
+     * When the feed last loaded. The music service keeps the process alive for days, so a feed
+     * fetched once at start went stale: songs played since never showed up in it. YouTube Music
+     * reloads Home when you come back to it; [refreshIfStale] does the same.
+     */
+    private var lastLoadedAtMs = 0L
+
+    /** Reloads Home when the shown feed is older than [STALE_AFTER_MS] (YouTube Music's behaviour on return). */
+    fun refreshIfStale() {
+        if (lastLoadedAtMs != 0L && currentTimeMs() - lastLoadedAtMs > STALE_AFTER_MS && !loading.value) {
+            getHomeItemList(params.value)
+        }
+    }
+
+    private fun currentTimeMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
+
+    private val STALE_AFTER_MS = 10 * 60_000L
+
     val loading = MutableStateFlow<Boolean>(true)
     val loadingChart = MutableStateFlow<Boolean>(true)
     private var regionCode: String = ""
@@ -115,7 +133,6 @@ class HomeViewModel(
         homeJob = Job()
         viewModelScope.launch {
             regionCodeChart.value = dataStoreManager.chartKey.first()
-            exploreChart(regionCodeChart.value ?: "ZZ")
             language = dataStoreManager.getString(SELECTED_LANGUAGE).first()
                 ?: SUPPORTED_LANGUAGE.codes.first()
             //  refresh when region change
@@ -210,20 +227,10 @@ class HomeViewModel(
         homeJob?.cancel()
         homeJob =
             viewModelScope.launch {
-                // Instant local shelves + last successful feed so the page is never blank
-                // while YouTube answers. Do not wait for chart/mood/new-release.
-                val localShelves =
-                    runCatching {
-                        homeRepository
-                            .getLocalShelves(
-                                onRepeatTitle = getString(Res.string.shelf_on_repeat),
-                                buriedTitle = getString(Res.string.shelf_buried_favourites),
-                            ).firstOrNull()
-                            .orEmpty()
-                    }.getOrDefault(emptyList())
+                // The last feed stays on screen while YouTube answers, so the page is never blank.
+                // No local shelves: YouTube Music's Home is YouTube's feed only, and the old
+                // "On repeat" / "Buried favourites" shelves kept old songs pinned at the top.
                 val previous = _homeItemList.value
-                _homeItemList.value =
-                    localShelves + previous.filterNot { p -> localShelves.any { it == p } }
 
                 var homeDone = false
                 launch {
@@ -235,50 +242,6 @@ class HomeViewModel(
                         if (_homeItemList.value.isEmpty()) {
                             _recommendationsFailed.value = true
                         }
-                    }
-                }
-
-                // Side channels — isolated so a failure cannot cancel the home feed.
-                launch {
-                    try {
-                        homeRepository.getMoodAndMomentsData().collect { mood ->
-                            if (mood is Resource.Success) _exploreMoodItem.value = mood.data
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Logger.w("HomeViewModel", "Mood load failed: ${e.message}")
-                    }
-                }
-                launch {
-                    try {
-                        homeRepository.getChartData(dataStoreManager.chartKey.first()).collect { chart ->
-                            if (chart is Resource.Success) {
-                                _chart.value = chart.data
-                                regionCodeChart.value = dataStoreManager.chartKey.first()
-                            }
-                        }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Logger.w("HomeViewModel", "Chart load failed: ${e.message}")
-                    }
-                }
-                launch {
-                    try {
-                        homeRepository
-                            .getNewRelease(
-                                getString(Res.string.new_release),
-                                getString(Res.string.music_video),
-                            ).collect { newRelease ->
-                                if (newRelease is Resource.Success) {
-                                    _newRelease.value = newRelease.data ?: arrayListOf()
-                                }
-                            }
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Logger.w("HomeViewModel", "New release load failed: ${e.message}")
                     }
                 }
 
@@ -296,23 +259,22 @@ class HomeViewModel(
                                 home is Resource.Success && !home.data?.second.isNullOrEmpty() -> {
                                     _recommendationsFailed.value = false
                                     _continuation.value = home.data?.first
-                                    _homeItemList.value = localShelves + (home.data?.second ?: listOf())
+                                    _homeItemList.value = home.data?.second ?: listOf()
+                                    lastLoadedAtMs = currentTimeMs()
                                 }
 
                                 home is Resource.Success -> {
                                     Logger.w("HomeViewModel", "Home returned no shelves; treating as a failed load")
                                     _recommendationsFailed.value = true
                                     _continuation.value = null
-                                    _homeItemList.value =
-                                        localShelves + previous.filterNot { p -> localShelves.any { it == p } }
+                                    _homeItemList.value = previous
                                 }
 
                                 else -> {
                                     Logger.e("HomeViewModel", "Home load failed: ${home.message}")
                                     _recommendationsFailed.value = true
                                     _continuation.value = null
-                                    _homeItemList.value =
-                                        localShelves + previous.filterNot { p -> localShelves.any { it == p } }
+                                    _homeItemList.value = previous
                                 }
                             }
                             _homeListState.value =

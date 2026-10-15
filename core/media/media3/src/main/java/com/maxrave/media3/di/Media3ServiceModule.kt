@@ -48,6 +48,7 @@ import com.maxrave.common.Config.PLAYER_CACHE
 import com.maxrave.common.Config.SERVICE_SCOPE
 import com.maxrave.common.MERGING_DATA_TYPE
 import com.maxrave.domain.extension.now
+import com.maxrave.domain.extension.plusSeconds
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.handler.DownloadHandler
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
@@ -283,7 +284,11 @@ private fun provideResolvingDataSourceFactory(
             streamRepository.getNewFormat(mediaId).lastOrNull()?.let {
                 val audioUrl = it.audioUrl
                 if (audioUrl != null && it.expiredTime > now()) {
-                    val is403Url = streamRepository.is403Url(audioUrl).firstOrNull() != false
+                    // A URL with hours of life left is used as is: probing it first cost a full
+                    // round trip before every song and every chunk. If it is rejected anyway, the
+                    // player's error recovery drops the format and resolves a fresh one.
+                    val fresh = it.expiredTime > now().plusSeconds(FRESH_URL_MARGIN_S)
+                    val is403Url = !fresh && streamRepository.is403Url(audioUrl).firstOrNull() != false
                     if (!is403Url) {
                         dataSpecReturn = dataSpec.withUri(audioUrl.toUri()).subrange(dataSpec.uriPositionOffset, chunkLength)
                         resolved = true
@@ -442,6 +447,9 @@ private fun provideCacheDataSource(
                 ),
         ).setCacheWriteDataSinkFactory(null)
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+/** Cached stream URLs with more than this left before expiry skip the 403 probe. */
+private const val FRESH_URL_MARGIN_S = 3 * 3600L
 
 @UnstableApi
 private fun provideLoadControl(): LoadControl =

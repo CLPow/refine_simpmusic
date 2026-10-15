@@ -1,5 +1,10 @@
 package com.maxrave.simpmusic
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import com.maxrave.simpmusic.desktop.DesktopSettings
+import com.maxrave.simpmusic.desktop.WindowsIntegration
 import androidx.compose.foundation.LocalScrollbarStyle
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,8 +44,6 @@ import com.maxrave.simpmusic.extension.DesktopWindowChrome
 import com.maxrave.simpmusic.ui.component.CustomTitleBar
 import com.maxrave.simpmusic.ui.component.simpMusicScrollbarStyle
 import com.maxrave.simpmusic.ui.component.applyWorkAreaMaximizedBounds
-import com.maxrave.simpmusic.ui.mini_player.MiniPlayerManager
-import com.maxrave.simpmusic.ui.mini_player.MiniPlayerWindow
 import com.maxrave.simpmusic.ui.theme.isDarkTheme
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.SharedViewModel
@@ -236,13 +239,42 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
         sharedViewModel.setIntent(intent)
     }
 
+    // ytmdesktop's Windows integrations: the media keys reach the player while the window is in
+    // the background (the taskbar controls attach once the window exists, below).
+    val onDesktopCommand: (WindowsIntegration.Command) -> Unit = { command ->
+        when (command) {
+            WindowsIntegration.Command.PlayPause -> sharedViewModel.onUIEvent(UIEvent.PlayPause)
+            WindowsIntegration.Command.Next -> sharedViewModel.onUIEvent(UIEvent.Next)
+            WindowsIntegration.Command.Previous -> sharedViewModel.onUIEvent(UIEvent.Previous)
+        }
+    }
+    WindowsIntegration.startMediaKeys(onDesktopCommand)
+    // Launched by "Start on boot", or with "Start minimized" on: open in the tray.
+    val dataStore = getKoin().get<DataStoreManager>()
+    val startHidden =
+        WindowsIntegration.MINIMIZED_ARG in args ||
+            runBlocking { dataStore.getString(DesktopSettings.START_MINIMIZED).first() } == DataStoreManager.TRUE
+
     application {
         // Main Window
         val windowState =
             rememberWindowState(
                 size = DpSize(1500.dp, 860.dp),
             )
-        var isVisible by remember { mutableStateOf(true) }
+        var isVisible by remember { mutableStateOf(!startHidden) }
+        // ytmdesktop's "Hide to tray on close". On by default here, which is how this app has
+        // always closed; off, closing the window quits.
+        val closeToTray by dataStore
+            .getString(DesktopSettings.CLOSE_TO_TRAY)
+            .collectAsState(DataStoreManager.TRUE)
+        val closeWindow: () -> Unit = {
+            if (closeToTray == DataStoreManager.FALSE) {
+                mediaPlayerHandler.release()
+                exitApplication()
+            } else {
+                isVisible = false
+            }
+        }
         // The single-instance guard now runs before startKoin (top of
         // runDesktopApp). Here we only react to a restore request raised when a
         // second instance launches: bring the window back to the foreground and
@@ -295,15 +327,6 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             if (!isVisible) {
                 Item(openAppString) {
                     DesktopRestoreSignal.request()
-                }
-            }
-            if (MiniPlayerManager.isOpen) {
-                Item(closeMiniPlayer) {
-                    MiniPlayerManager.isOpen = false
-                }
-            } else {
-                Item(openMiniPlayer) {
-                    MiniPlayerManager.isOpen = true
                 }
             }
             Divider()
@@ -383,9 +406,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                 else -> appName
             }
         Window(
-            onCloseRequest = {
-                isVisible = false
-            },
+            onCloseRequest = closeWindow,
             title = windowTitle,
             icon = painterResource(Res.drawable.circle_app_icon),
             undecorated = !isVM,
@@ -400,6 +421,19 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                 DesktopRestoreSignal.requests.collect {
                     window.toFront()
                 }
+            }
+            // Taskbar thumbnail buttons (previous / play-pause / next) and the progress on the
+            // taskbar button, as ytmdesktop adds them.
+            LaunchedEffect(Unit) {
+                WindowsIntegration.attachTaskbar(window.windowHandle, onDesktopCommand)
+                launch {
+                    sharedViewModel.controllerState.collect { WindowsIntegration.setPlaying(it.isPlaying) }
+                }
+                sharedViewModel.timeline
+                    .map { t -> if (t.total > 0 && t.current >= 0) (t.current.toFloat() / t.total) else null }
+                    .map { f -> f?.let { (it * 200).toInt() / 200f } }
+                    .distinctUntilChanged()
+                    .collect { WindowsIntegration.setProgress(it) }
             }
             // Keep the maximize target pinned to the current screen work area.
             // The title bar applies this before maximizing itself, but a
@@ -442,9 +476,7 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         title = windowTitle,
                         windowState = windowState,
                         window = window,
-                        onCloseRequest = {
-                            isVisible = false
-                        },
+                        onCloseRequest = closeWindow,
                         containerColor = if (isDark) Color.Black else Color.White,
                         titleColor = if (isDark) Color.White else Color.Black,
                     )
@@ -482,15 +514,6 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             }
         }
 
-        // Mini Player Window (separate window)
-        if (MiniPlayerManager.isOpen) {
-            MiniPlayerWindow(
-                sharedViewModel = sharedViewModel,
-                onCloseRequest = {
-                    MiniPlayerManager.isOpen = false
-                },
-            )
-        }
     }
 }
 

@@ -1,679 +1,474 @@
 package com.maxrave.simpmusic.ui.screen.library
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.expandHorizontally
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import coil3.compose.AsyncImage
-import coil3.compose.LocalPlatformContext
-import coil3.request.ImageRequest
-import coil3.request.crossfade
-import com.maxrave.common.LibraryChipType
+import com.maxrave.common.Config
 import com.maxrave.domain.data.entities.SongEntity
-import com.maxrave.domain.utils.LocalResource
-import com.maxrave.logger.Logger
-import com.maxrave.simpmusic.extension.copy
-import com.maxrave.simpmusic.extension.isScrollingUp
-import com.maxrave.simpmusic.ui.component.AddToPlaylistModalBottomSheet
-import com.maxrave.simpmusic.ui.component.Chip
-import com.maxrave.simpmusic.ui.component.EndOfPage
-import com.maxrave.simpmusic.ui.component.GridLibraryPlaylist
-import com.maxrave.simpmusic.ui.component.LibraryItem
-import com.maxrave.simpmusic.ui.component.LibraryItemState
-import com.maxrave.simpmusic.ui.component.LibraryItemType
-import com.maxrave.simpmusic.ui.component.LibraryTilingBox
-import com.maxrave.simpmusic.ui.component.ListenTogetherIconButton
-import com.maxrave.simpmusic.ui.component.RippleIconButton
-import com.maxrave.simpmusic.ui.component.selection.SelectedSongsBottomSheet
-import com.maxrave.simpmusic.ui.component.selection.SongSelectionTopAppBar
-import com.maxrave.simpmusic.ui.component.selection.rememberSongSelectionState
-import com.maxrave.simpmusic.ui.icon.Groups
-import com.maxrave.simpmusic.ui.icon.PeopleAlt
-import com.maxrave.simpmusic.ui.icon.ArrowForwardIos
-import com.maxrave.simpmusic.ui.icon.AutoGraph
-import com.maxrave.simpmusic.ui.icon.History
-import com.maxrave.simpmusic.ui.icon.Sensors
+import com.maxrave.domain.mediaservice.handler.PlaylistType
+import com.maxrave.domain.mediaservice.handler.QueueData
+import com.maxrave.domain.utils.toArrayListTrack
+import com.maxrave.domain.utils.toTrack
+import com.maxrave.simpmusic.ui.component.NowPlayingBottomSheet
+import com.maxrave.simpmusic.ui.component.ytm.Thumb
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
+import com.maxrave.simpmusic.ui.component.ytm.YtmChips
+import com.maxrave.simpmusic.ui.component.ytm.YtmSongRow
+import com.maxrave.simpmusic.ui.component.ytm.YtmTopBar
+import com.maxrave.simpmusic.ui.icon.Add
+import com.maxrave.simpmusic.ui.icon.DownloadForOffline
+import com.maxrave.simpmusic.ui.icon.KeyboardArrowDown
+import com.maxrave.simpmusic.ui.icon.LibraryMusic
+import com.maxrave.simpmusic.ui.icon.QueueMusic
+import com.maxrave.simpmusic.ui.icon.SelectAll
 import com.maxrave.simpmusic.ui.icon.SimpIcons
-import com.maxrave.simpmusic.ui.navigation.destination.home.AnalyticsDestination
-import com.maxrave.simpmusic.ui.navigation.destination.home.RecentlySongsDestination
-import com.maxrave.simpmusic.ui.navigation.destination.library.MixForYouDestination
-import androidx.compose.foundation.clickable
-import androidx.compose.material3.Icon
-import androidx.compose.ui.graphics.vector.ImageVector
-import simpmusic.composeapp.generated.resources.analytics
-import simpmusic.composeapp.generated.resources.history
-import simpmusic.composeapp.generated.resources.mix_for_you
-import com.maxrave.simpmusic.ui.navigation.destination.home.ListenTogetherDestination
+import com.maxrave.simpmusic.ui.icon.ThumbUp
+import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDestination
+import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDynamicPlaylistDestination
+import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
+import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
+import com.maxrave.simpmusic.ui.navigation.destination.list.LocalPlaylistDestination
+import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
 import com.maxrave.simpmusic.ui.theme.typo
+import com.maxrave.simpmusic.viewModel.LibraryChip
+import com.maxrave.simpmusic.viewModel.LibrarySort
 import com.maxrave.simpmusic.viewModel.LibraryViewModel
-import com.maxrave.simpmusic.viewModel.SongSelectionViewModel
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
-import dev.chrisbanes.haze.rememberHazeState
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import org.jetbrains.compose.resources.getString
-import org.jetbrains.compose.resources.painterResource
-import org.jetbrains.compose.resources.stringResource
+import com.maxrave.simpmusic.viewModel.SharedViewModel
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
-import simpmusic.composeapp.generated.resources.Res
-import simpmusic.composeapp.generated.resources.chart
-import simpmusic.composeapp.generated.resources.create
-import simpmusic.composeapp.generated.resources.downloaded_playlists
-import simpmusic.composeapp.generated.resources.favorite_playlists
-import simpmusic.composeapp.generated.resources.favorite_podcasts
-import simpmusic.composeapp.generated.resources.library
-import simpmusic.composeapp.generated.resources.no_YouTube_playlists
-import simpmusic.composeapp.generated.resources.no_charts_found
-import simpmusic.composeapp.generated.resources.no_favorite_playlists
-import simpmusic.composeapp.generated.resources.no_favorite_podcasts
-import simpmusic.composeapp.generated.resources.no_playlists_added
-import simpmusic.composeapp.generated.resources.no_playlists_downloaded
-import simpmusic.composeapp.generated.resources.playlist_name
-import simpmusic.composeapp.generated.resources.playlist_name_cannot_be_empty
-import simpmusic.composeapp.generated.resources.simpmusic_charts
-import simpmusic.composeapp.generated.resources.wrapped
-import simpmusic.composeapp.generated.resources.your_library
-import simpmusic.composeapp.generated.resources.your_playlists
-import simpmusic.composeapp.generated.resources.your_youtube_playlists
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
+/** One row/tile of the Library, whatever kind of thing it stands for. */
+private data class LibraryEntry(
+    val key: String,
+    val title: String,
+    val subtitle: String,
+    val thumbnail: String?,
+    val round: Boolean = false,
+    val sortKey: Long = 0,
+    val onClick: () -> Unit,
+)
+
+/**
+ * YouTube Music's Library: the logo bar, chips (Playlists · Songs · Albums · Artists ·
+ * Downloads), a sort menu with the list/grid switch, then the items. Playlists starts with Liked
+ * music, and carries the white "New" button for a new playlist.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
-    innerPadding: PaddingValues,
-    viewModel: LibraryViewModel = koinViewModel(),
+    innerPadding: PaddingValues = PaddingValues(),
     navController: NavController,
     onScrolling: (onTop: Boolean) -> Unit = {},
+    viewModel: LibraryViewModel = koinViewModel(),
+    sharedViewModel: SharedViewModel = koinInject(),
 ) {
-    val density = LocalDensity.current
+    val chip by viewModel.chip.collectAsStateWithLifecycle()
+    val sort by viewModel.sort.collectAsStateWithLifecycle()
+    val grid by viewModel.grid.collectAsStateWithLifecycle()
+    val loggedIn by viewModel.loggedIn.collectAsStateWithLifecycle()
+    val youTubePlaylists by viewModel.youTubePlaylists.collectAsStateWithLifecycle()
+    val localPlaylists by viewModel.localPlaylists.collectAsStateWithLifecycle()
+    val liked by viewModel.likedSongs.collectAsStateWithLifecycle()
+    val albums by viewModel.albums.collectAsStateWithLifecycle()
+    val artists by viewModel.artists.collectAsStateWithLifecycle()
+    val downloads by viewModel.downloads.collectAsStateWithLifecycle()
+    val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    var menuSong by remember { mutableStateOf<SongEntity?>(null) }
+    var showNewPlaylist by remember { mutableStateOf(false) }
 
-    val loggedIn by viewModel.youtubeLoggedIn.collectAsStateWithLifecycle(initialValue = false)
-    // Wrapped and its recaps are built entirely from playback_event, so the chip follows the same
-    // setting the Analytics tab does.
-    val localTrackingEnabled by viewModel.localTrackingEnabled.collectAsStateWithLifecycle(initialValue = false)
-    val monthlyRecaps by viewModel.monthlyRecaps.collectAsStateWithLifecycle()
-    val nowPlaying by viewModel.nowPlayingVideoId.collectAsStateWithLifecycle()
-    val youTubePlaylist by viewModel.youTubePlaylist.collectAsStateWithLifecycle()
-    val listCanvasSong by viewModel.listCanvasSong.collectAsStateWithLifecycle()
-    val yourLocalPlaylist by viewModel.yourLocalPlaylist.collectAsStateWithLifecycle()
-    val favoritePlaylist by viewModel.favoritePlaylist.collectAsStateWithLifecycle()
-    val downloadedPlaylist by viewModel.downloadedPlaylist.collectAsStateWithLifecycle()
-    val favoritePodcasts by viewModel.favoritePodcasts.collectAsStateWithLifecycle()
-    val chartPlaylists by viewModel.chartPlaylists.collectAsStateWithLifecycle()
-    val recentlyAdded by viewModel.recentlyAdded.collectAsStateWithLifecycle()
-
-    val selectionState = rememberSongSelectionState()
-    val selectionViewModel: SongSelectionViewModel = koinViewModel()
-    var showSelectionSheet by rememberSaveable { mutableStateOf(false) }
-    var showSelectionAddToPlaylist by rememberSaveable { mutableStateOf(false) }
-    val accountThumbnail by viewModel.accountThumbnail.collectAsStateWithLifecycle()
-    val hazeState =
-        rememberHazeState(
-            blurEnabled = true,
-        )
-
-    var topAppBarHeight by remember {
-        mutableStateOf(0.dp)
+    menuSong?.let { song ->
+        NowPlayingBottomSheet(onDismiss = { menuSong = null }, navController = navController, song = song)
     }
-    var showAddSheet by remember { mutableStateOf(false) }
-
-    LaunchedEffect(nowPlaying) {
-        Logger.w("LibraryScreen", "Check nowPlaying: $nowPlaying")
-        viewModel.getRecentlyAdded()
-    }
-
-    val chipRowState = rememberScrollState()
-    val currentFilter by viewModel.currentScreen.collectAsStateWithLifecycle()
-
-    LaunchedEffect(currentFilter) {
-        when (currentFilter) {
-            LibraryChipType.YOUTUBE_MUSIC_PLAYLIST -> {
-                if (youTubePlaylist.data.isNullOrEmpty()) {
-                    viewModel.getYouTubePlaylist()
-                }
-            }
-
-            // Mix for you has its own nav tab now. The filter is persisted, so a build upgraded
-            // while it was selected would land here with no chip to match — send it back to the
-            // default. The enum value itself stays so older persisted values still parse.
-            LibraryChipType.YOUTUBE_MIX_FOR_YOU -> {
-                viewModel.setCurrentScreen(LibraryChipType.YOUR_LIBRARY)
-            }
-
-            LibraryChipType.YOUR_LIBRARY -> {
-                viewModel.getCanvasSong()
-                viewModel.getRecentlyAdded()
-            }
-
-            LibraryChipType.LOCAL_PLAYLIST -> {
-                viewModel.getLocalPlaylist()
-            }
-
-            LibraryChipType.FAVORITE_PLAYLIST -> {
-                viewModel.getPlaylistFavorite()
-            }
-
-            LibraryChipType.DOWNLOADED_PLAYLIST -> {
-                viewModel.getDownloadedPlaylist()
-            }
-
-            LibraryChipType.FAVORITE_PODCAST -> {
-                viewModel.getFavoritePodcasts()
-            }
-
-            LibraryChipType.CHART -> {
-                if (chartPlaylists.data.isNullOrEmpty()) {
-                    viewModel.getChartPlaylists()
-                }
-            }
-
-            LibraryChipType.WRAPPED -> {
-                viewModel.getMonthlyRecaps()
-            }
+    if (showNewPlaylist) {
+        NewPlaylistDialog(onDismiss = { showNewPlaylist = false }) { title ->
+            viewModel.createPlaylist(title)
+            showNewPlaylist = false
         }
     }
 
-    Crossfade(
-        modifier = Modifier.hazeSource(hazeState),
-        targetState = currentFilter,
-    ) { filter ->
-        when (filter) {
-            LibraryChipType.YOUR_LIBRARY -> {
-                val state = rememberLazyListState()
-                val isScrollingUp by state.isScrollingUp()
-                LaunchedEffect(state) {
-                    snapshotFlow { state.firstVisibleItemIndex }
-                        .collect {
-                            if (it <= 1) {
-                                onScrolling.invoke(true)
-                            } else {
-                                onScrolling.invoke(isScrollingUp)
-                            }
-                        }
-                }
-                LazyColumn(
-                    contentPadding =
-                        innerPadding.copy(
-                            top = topAppBarHeight,
-                        ),
-                    state = state,
-                ) {
-                    item {
-                        LibraryTilingBox(navController)
-                    }
+    fun playSongs(
+        songs: List<SongEntity>,
+        start: SongEntity,
+        name: String,
+    ) {
+        sharedViewModel.setQueueData(
+            QueueData.Data(
+                listTracks = songs.toArrayListTrack(),
+                firstPlayedTrack = start.toTrack(),
+                playlistId = null,
+                playlistName = name,
+                playlistType = PlaylistType.PLAYLIST,
+                continuation = null,
+            ),
+        )
+        sharedViewModel.loadMediaItem(start.toTrack(), Config.PLAYLIST_CLICK, songs.indexOf(start).coerceAtLeast(0))
+    }
 
-                    // Destinations that used to take bottom-bar tabs (Mix for you, Analytics) or a
-                    // Home top-bar slot (History) now live here, with the rest of the user's music.
-                    item {
-                        Column(Modifier.padding(vertical = 8.dp)) {
+    val entries: List<LibraryEntry> =
+        when (chip) {
+            LibraryChip.Playlists ->
+                buildList {
+                    add(
+                        LibraryEntry(
+                            key = "liked",
+                            title = "Liked music",
+                            subtitle = "Auto playlist",
+                            thumbnail = null,
+                            sortKey = Long.MAX_VALUE,
+                        ) {
                             if (loggedIn) {
-                                LibraryShortcutRow(SimpIcons.Sensors, stringResource(Res.string.mix_for_you)) {
-                                    navController.navigate(MixForYouDestination)
-                                }
+                                navController.navigate(PlaylistDestination(playlistId = "VLLM"))
+                            } else {
+                                navController.navigate(LibraryDynamicPlaylistDestination(type = "favorite"))
                             }
-                            LibraryShortcutRow(SimpIcons.History, stringResource(Res.string.history)) {
-                                navController.navigate(RecentlySongsDestination)
-                            }
-                            if (localTrackingEnabled) {
-                                LibraryShortcutRow(SimpIcons.AutoGraph, stringResource(Res.string.analytics)) {
-                                    navController.navigate(AnalyticsDestination)
-                                }
-                            }
-                        }
+                        },
+                    )
+                    localPlaylists.forEach { p ->
+                        add(
+                            LibraryEntry(
+                                key = "local-${p.id}",
+                                title = p.title,
+                                subtitle = "Playlist • ${p.tracks?.size ?: 0} songs",
+                                thumbnail = p.thumbnail,
+                                sortKey = p.inLibrary.toEpochKey(),
+                            ) { navController.navigate(LocalPlaylistDestination(id = p.id)) },
+                        )
                     }
+                    youTubePlaylists.orEmpty().filter { it.browseId != "VLLM" && it.browseId != "LM" }.forEach { p ->
+                        add(
+                            LibraryEntry(
+                                key = "yt-${p.browseId}",
+                                title = p.title,
+                                subtitle = listOf("Playlist", p.author, p.itemCount).filter { it.isNotBlank() }.joinToString(" • "),
+                                thumbnail = p.thumbnails.lastOrNull()?.url,
+                            ) { navController.navigate(PlaylistDestination(playlistId = p.browseId, isYourYouTubePlaylist = true)) },
+                        )
+                    }
+                }
+            LibraryChip.Songs ->
+                liked.map { s ->
+                    LibraryEntry(
+                        key = s.videoId,
+                        title = s.title,
+                        subtitle = s.artistName?.joinToString(", ").orEmpty(),
+                        thumbnail = s.thumbnails,
+                        sortKey = (s.favoriteAt ?: s.inLibrary).toEpochKey(),
+                    ) { playSongs(liked, s, "Liked songs") }
+                }
+            LibraryChip.Albums ->
+                albums.map { a ->
+                    LibraryEntry(
+                        key = a.browseId,
+                        title = a.title,
+                        subtitle = listOfNotNull(a.type.ifBlank { "Album" }, a.artistName?.joinToString(", "), a.year).filter { it.isNotBlank() }.joinToString(" • "),
+                        thumbnail = a.thumbnails,
+                        sortKey = (a.favoriteAt ?: a.inLibrary).toEpochKey(),
+                    ) { navController.navigate(AlbumDestination(browseId = a.browseId)) }
+                }
+            LibraryChip.Artists ->
+                artists.map { a ->
+                    LibraryEntry(
+                        key = a.channelId,
+                        title = a.name,
+                        subtitle = "Artist",
+                        thumbnail = a.thumbnails,
+                        round = true,
+                        sortKey = (a.followedAt ?: a.inLibrary).toEpochKey(),
+                    ) { navController.navigate(ArtistDestination(channelId = a.channelId)) }
+                }
+            LibraryChip.Downloads ->
+                downloads.map { s ->
+                    LibraryEntry(
+                        key = s.videoId,
+                        title = s.title,
+                        subtitle = s.artistName?.joinToString(", ").orEmpty(),
+                        thumbnail = s.thumbnails,
+                        sortKey = (s.downloadedAt ?: s.inLibrary).toEpochKey(),
+                    ) { playSongs(downloads, s, "Downloads") }
+                }
+        }.let { list ->
+            when (sort) {
+                LibrarySort.RecentActivity -> list
+                LibrarySort.RecentlyAdded -> list.sortedByDescending { it.sortKey }
+                LibrarySort.Alphabetical -> list.sortedBy { it.title.lowercase() }
+            }
+        }
+    val songChip = chip == LibraryChip.Songs || chip == LibraryChip.Downloads
+    val useGrid = grid && !songChip
 
-                    if (!listCanvasSong.data.isNullOrEmpty()) {
-                        item {
-                            LibraryItem(
-                                state =
-                                    LibraryItemState(
-                                        type = LibraryItemType.CanvasSong,
-                                        data = listCanvasSong.data ?: emptyList(),
-                                        isLoading = listCanvasSong is LocalResource.Loading,
-                                    ),
-                                navController = navController,
+    Box(Modifier.fillMaxSize().background(Ytm.Background)) {
+        Column(Modifier.fillMaxSize()) {
+            YtmTopBar(navController = navController)
+            PullToRefreshBox(
+                isRefreshing = refreshing,
+                onRefresh = { viewModel.refreshYouTubePlaylists() },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                LazyVerticalGrid(
+                    columns = if (useGrid) GridCells.Adaptive(150.dp) else GridCells.Fixed(1),
+                    contentPadding = PaddingValues(bottom = 96.dp),
+                    horizontalArrangement = Arrangement.spacedBy(if (useGrid) 12.dp else 0.dp),
+                    modifier = Modifier.fillMaxSize().padding(horizontal = if (useGrid) 16.dp else 0.dp),
+                ) {
+                    item(key = "chips", span = { GridItemSpan(maxLineSpan) }) {
+                        YtmChips(
+                            labels = LibraryChip.entries.map { it.label },
+                            selected = chip.ordinal,
+                            onSelect = { viewModel.setChip(LibraryChip.entries[it]) },
+                            contentPadding = PaddingValues(horizontal = if (useGrid) 0.dp else 16.dp),
+                            modifier = Modifier.padding(vertical = 8.dp),
+                        )
+                    }
+                    item(key = "sort", span = { GridItemSpan(maxLineSpan) }) {
+                        SortRow(
+                            sort = sort,
+                            onSort = viewModel::setSort,
+                            grid = grid,
+                            showGridToggle = !songChip,
+                            onToggleGrid = viewModel::toggleGrid,
+                            horizontalPadding = if (useGrid) 0.dp else 16.dp,
+                        )
+                    }
+                    if (entries.isEmpty()) {
+                        item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                when (chip) {
+                                    LibraryChip.Songs -> "Songs you like will show up here"
+                                    LibraryChip.Albums -> "Albums you save will show up here"
+                                    LibraryChip.Artists -> "Artists you subscribe to will show up here"
+                                    LibraryChip.Downloads -> "Songs you download will show up here"
+                                    LibraryChip.Playlists -> ""
+                                },
+                                style = typo().bodyLarge,
+                                color = Ytm.TextSecondary,
+                                modifier = Modifier.padding(32.dp),
                             )
                         }
                     }
-
-                    item {
-                        LibraryItem(
-                            state =
-                                LibraryItemState(
-                                    type =
-                                        LibraryItemType.RecentlyAdded(
-                                            playingVideoId = nowPlaying,
-                                        ),
-                                    data = recentlyAdded.data ?: emptyList(),
-                                    isLoading = recentlyAdded is LocalResource.Loading,
-                                ),
-                            navController = navController,
-                            selectionState = selectionState,
-                        )
-                    }
-                    item {
-                        EndOfPage()
-                    }
-                }
-            }
-
-            LibraryChipType.YOUTUBE_MUSIC_PLAYLIST -> {
-                GridLibraryPlaylist(
-                    navController,
-                    innerPadding.copy(top = topAppBarHeight),
-                    youTubePlaylist,
-                    emptyText = Res.string.no_YouTube_playlists,
-                    onScrolling = onScrolling,
-                ) {
-                    viewModel.getYouTubePlaylist()
-                }
-            }
-
-            // Nothing to draw: MixForYouScreen owns this content now, and the effect above bounces
-            // the filter back to YOUR_LIBRARY the moment it lands here.
-            LibraryChipType.YOUTUBE_MIX_FOR_YOU -> Unit
-
-            LibraryChipType.LOCAL_PLAYLIST -> {
-                GridLibraryPlaylist(
-                    navController,
-                    innerPadding.copy(top = topAppBarHeight),
-                    yourLocalPlaylist,
-                    onScrolling = onScrolling,
-                    emptyText = Res.string.no_playlists_added,
-                    createNewPlaylist = {
-                        showAddSheet = true
-                    },
-                ) {
-                    viewModel.getLocalPlaylist()
-                }
-            }
-
-            LibraryChipType.FAVORITE_PLAYLIST -> {
-                GridLibraryPlaylist(
-                    navController,
-                    innerPadding.copy(top = topAppBarHeight),
-                    favoritePlaylist,
-                    emptyText = Res.string.no_favorite_playlists,
-                    onScrolling = onScrolling,
-                ) {
-                    viewModel.getPlaylistFavorite()
-                }
-            }
-
-            LibraryChipType.DOWNLOADED_PLAYLIST -> {
-                GridLibraryPlaylist(
-                    navController,
-                    innerPadding.copy(top = topAppBarHeight),
-                    downloadedPlaylist,
-                    emptyText = Res.string.no_playlists_downloaded,
-                    onScrolling = onScrolling,
-                ) {
-                    viewModel.getDownloadedPlaylist()
-                }
-            }
-
-            LibraryChipType.FAVORITE_PODCAST -> {
-                GridLibraryPlaylist(
-                    navController,
-                    innerPadding.copy(top = topAppBarHeight),
-                    favoritePodcasts,
-                    emptyText = Res.string.no_favorite_podcasts,
-                    onScrolling = onScrolling,
-                ) {
-                    viewModel.getFavoritePodcasts()
-                }
-            }
-
-            LibraryChipType.CHART -> {
-                GridLibraryPlaylist(
-                    navController,
-                    innerPadding.copy(top = topAppBarHeight),
-                    chartPlaylists,
-                    emptyText = Res.string.no_charts_found,
-                    onScrolling = onScrolling,
-                ) {
-                    viewModel.getChartPlaylists()
-                }
-            }
-
-            LibraryChipType.WRAPPED -> {
-                LibraryWrappedTab(
-                    navController = navController,
-                    contentPadding = innerPadding.copy(top = topAppBarHeight),
-                    recaps = monthlyRecaps,
-                    onScrolling = onScrolling,
-                ) {
-                    viewModel.getMonthlyRecaps()
-                }
-            }
-        }
-    }
-    val coroutineScope = rememberCoroutineScope()
-    if (showAddSheet) {
-        var newTitle by remember { mutableStateOf("") }
-        val showAddSheetState =
-            rememberModalBottomSheetState(
-                skipPartiallyExpanded = true,
-            )
-        val hideEditTitleBottomSheet: () -> Unit =
-            {
-                coroutineScope.launch {
-                    showAddSheetState.hide()
-                    showAddSheet = false
-                }
-            }
-        ModalBottomSheet(
-            onDismissRequest = { showAddSheet = false },
-            sheetState = showAddSheetState,
-            containerColor = Color.Transparent,
-            contentColor = Color.Transparent,
-            dragHandle = null,
-            scrimColor = Color.Black.copy(alpha = .5f),
-        ) {
-            Card(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight(),
-                shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
-                colors = CardDefaults.cardColors().copy(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Spacer(modifier = Modifier.height(5.dp))
-                    Card(
-                        modifier =
-                            Modifier
-                                .width(60.dp)
-                                .height(4.dp),
-                        colors =
-                            CardDefaults.cardColors().copy(
-                                containerColor = MaterialTheme.colorScheme.outline,
-                            ),
-                        shape = RoundedCornerShape(50),
-                    ) {}
-                    Spacer(modifier = Modifier.height(5.dp))
-                    OutlinedTextField(
-                        value = newTitle,
-                        onValueChange = { s -> newTitle = s },
-                        label = {
-                            Text(text = stringResource(Res.string.playlist_name))
-                        },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp),
-                    )
-                    Spacer(modifier = Modifier.height(5.dp))
-                    TextButton(
-                        onClick = {
-                            if (newTitle.isBlank()) {
-                                viewModel.makeToast(runBlocking { getString(Res.string.playlist_name_cannot_be_empty) })
-                            } else {
-                                viewModel.createPlaylist(newTitle)
-                                hideEditTitleBottomSheet()
-                            }
-                        },
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.CenterHorizontally),
-                    ) {
-                        Text(text = stringResource(Res.string.create))
+                    items(entries, key = { it.key }) { entry ->
+                        if (useGrid) {
+                            GridTile(entry)
+                        } else if (songChip) {
+                            val song = (if (chip == LibraryChip.Songs) liked else downloads).firstOrNull { it.videoId == entry.key }
+                            YtmSongRow(
+                                title = entry.title,
+                                subtitle = entry.subtitle,
+                                thumbnail = entry.thumbnail,
+                                onClick = entry.onClick,
+                                onMore = { menuSong = song },
+                            )
+                        } else {
+                            ListRow(entry)
+                        }
                     }
                 }
             }
         }
-    }
-    Column(
-        Modifier
-            .background(Color.Transparent)
-            .hazeEffect(hazeState, style = HazeMaterials.ultraThin()) {
-                blurEnabled = true
-            }.onGloballyPositioned { coordinates ->
-                topAppBarHeight = with(density) { coordinates.size.height.toDp() }
-            },
-    ) {
-        TopAppBar(
-            title = {
-                Text(
-                    text = stringResource(Res.string.library),
-                    style = typo().titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
-            },
-            colors =
-                TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                ),
-            navigationIcon = {
-                AnimatedVisibility(
-                    !accountThumbnail.isNullOrEmpty(),
-                    modifier = Modifier.padding(horizontal = 12.dp),
-                    enter = fadeIn() + expandHorizontally(),
-                    exit = fadeOut() + shrinkVertically(),
-                ) {
-                    AsyncImage(
-                        model =
-                            ImageRequest
-                                .Builder(LocalPlatformContext.current)
-                                .data(accountThumbnail)
-                                .crossfade(550)
-                                .build(),
-                        placeholder = rememberVectorPainter(SimpIcons.PeopleAlt),
-                        error = rememberVectorPainter(SimpIcons.PeopleAlt),
-                        contentDescription = null,
-                        modifier =
-                            Modifier
-                                .size(26.dp)
-                                .clip(CircleShape),
-                    )
-                }
-            },
-            // The Library bar had no actions slot at all — added for the Listen Together entry,
-            // which the design canvas puts on Home AND Library.
-            actions = {
-                ListenTogetherIconButton { navController.navigate(ListenTogetherDestination) }
-            },
-        )
-        AnimatedVisibility(visible = selectionState.isActive) {
-            SongSelectionTopAppBar(
-                state = selectionState,
-                // Stacked BELOW the Library TopAppBar in the same Column, which already consumed
-                // the status-bar inset — leaving the default here reserved it twice and opened a
-                // status-bar-sized band of dead blur between the two bars. Same fix as Search;
-                // the overlay-style call sites (Album, Artist, Recently…) keep the default because
-                // they COVER their normal bar instead of standing under it.
-                windowInsets = WindowInsets(0),
-                onSelectAll = {
-                    selectionState.toggleSelectAll(
-                        (recentlyAdded.data ?: emptyList())
-                            .filterIsInstance<SongEntity>()
-                            .map { it.videoId },
-                    )
-                },
-                onOpenActions = { showSelectionSheet = true },
-                containerColor = Color.Transparent,
-                contentColor = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-        Row(
-            modifier =
-                Modifier
-                    .horizontalScroll(chipRowState)
-                    .padding(horizontal = 15.dp)
-                    .padding(bottom = 8.dp)
-                    .background(Color.Transparent),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            LibraryChipType.entries.forEach { type ->
-                // Mix for you left this row for a tab of its own.
-                if (type == LibraryChipType.YOUTUBE_MIX_FOR_YOU) {
-                    return@forEach
-                }
-                if (type == LibraryChipType.YOUTUBE_MUSIC_PLAYLIST && !loggedIn) {
-                    return@forEach
-                }
-                // Songs only: podcasts are not offered anywhere in the app.
-                if (type == LibraryChipType.FAVORITE_PODCAST) {
-                    return@forEach
-                }
-                // Nothing to recap without the plays — gated exactly as the YouTube chip above
-                // is gated on being logged in.
-                if (type == LibraryChipType.WRAPPED && !localTrackingEnabled) {
-                    return@forEach
-                }
-                Chip(
-                    isAnimated = false,
-                    isSelected = type == currentFilter,
-                    text =
-                        when (type) {
-                            LibraryChipType.YOUR_LIBRARY -> stringResource(Res.string.your_library)
-                            LibraryChipType.YOUTUBE_MUSIC_PLAYLIST -> stringResource(Res.string.your_youtube_playlists)
-                            LibraryChipType.YOUTUBE_MIX_FOR_YOU -> stringResource(Res.string.mix_for_you)
-                            LibraryChipType.LOCAL_PLAYLIST -> stringResource(Res.string.your_playlists)
-                            LibraryChipType.FAVORITE_PLAYLIST -> stringResource(Res.string.favorite_playlists)
-                            LibraryChipType.DOWNLOADED_PLAYLIST -> stringResource(Res.string.downloaded_playlists)
-                            LibraryChipType.FAVORITE_PODCAST -> stringResource(Res.string.favorite_podcasts)
-                            LibraryChipType.CHART -> stringResource(Res.string.simpmusic_charts)
-                            LibraryChipType.WRAPPED -> stringResource(Res.string.wrapped)
-                        },
-                ) {
-                    viewModel.setCurrentScreen(type)
-                }
-            }
-        }
-        if (showSelectionSheet) {
-            val selectedIds = selectionState.selected.toList()
-            SelectedSongsBottomSheet(
-                count = selectedIds.size,
-                onDismiss = { showSelectionSheet = false },
-                onPlayNext = {
-                    selectionViewModel.playNext(selectedIds)
-                    selectionState.exit()
-                },
-                onAddToQueue = {
-                    selectionViewModel.addToQueue(selectedIds)
-                    selectionState.exit()
-                },
-                onAddToPlaylist = { showSelectionAddToPlaylist = true },
-                onDownload = {
-                    selectionViewModel.download(selectedIds)
-                    selectionState.exit()
-                },
-                onAddToFavorite = {
-                    selectionViewModel.addToFavorite(selectedIds)
-                    selectionState.exit()
-                },
-            )
-        }
-        if (showSelectionAddToPlaylist) {
-            val selectedIds = selectionState.selected.toList()
-            val localPlaylists by selectionViewModel.listLocalPlaylist.collectAsStateWithLifecycle()
-            AddToPlaylistModalBottomSheet(
-                isBottomSheetVisible = true,
-                listLocalPlaylist = localPlaylists,
-                listYouTubePlaylist = emptyList(),
-                onDismiss = { showSelectionAddToPlaylist = false },
-                onClick = { playlist ->
-                    selectionViewModel.addToPlaylist(playlist.id, selectedIds)
-                    selectionState.exit()
-                },
-                onYTPlaylistClick = {},
-            )
+        if (chip == LibraryChip.Playlists) {
+            NewButton(Modifier.align(Alignment.BottomEnd).padding(16.dp)) { showNewPlaylist = true }
         }
     }
 }
-/** One row of the Library list: icon, label, chevron — YouTube Music's library entry form. */
+
 @Composable
-private fun LibraryShortcutRow(
-    icon: ImageVector,
-    label: String,
+private fun SortRow(
+    sort: LibrarySort,
+    onSort: (LibrarySort) -> Unit,
+    grid: Boolean,
+    showGridToggle: Boolean,
+    onToggleGrid: () -> Unit,
+    horizontalPadding: androidx.compose.ui.unit.Dp,
+) {
+    var open by remember { mutableStateOf(false) }
+    Row(
+        Modifier.fillMaxWidth().padding(start = horizontalPadding, end = horizontalPadding - 8.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box {
+            Row(
+                Modifier.clip(RoundedCornerShape(4.dp)).clickable { open = true }.padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(sort.label, style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = Color.White)
+                Icon(SimpIcons.KeyboardArrowDown, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Ytm.Surface) {
+                LibrarySort.entries.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.label, color = Color.White) },
+                        onClick = {
+                            onSort(option)
+                            open = false
+                        },
+                    )
+                }
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        if (showGridToggle) {
+            IconButton(onClick = onToggleGrid) {
+                Icon(
+                    if (grid) SimpIcons.QueueMusic else SimpIcons.SelectAll,
+                    contentDescription = if (grid) "List" else "Grid",
+                    tint = Color.White,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EntryThumb(
+    entry: LibraryEntry,
+    side: androidx.compose.ui.unit.Dp,
+    shape: Shape,
+) {
+    if (entry.key == "liked") {
+        Box(
+            Modifier.size(side).clip(shape).background(Color(0xFF6B4CDA)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(SimpIcons.ThumbUp, contentDescription = null, tint = Color.White, modifier = Modifier.size(side * 0.45f))
+        }
+    } else if (entry.thumbnail == null) {
+        Box(Modifier.size(side).clip(shape).background(Ytm.Raised), contentAlignment = Alignment.Center) {
+            Icon(SimpIcons.LibraryMusic, contentDescription = null, tint = Ytm.TextSecondary, modifier = Modifier.size(side * 0.4f))
+        }
+    } else {
+        Thumb(entry.thumbnail, side, shape)
+    }
+}
+
+@Composable
+private fun ListRow(entry: LibraryEntry) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = entry.onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        EntryThumb(entry, 56.dp, if (entry.round) CircleShape else RoundedCornerShape(4.dp))
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(entry.title, style = typo().bodyLarge.copy(fontSize = 15.sp), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (entry.subtitle.isNotBlank()) {
+                Text(entry.subtitle, style = typo().bodyMedium, color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+private fun GridTile(entry: LibraryEntry) {
+    Column(Modifier.padding(vertical = 8.dp).clickable(onClick = entry.onClick)) {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+            EntryThumb(entry, maxWidth, if (entry.round) CircleShape else RoundedCornerShape(4.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(entry.title, style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        if (entry.subtitle.isNotBlank()) {
+            Text(entry.subtitle, style = typo().bodyMedium.copy(fontSize = 13.sp), color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** YouTube Music's white "New" pill, for a new playlist. */
+@Composable
+private fun NewButton(
+    modifier: Modifier,
     onClick: () -> Unit,
 ) {
     Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onClick)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier
+            .height(48.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceContainerHigh),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurface)
-        }
-        Spacer(Modifier.width(16.dp))
-        Text(
-            text = label,
-            style = typo().titleSmall,
-            modifier = Modifier.weight(1f),
-        )
-        Icon(
-            SimpIcons.ArrowForwardIos,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Icon(SimpIcons.Add, contentDescription = null, tint = Color.Black)
+        Spacer(Modifier.width(8.dp))
+        Text("New", style = typo().bodyLarge.copy(fontWeight = FontWeight.Medium), color = Color.Black)
     }
 }
+
+@Composable
+private fun NewPlaylistDialog(
+    onDismiss: () -> Unit,
+    onCreate: (String) -> Unit,
+) {
+    var title by remember { mutableStateOf("") }
+    AlertDialog(
+        containerColor = Ytm.Surface,
+        onDismissRequest = onDismiss,
+        title = { Text("New playlist", color = Color.White) },
+        text = {
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                singleLine = true,
+                label = { Text("Title") },
+                colors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color.White,
+                        focusedLabelColor = Color.White,
+                        cursorColor = Color.White,
+                    ),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { if (title.isNotBlank()) onCreate(title.trim()) }, enabled = title.isNotBlank()) {
+                Text("Create", color = Color.White)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Ytm.TextSecondary) } },
+    )
+}
+
+private fun kotlinx.datetime.LocalDateTime.toEpochKey(): Long =
+    ((((year * 12L + month.ordinal) * 31 + day) * 24 + hour) * 60 + minute) * 60 + second

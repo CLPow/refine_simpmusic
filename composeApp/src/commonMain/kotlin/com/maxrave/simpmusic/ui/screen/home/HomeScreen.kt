@@ -1,152 +1,48 @@
 package com.maxrave.simpmusic.ui.screen.home
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider
-import androidx.compose.foundation.gestures.snapping.SnapPosition
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleStartEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import coil3.compose.AsyncImage
-import coil3.compose.LocalPlatformContext
-import coil3.request.CachePolicy
-import coil3.request.ImageRequest
-import coil3.request.crossfade
-import com.kmpalette.loader.rememberNetworkLoader
-import com.kmpalette.rememberDominantColorState
-import com.maxrave.common.CHART_SUPPORTED_COUNTRY
-import com.maxrave.common.Config
-import com.maxrave.domain.data.model.browse.album.Track
-import com.maxrave.domain.data.model.home.HomeItem
-import com.maxrave.domain.data.model.home.chart.Chart
-import com.maxrave.domain.data.model.mood.Mood
-import com.maxrave.domain.extension.now
-import com.maxrave.domain.mediaservice.handler.PlaylistType
-import com.maxrave.domain.mediaservice.handler.QueueData
-import com.maxrave.domain.utils.toSongEntity
-import com.maxrave.domain.utils.toTrack
-import com.maxrave.logger.Logger
-import com.maxrave.simpmusic.Platform
-import com.maxrave.simpmusic.extension.angledGradientBackground
-import com.maxrave.simpmusic.extension.artworkScrimBrush
-import com.maxrave.simpmusic.extension.isScrollingUp
-import com.maxrave.simpmusic.extension.rgbFactor
-import com.maxrave.simpmusic.getPlatform
-import com.maxrave.simpmusic.ui.component.CenterLoadingBox
-import com.maxrave.simpmusic.ui.component.Chip
-import com.maxrave.simpmusic.ui.component.DropdownButton
-import com.maxrave.simpmusic.ui.component.EndOfPage
-import com.maxrave.simpmusic.ui.component.HorizontalLazyGridScrollbar
-import com.maxrave.simpmusic.ui.component.HomeItem
-import com.maxrave.simpmusic.ui.component.HomeItemContentPlaylist
-import com.maxrave.simpmusic.ui.component.HomeShimmer
-import com.maxrave.simpmusic.ui.component.ItemArtistChart
-import com.maxrave.simpmusic.ui.component.ListenTogetherIconButton
-import com.maxrave.simpmusic.ui.component.MoodMomentAndGenreHomeItem
-import com.maxrave.simpmusic.ui.component.NowPlayingBottomSheet
-import com.maxrave.simpmusic.ui.component.OfflineErrorState
-import com.maxrave.simpmusic.ui.component.QuickPicksItem
-import com.maxrave.simpmusic.ui.component.RippleIconButton
-import com.maxrave.simpmusic.ui.component.rememberHolderPainter
-import com.maxrave.simpmusic.ui.icon.Groups
-import com.maxrave.simpmusic.ui.icon.History
-import com.maxrave.simpmusic.ui.icon.Notifications
-import com.maxrave.simpmusic.ui.icon.Search
-import com.maxrave.simpmusic.ui.navigation.destination.search.SearchDestination
-import com.maxrave.simpmusic.ui.icon.Settings
-import com.maxrave.simpmusic.ui.icon.SimpIcons
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
+import com.maxrave.simpmusic.ui.component.ytm.YtmChips
+import com.maxrave.simpmusic.ui.component.ytm.YtmOutlinedPill
+import com.maxrave.simpmusic.ui.component.ytm.YtmShelf
+import com.maxrave.simpmusic.ui.component.ytm.YtmTopBar
 import com.maxrave.simpmusic.ui.navigation.destination.home.HomeDestination
-import com.maxrave.simpmusic.ui.navigation.destination.home.ListenTogetherDestination
-import com.maxrave.simpmusic.ui.navigation.destination.home.MoodDestination
-import com.maxrave.simpmusic.ui.navigation.destination.home.NotificationDestination
-import com.maxrave.simpmusic.ui.navigation.destination.home.RecentlySongsDestination
-import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsDestination
-import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDynamicPlaylistDestination
-import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
-import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.login.LoginDestination
-import com.maxrave.simpmusic.ui.screen.library.LibraryDynamicPlaylistType
-import com.maxrave.simpmusic.ui.theme.LocalIsBoomingTheme
-import com.maxrave.simpmusic.ui.theme.LocalIsYtmTheme
-import com.maxrave.simpmusic.ui.theme.YtmRed
-import androidx.compose.material3.Icon
-import androidx.compose.ui.unit.sp
-import simpmusic.composeapp.generated.resources.mono
-import com.maxrave.simpmusic.ui.theme.desktopPanelDark
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.HomeViewModel
 import com.maxrave.simpmusic.viewModel.HomeViewModel.Companion.HOME_PARAMS_COMMUTE
@@ -161,1122 +57,174 @@ import com.maxrave.simpmusic.viewModel.HomeViewModel.Companion.HOME_PARAMS_SLEEP
 import com.maxrave.simpmusic.viewModel.HomeViewModel.Companion.HOME_PARAMS_WORKOUT
 import com.maxrave.simpmusic.viewModel.ListState
 import com.maxrave.simpmusic.viewModel.SharedViewModel
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
-import dev.chrisbanes.haze.materials.HazeMaterials
-import dev.chrisbanes.haze.rememberHazeState
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
-import io.ktor.http.Url
-import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import simpmusic.composeapp.generated.resources.Res
-import simpmusic.composeapp.generated.resources.all
-import simpmusic.composeapp.generated.resources.app_name
-import simpmusic.composeapp.generated.resources.cancel
-import simpmusic.composeapp.generated.resources.chart
 import simpmusic.composeapp.generated.resources.commute
-import simpmusic.composeapp.generated.resources.do_not_show_again
 import simpmusic.composeapp.generated.resources.energize
 import simpmusic.composeapp.generated.resources.feel_good
 import simpmusic.composeapp.generated.resources.focus
-import simpmusic.composeapp.generated.resources.go_to_log_in_page
-import simpmusic.composeapp.generated.resources.good_afternoon
-import simpmusic.composeapp.generated.resources.good_evening
-import simpmusic.composeapp.generated.resources.good_morning
-import simpmusic.composeapp.generated.resources.good_night
-import simpmusic.composeapp.generated.resources.let_s_pick_a_playlist_for_you
-import simpmusic.composeapp.generated.resources.let_s_start_with_a_radio
-import simpmusic.composeapp.generated.resources.log_in_warning
 import simpmusic.composeapp.generated.resources.party
-import simpmusic.composeapp.generated.resources.recommendations_unavailable
-import simpmusic.composeapp.generated.resources.recommendations_unavailable_action
-import simpmusic.composeapp.generated.resources.quick_picks
 import simpmusic.composeapp.generated.resources.relax
 import simpmusic.composeapp.generated.resources.romance
 import simpmusic.composeapp.generated.resources.sad
 import simpmusic.composeapp.generated.resources.sleep
-import simpmusic.composeapp.generated.resources.top_artists
-import simpmusic.composeapp.generated.resources.warning
-import simpmusic.composeapp.generated.resources.welcome_back
-import simpmusic.composeapp.generated.resources.what_is_best_choice_today
 import simpmusic.composeapp.generated.resources.workout
 
-// DataStore key for blog-promo one-shot dialog. Bump the suffix (v2, v3, …) to re-promote.
-
-private val listOfHomeChip =
+/** YouTube Music's Home chips, each a filter of the same feed. Tapping the selected one clears it. */
+private val homeChips: List<Pair<StringResource, String>> =
     listOf(
-        Res.string.all,
-        Res.string.relax,
-        Res.string.sleep,
-        Res.string.energize,
-        Res.string.sad,
-        Res.string.romance,
-        Res.string.feel_good,
-        Res.string.workout,
-        Res.string.party,
-        Res.string.commute,
-        Res.string.focus,
+        Res.string.energize to HOME_PARAMS_ENERGIZE,
+        Res.string.relax to HOME_PARAMS_RELAX,
+        Res.string.workout to HOME_PARAMS_WORKOUT,
+        Res.string.feel_good to HOME_PARAMS_FEEL_GOOD,
+        Res.string.commute to HOME_PARAMS_COMMUTE,
+        Res.string.party to HOME_PARAMS_PARTY,
+        Res.string.romance to HOME_PARAMS_ROMANCE,
+        Res.string.sad to HOME_PARAMS_SAD,
+        Res.string.focus to HOME_PARAMS_FOCUS,
+        Res.string.sleep to HOME_PARAMS_SLEEP,
     )
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
-@ExperimentalFoundationApi
+/**
+ * YouTube Music's Home: the logo bar, the mood chips, then YouTube's own feed for the account,
+ * shelf after shelf (Quick picks as its song grid, everything else as cards), loading more as it
+ * scrolls. The feed reloads when you come back to the app after a while, as YouTube Music's does,
+ * so what you have been listening to shows up in it.
+ */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     onScrolling: (onTop: Boolean) -> Unit = {},
-    viewModel: HomeViewModel =
-        koinViewModel(),
-    sharedViewModel: SharedViewModel =
-        koinInject(),
+    viewModel: HomeViewModel = koinViewModel(),
+    sharedViewModel: SharedViewModel = koinInject(),
     navController: NavController,
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val scrollState = rememberLazyListState()
-    val isScrollingUp by scrollState.isScrollingUp()
-    val accountInfo by viewModel.accountInfo.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
     val homeData by viewModel.homeItemList.collectAsStateWithLifecycle()
-    val recommendationsFailed by viewModel.recommendationsFailed.collectAsStateWithLifecycle()
-    val newRelease by viewModel.newRelease.collectAsStateWithLifecycle()
-    val chart by viewModel.chart.collectAsStateWithLifecycle()
-    val moodMomentAndGenre by viewModel.exploreMoodItem.collectAsStateWithLifecycle()
-    val chartLoading by viewModel.loadingChart.collectAsStateWithLifecycle()
     val loading by viewModel.loading.collectAsStateWithLifecycle()
-    var accountShow by rememberSaveable {
-        mutableStateOf(false)
-    }
-    val regionChart by viewModel.regionCodeChart.collectAsStateWithLifecycle()
-    val reloadDestination by sharedViewModel.reloadDestination.collectAsStateWithLifecycle()
-    val pullToRefreshState = rememberPullToRefreshState()
-    var isRefreshing by remember { mutableStateOf(false) }
-    val chipRowState = rememberScrollState()
+    val failed by viewModel.recommendationsFailed.collectAsStateWithLifecycle()
     val params by viewModel.params.collectAsStateWithLifecycle()
     val homeListState by viewModel.homeListState.collectAsStateWithLifecycle()
     val continuation by viewModel.continuation.collectAsStateWithLifecycle()
-
+    val reloadDestination by sharedViewModel.reloadDestination.collectAsStateWithLifecycle()
     val shouldShowLogInAlert by viewModel.showLogInAlert.collectAsStateWithLifecycle()
+    var refreshing by remember { mutableStateOf(false) }
 
-    val openAppTime by sharedViewModel.openAppTime.collectAsStateWithLifecycle()
-    val shareLyricsPermissions by sharedViewModel.shareSavedLyrics.collectAsStateWithLifecycle()
-
-    val backgroundColor = MaterialTheme.colorScheme.background
-    val isLightTheme = backgroundColor.luminance() > 0.5f
-    // Booming Music theme: keep the page on the fixed indigo surface. The usual Home treatment
-    // pulls the first shelf's artwork colour over the top bar, which buried the #121318 look
-    // under a random tint and made the theme look like plain AMOLED black.
-    val isBoomingTheme = LocalIsBoomingTheme.current
-    val pageBackground =
-        if (getPlatform() == Platform.Desktop) {
-            if (isLightTheme) MaterialTheme.colorScheme.surfaceContainer
-            else if (isBoomingTheme) MaterialTheme.colorScheme.background
-            else desktopPanelDark
-        } else {
-            backgroundColor
-        }
-    var topHeaderColor by remember {
-        mutableStateOf(backgroundColor)
+    // Coming back to the app (or to this tab) after a while reloads the feed.
+    LifecycleStartEffect(Unit) {
+        viewModel.refreshIfStale()
+        onStopOrDispose { }
     }
-    val animatedColor by animateColorAsState(topHeaderColor, tween(500))
-    val mainHomeThumbnail by viewModel.mainHomeThumbnail.collectAsStateWithLifecycle()
-    val networkLoader = rememberNetworkLoader(HttpClient(CIO))
-    val dominantColorState =
-        rememberDominantColorState(
-            defaultColor = backgroundColor,
-            defaultOnColor = backgroundColor,
-            loader = networkLoader,
-        )
+    LaunchedEffect(loading) { if (!loading) refreshing = false }
 
-    LaunchedEffect(mainHomeThumbnail, isBoomingTheme) {
-        if (isBoomingTheme) {
-            topHeaderColor = backgroundColor
-        } else {
-            mainHomeThumbnail?.let {
-                dominantColorState.updateFrom(Url(it))
-            }
-        }
-    }
-
-    LaunchedEffect(dominantColorState, isLightTheme, isBoomingTheme) {
-        snapshotFlow { dominantColorState.color }.collect {
-            if (isBoomingTheme) {
-                topHeaderColor = backgroundColor
-            } else {
-                // Light theme: pull the artwork color toward white for a soft pastel header;
-                // dark theme keeps the original darkened tone.
-                topHeaderColor = if (isLightTheme) lerp(it, Color.White, 0.85f) else it.rgbFactor(0.3f)
-            }
-        }
-    }
-
-
-    var topAppBarHeightPx by rememberSaveable {
-        mutableIntStateOf(0)
-    }
-
-    val hazeState =
-        rememberHazeState(
-            blurEnabled = true,
-        )
-
-    LaunchedEffect(scrollState) {
-        snapshotFlow { scrollState.firstVisibleItemIndex }
-            .collect {
-                if (it <= 1) {
-                    onScrolling.invoke(true)
-                } else {
-                    onScrolling.invoke(isScrollingUp)
-                }
-            }
-    }
-
-    val onRefresh: () -> Unit = {
-        isRefreshing = true
-        viewModel.getHomeItemList(params)
-        Logger.w("HomeScreen", "onRefresh")
-    }
-    LaunchedEffect(key1 = reloadDestination) {
+    // Tapping Home again: back to the top, or a reload when already there.
+    LaunchedEffect(reloadDestination) {
         if (reloadDestination == HomeDestination::class) {
-            if (scrollState.firstVisibleItemIndex > 1) {
-                Logger.w("HomeScreen", "scrollState.firstVisibleItemIndex: ${scrollState.firstVisibleItemIndex}")
-                scrollState.animateScrollToItem(0)
-                sharedViewModel.reloadDestinationDone()
+            if (listState.firstVisibleItemIndex > 0) {
+                listState.animateScrollToItem(0)
             } else {
-                Logger.w("HomeScreen", "scrollState.firstVisibleItemIndex: ${scrollState.firstVisibleItemIndex}")
-                onRefresh.invoke()
+                refreshing = true
+                viewModel.getHomeItemList(params)
             }
-        }
-    }
-    // Keyed on both, not on `loading` alone. Keying on `loading` only re-runs when it *changes*,
-    // so a refresh whose load never flipped it left isRefreshing stuck true and the indicator
-    // pinned on screen — and the desktop window closes to the tray, so that survived reopening.
-    // getHomeItemList sets loading = true synchronously before returning, so there is no window
-    // where this clears a refresh that has not started yet.
-    LaunchedEffect(loading, isRefreshing) {
-        if (!loading) {
-            if (isRefreshing) isRefreshing = false
             sharedViewModel.reloadDestinationDone()
-            coroutineScope.launch {
-                pullToRefreshState.animateToHidden()
-            }
-        }
-    }
-    LaunchedEffect(key1 = homeData) {
-        accountShow = homeData.find { it.subtitle == accountInfo?.first } == null
-    }
-    // Nothing prompts on launch any more. Upstream opened a "rate us" dialog every ten launches, a
-    // blog promo on the fifth, and asked repeatedly about contributing lyrics; all three are gone.
-    // Lyrics sharing is still available, opt-in, in Settings — which is where someone who wants it
-    // will look, and where someone who does not is never interrupted by it.
-
-    val shouldStartPaginate =
-        remember {
-            derivedStateOf {
-                homeListState != ListState.PAGINATION_EXHAUST &&
-                    (
-                        scrollState.layoutInfo.visibleItemsInfo
-                            .lastOrNull()
-                            ?.index ?: -9
-                    ) >= (scrollState.layoutInfo.totalItemsCount - 1)
-            }
-        }
-
-    LaunchedEffect(key1 = shouldStartPaginate.value) {
-        Logger.d("HomeScreen", "shouldStartPaginate: ${shouldStartPaginate.value}")
-        Logger.d("HomeScreen", "homeListState: $homeListState")
-        Logger.d("HomeScreen", "Continuation: $continuation")
-        if (shouldStartPaginate.value && homeListState == ListState.IDLE) {
-            viewModel.getContinueHomeItem(
-                continuation,
-            )
         }
     }
 
-//    if (shouldShowGetDataSyncIdBottomSheet) {
-//        GetDataSyncIdBottomSheet(
-//            cookie = youTubeCookie,
-//            onDismissRequest = {
-//                shouldShowGetDataSyncIdBottomSheet = false
-//            },
-//        )
-//    }
+    val nearEnd by remember {
+        derivedStateOf {
+            val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false
+            last >= listState.layoutInfo.totalItemsCount - 2
+        }
+    }
+    LaunchedEffect(nearEnd, homeListState) {
+        if (nearEnd && homeListState == ListState.IDLE && !continuation.isNullOrEmpty()) {
+            viewModel.getContinueHomeItem(continuation)
+        }
+    }
 
     if (shouldShowLogInAlert) {
-        var doNotShowAgain by rememberSaveable {
-            mutableStateOf(false)
-        }
         AlertDialog(
-            title = {
-                Text(stringResource(Res.string.warning))
-            },
+            containerColor = Ytm.Surface,
+            title = { Text("Sign in to YouTube Music", color = Color.White) },
             text = {
-                Column {
-                    Text(text = stringResource(Res.string.log_in_warning))
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier =
-                            Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    doNotShowAgain = !doNotShowAgain
-                                }.fillMaxWidth(),
-                    ) {
-                        Checkbox(
-                            checked = doNotShowAgain,
-                            onCheckedChange = {
-                                doNotShowAgain = it
-                            },
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(stringResource(Res.string.do_not_show_again))
-                    }
-                }
+                Text(
+                    "Sign in to get your own recommendations, your library and your history.",
+                    color = Ytm.TextSecondary,
+                )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.doneShowLogInAlert(doNotShowAgain)
+                    viewModel.doneShowLogInAlert(true)
                     navController.navigate(LoginDestination)
-                }) {
-                    Text(stringResource(Res.string.go_to_log_in_page))
-                }
+                }) { Text("Sign in", color = Color.White) }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    viewModel.doneShowLogInAlert(doNotShowAgain)
-                }) {
-                    Text(stringResource(Res.string.cancel))
-                }
+                TextButton(onClick = { viewModel.doneShowLogInAlert(true) }) { Text("Not now", color = Ytm.TextSecondary) }
             },
-            onDismissRequest = {
-                viewModel.doneShowLogInAlert()
-            },
+            onDismissRequest = { viewModel.doneShowLogInAlert() },
         )
     }
 
-    Box {
-        // Booming Music theme replaces the whole home chrome, not just colours.
-        if (LocalIsBoomingTheme.current) {
-            BoomingHomeScreen(
-                homeData = homeData,
-                newRelease = newRelease,
-                chart = chart,
-                sharedViewModel = sharedViewModel,
-                navController = navController,
-            )
-            return@Box
-        }
+    Column(Modifier.fillMaxSize().background(Ytm.Background)) {
+        YtmTopBar(navController = navController)
         PullToRefreshBox(
-            modifier =
-                Modifier
-                    .hazeSource(hazeState),
-            state = pullToRefreshState,
-            onRefresh = onRefresh,
-            isRefreshing = isRefreshing,
-            indicator = {
-                PullToRefreshDefaults.Indicator(
-                    state = pullToRefreshState,
-                    isRefreshing = isRefreshing,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(
-                                top =
-                                    with(LocalDensity.current) {
-                                        topAppBarHeightPx.toDp()
-                                    },
-                            ),
-                    containerColor = PullToRefreshDefaults.indicatorContainerColor,
-                    color = PullToRefreshDefaults.indicatorColor,
-                    maxDistance = PullToRefreshDefaults.PositionalThreshold,
-                )
+            isRefreshing = refreshing,
+            onRefresh = {
+                refreshing = true
+                viewModel.getHomeItemList(params)
             },
+            modifier = Modifier.fillMaxSize(),
         ) {
-            Crossfade(targetState = loading, label = "Home Shimmer") { loading ->
-                if (!loading) {
-                    if (homeData.isEmpty()) {
-                        OfflineErrorState(
-                            onRetry = onRefresh,
-                            onOpenDownloaded = {
-                                navController.navigate(
-                                    LibraryDynamicPlaylistDestination(
-                                        type = LibraryDynamicPlaylistType.Downloaded.toStringParams(),
-                                    ),
-                                )
-                            },
-                        )
-                        return@Crossfade
-                    }
-                    LazyColumn(
-                        state = scrollState,
-                        verticalArrangement = Arrangement.spacedBy(20.dp),
-                    ) {
-                        // Shown when YouTube's shelves failed but local ones remain. Without it the
-                        // page just looks short: the empty-state and its retry button never appear,
-                        // because local shelves keep the list non-empty.
-                        if (recommendationsFailed) {
-                            item(key = "recommendations_failed") {
-                                Column(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 24.dp, vertical = 12.dp),
-                                ) {
-                                    // The app bar is a sibling overlay, not part of this list, so
-                                    // whatever is first has to make room for it itself. Without
-                                    // this the banner sits underneath and is invisible in exactly
-                                    // the situation it exists to explain. The first shelf does the
-                                    // same below, and skips it while this is showing.
-                                    Spacer(
-                                        Modifier.height(
-                                            with(LocalDensity.current) { topAppBarHeightPx.toDp() },
-                                        ),
-                                    )
-                                    Text(
-                                        text = stringResource(Res.string.recommendations_unavailable),
-                                        style = typo().labelMedium,
-                                        color = MaterialTheme.colorScheme.onBackground,
-                                    )
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        text = stringResource(Res.string.recommendations_unavailable_action),
-                                        style = typo().bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                        itemsIndexed(homeData, key = { _, item ->
-                            item.hashCode().toString() + (mainHomeThumbnail ?: "nothumb")
-                        }) { index, item ->
-                            Box {
-                                if (index == 0) {
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                // matchParentSize, not height(300.dp): 300 is the
-                                                // height of this shelf ON A PHONE. On a desktop
-                                                // window the first item is taller, the gradient
-                                                // stopped mid-item and everything below it fell
-                                                // back to the flat background — a hard colour seam
-                                                // straight across Home. Sized by the item, the
-                                                // bottom scrim always lands on the item's edge.
-                                                .matchParentSize()
-                                                .angledGradientBackground(listOf(animatedColor, pageBackground), 25f),
-                                    ) {
-                                        Box(
-                                            modifier =
-                                                Modifier
-                                                    .fillMaxWidth()
-                                                    .height(180.dp)
-                                                    .align(Alignment.BottomCenter)
-                                                    .background(artworkScrimBrush(pageBackground)),
-                                        )
-                                    }
-                                }
-                                Column(
-                                    modifier =
-                                        Modifier
-                                            .padding(horizontal = 15.dp),
-                                ) {
-                                    // Skipped when the failure banner is showing: it is above this
-                                    // and has already made the room, so applying it twice would push
-                                    // the first shelf down by a whole app bar.
-                                    if (index == 0 && !recommendationsFailed) {
-                                        Spacer(
-                                            Modifier.height(
-                                                with(LocalDensity.current) { topAppBarHeightPx.toDp() },
-                                            ),
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
-                                    if (index == 0 && accountInfo != null && accountShow) {
-                                        AccountLayout(
-                                            accountName = accountInfo?.first ?: "",
-                                            url = accountInfo?.second ?: "",
-                                        )
-                                        Spacer(Modifier.height(8.dp))
-                                    }
-                                    if (item.title == stringResource(Res.string.quick_picks)) {
-                                        AnimatedVisibility(
-                                            visible =
-                                                homeData.find {
-                                                    it.title ==
-                                                        stringResource(
-                                                            Res.string.quick_picks,
-                                                        )
-                                                } != null,
-                                        ) {
-                                            QuickPicks(
-                                                homeItem =
-                                                    (
-                                                        homeData.find {
-                                                            it.title ==
-                                                                stringResource(
-                                                                    Res.string.quick_picks,
-                                                                )
-                                                        } ?: return@AnimatedVisibility
-                                                    ).let { content ->
-                                                        content.copy(
-                                                            contents =
-                                                                content.contents.mapNotNull { ct ->
-                                                                    ct?.copy(
-                                                                        artists =
-                                                                            ct.artists?.let { art ->
-                                                                                if (art.size > 1) {
-                                                                                    art.dropLast(1)
-                                                                                } else {
-                                                                                    art
-                                                                                }
-                                                                            },
-                                                                    )
-                                                                },
-                                                        )
-                                                    },
-                                                navController = navController,
-                                                viewModel = viewModel,
-                                            )
-                                        }
-                                    } else {
-                                        HomeItem(
-                                            navController = navController,
-                                            data = item,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        item {
-                            AnimatedVisibility(
-                                homeListState == ListState.PAGINATING,
-                                enter = expandVertically() + expandVertically(),
-                                exit = fadeOut() + shrinkVertically(),
-                            ) {
-                                CenterLoadingBox(
-                                    modifier =
-                                        Modifier
-                                            .fillMaxWidth()
-                                            .height(200.dp),
-                                )
-                            }
-                        }
-                        if (homeListState == ListState.PAGINATION_EXHAUST) {
-                            items(newRelease, key = { it.hashCode() }) {
-                                AnimatedVisibility(
-                                    visible = newRelease.isNotEmpty(),
-                                ) {
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .padding(horizontal = 15.dp),
-                                    ) {
-                                        HomeItem(
-                                            navController = navController,
-                                            data = it,
-                                        )
-                                    }
-                                }
-                            }
-                            item {
-                                AnimatedVisibility(
-                                    visible = moodMomentAndGenre != null,
-                                ) {
-                                    Box(
-                                        modifier =
-                                            Modifier
-                                                .padding(horizontal = 15.dp),
-                                    ) {
-                                        moodMomentAndGenre?.let {
-                                            MoodMomentAndGenre(
-                                                mood = it,
-                                                navController = navController,
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                            item {
-                                Column(
-                                    Modifier
-                                        .padding(vertical = 10.dp)
-                                        .padding(horizontal = 15.dp),
-                                    verticalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    ChartTitle()
-                                    Spacer(modifier = Modifier.height(5.dp))
-                                    Crossfade(targetState = regionChart) {
-                                        Logger.w("HomeScreen", "regionChart: $it")
-                                        if (it != null) {
-                                            DropdownButton(
-                                                items = CHART_SUPPORTED_COUNTRY.itemsData.toList(),
-                                                defaultSelected =
-                                                    CHART_SUPPORTED_COUNTRY.itemsData.getOrNull(
-                                                        CHART_SUPPORTED_COUNTRY.items.indexOf(it),
-                                                    )
-                                                        ?: CHART_SUPPORTED_COUNTRY.itemsData[1],
-                                            ) {
-                                                viewModel.exploreChart(
-                                                    CHART_SUPPORTED_COUNTRY.items[
-                                                        CHART_SUPPORTED_COUNTRY.itemsData.indexOf(
-                                                            it,
-                                                        ),
-                                                    ],
-                                                )
-                                            }
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.height(5.dp))
-                                    Crossfade(
-                                        targetState = chartLoading,
-                                        label = "Chart",
-                                    ) { loading ->
-                                        if (!loading) {
-                                            chart?.let {
-                                                ChartData(
-                                                    chart = it,
-                                                    navController = navController,
-                                                )
-                                            }
-                                        } else {
-                                            CenterLoadingBox(
-                                                modifier =
-                                                    Modifier
-                                                        .fillMaxWidth()
-                                                        .height(400.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        item {
-                            EndOfPage()
-                        }
-                    }
-                } else {
-                    Column {
-                        Spacer(
-                            Modifier.height(
-                                with(LocalDensity.current) {
-                                    topAppBarHeightPx.toDp()
-                                },
-                            ),
-                        )
-                        HomeShimmer()
-                    }
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(bottom = 24.dp),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                item(key = "chips") {
+                    val selected = homeChips.indexOfFirst { it.second == params }.takeIf { it >= 0 }
+                    YtmChips(
+                        labels = homeChips.map { stringResource(it.first) },
+                        selected = selected,
+                        onSelect = { index ->
+                            viewModel.setParams(if (index == selected) null else homeChips[index].second)
+                        },
+                        modifier = Modifier.padding(vertical = 8.dp),
+                    )
                 }
-            }
-        }
-        AnimatedContent(
-            targetState = scrollState.firstVisibleItemIndex == 0 && scrollState.firstVisibleItemScrollOffset == 0,
-            transitionSpec = {
-                fadeIn(tween(300)).togetherWith(fadeOut(tween(300)))
-            },
-        ) { target ->
-            Column(
-                modifier =
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .then(
-                            if (target) {
-                                Modifier.background(Color.Transparent)
+                if (homeData.isEmpty()) {
+                    item(key = "state") {
+                        Box(Modifier.fillMaxWidth().padding(top = 96.dp), contentAlignment = Alignment.Center) {
+                            if (failed && !loading) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    Text(
+                                        "Couldn't load your recommendations",
+                                        style = typo().bodyLarge,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                    YtmOutlinedPill("Retry") { viewModel.getHomeItemList(params) }
+                                }
                             } else {
-                                Modifier
-                                    .hazeEffect(hazeState, style = HazeMaterials.ultraThin()) {
-                                        blurEnabled = true
-                                    }
-                            },
-                        ).onGloballyPositioned { coordinates ->
-                            topAppBarHeightPx = coordinates.size.height
-                        },
-            ) {
-                AnimatedVisibility(
-                    visible = isScrollingUp,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically(),
-                ) {
-                    HomeTopAppBar(navController)
-                }
-                AnimatedVisibility(
-                    visible = !isScrollingUp,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically(),
-                ) {
-                    Spacer(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .windowInsetsPadding(
-                                    WindowInsets.statusBars,
-                                ),
-                    )
-                }
-                Row(
-                    modifier =
-                        Modifier
-                            .horizontalScroll(chipRowState)
-                            .padding(vertical = 8.dp, horizontal = 15.dp)
-                            .background(Color.Transparent),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    listOfHomeChip.forEach { id ->
-                        val isSelected =
-                            when (params) {
-                                HOME_PARAMS_RELAX -> id == Res.string.relax
-                                HOME_PARAMS_SLEEP -> id == Res.string.sleep
-                                HOME_PARAMS_ENERGIZE -> id == Res.string.energize
-                                HOME_PARAMS_SAD -> id == Res.string.sad
-                                HOME_PARAMS_ROMANCE -> id == Res.string.romance
-                                HOME_PARAMS_FEEL_GOOD -> id == Res.string.feel_good
-                                HOME_PARAMS_WORKOUT -> id == Res.string.workout
-                                HOME_PARAMS_PARTY -> id == Res.string.party
-                                HOME_PARAMS_COMMUTE -> id == Res.string.commute
-                                HOME_PARAMS_FOCUS -> id == Res.string.focus
-                                else -> id == Res.string.all
-                            }
-                        Chip(
-                            isAnimated = loading,
-                            isSelected = isSelected,
-                            text = stringResource(id),
-                        ) {
-                            when (id) {
-                                Res.string.all -> viewModel.setParams(null)
-                                Res.string.relax -> viewModel.setParams(HOME_PARAMS_RELAX)
-                                Res.string.sleep -> viewModel.setParams(HOME_PARAMS_SLEEP)
-                                Res.string.energize -> viewModel.setParams(HOME_PARAMS_ENERGIZE)
-                                Res.string.sad -> viewModel.setParams(HOME_PARAMS_SAD)
-                                Res.string.romance -> viewModel.setParams(HOME_PARAMS_ROMANCE)
-                                Res.string.feel_good -> viewModel.setParams(HOME_PARAMS_FEEL_GOOD)
-                                Res.string.workout -> viewModel.setParams(HOME_PARAMS_WORKOUT)
-                                Res.string.party -> viewModel.setParams(HOME_PARAMS_PARTY)
-                                Res.string.commute -> viewModel.setParams(HOME_PARAMS_COMMUTE)
-                                Res.string.focus -> viewModel.setParams(HOME_PARAMS_FOCUS)
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
                             }
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun HomeTopAppBar(navController: NavController) {
-    val hour =
-        remember {
-            val date = now().time
-            date.hour
-        }
-    TopAppBar(
-        windowInsets =
-            TopAppBarDefaults.windowInsets.exclude(
-                TopAppBarDefaults.windowInsets.only(WindowInsetsSides.Start),
-            ),
-        title = {
-            // YouTube Music's header: the red mark and the wordmark, no greeting under it.
-            if (LocalIsYtmTheme.current) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        painter = painterResource(Res.drawable.mono),
-                        contentDescription = null,
-                        tint = YtmRed,
-                        modifier = Modifier.size(28.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = "Refine",
-                        style = typo().titleLarge.copy(fontSize = 22.sp, letterSpacing = (-0.5).sp),
-                        color = MaterialTheme.colorScheme.onBackground,
-                    )
+                items(homeData, key = { it.title + it.subtitle.orEmpty() + it.contents.size }) { shelf ->
+                    YtmShelf(item = shelf, navController = navController)
                 }
-                return@TopAppBar
-            }
-            Column {
-                val boomingAccent = LocalIsBoomingTheme.current
-                Text(
-                    text = stringResource(Res.string.app_name),
-                    style = typo().titleMedium,
-                    color =
-                        if (boomingAccent) {
-                            // Indigo wordmark, matching Booming Music's "Booming Music" title.
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onBackground
-                        },
-                    modifier = Modifier.padding(bottom = 4.dp),
-                )
-                Text(
-                    text =
-                        when (hour) {
-                            in 6..12 -> {
-                                stringResource(Res.string.good_morning)
-                            }
-
-                            in 13..17 -> {
-                                stringResource(Res.string.good_afternoon)
-                            }
-
-                            in 18..23 -> {
-                                stringResource(Res.string.good_evening)
-                            }
-
-                            else -> {
-                                stringResource(Res.string.good_night)
-                            }
-                        },
-                    style = typo().bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        actions = {
-            // Search sits in the top bar, as in YouTube Music; the Explore tab holds moods, genres
-            // and charts. History moved to Library, where the rest of the user's own music lives.
-            RippleIconButton(imageVector = SimpIcons.Search, tint = MaterialTheme.colorScheme.onBackground) {
-                navController.navigate(SearchDestination)
-            }
-            RippleIconButton(imageVector = SimpIcons.Notifications, tint = MaterialTheme.colorScheme.onBackground) {
-                navController.navigate(NotificationDestination)
-            }
-            // Fourth button, immediately before Settings — the position the design canvas fixes.
-            ListenTogetherIconButton { navController.navigate(ListenTogetherDestination) }
-            RippleIconButton(imageVector = SimpIcons.Settings, tint = MaterialTheme.colorScheme.onBackground) {
-                navController.navigate(SettingsDestination)
-            }
-        },
-        colors =
-            TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
-            ),
-    )
-}
-
-@Composable
-fun AccountLayout(
-    accountName: String,
-    url: String,
-) {
-    Column {
-        Text(
-            text = stringResource(Res.string.welcome_back),
-            style = typo().bodyMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.padding(bottom = 3.dp),
-        )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 5.dp, vertical = 5.dp),
-        ) {
-            AsyncImage(
-                model =
-                    ImageRequest
-                        .Builder(LocalPlatformContext.current)
-                        .data(url)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .diskCacheKey(url)
-                        .crossfade(true)
-                        .build(),
-                placeholder = rememberHolderPainter(),
-                error = rememberHolderPainter(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier =
-                    Modifier
-                        .size(40.dp)
-                        .clip(
-                            CircleShape,
-                        ),
-            )
-            Text(
-                text = accountName,
-                style = typo().headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                modifier =
-                    Modifier
-                        .padding(start = 8.dp),
-            )
-        }
-    }
-}
-
-@ExperimentalFoundationApi
-@Composable
-fun QuickPicks(
-    homeItem: HomeItem,
-    navController: NavController,
-    viewModel: HomeViewModel = koinViewModel(),
-) {
-    val lazyListState = rememberLazyGridState()
-    val snapperFlingBehavior = rememberSnapFlingBehavior(SnapLayoutInfoProvider(lazyGridState = lazyListState, snapPosition = SnapPosition.Start))
-    val density = LocalDensity.current
-    var widthDp by remember {
-        mutableStateOf(0.dp)
-    }
-    var bottomSheetShow by remember { mutableStateOf(false) }
-    var track by remember { mutableStateOf<Track?>(null) }
-
-    if (bottomSheetShow) {
-        NowPlayingBottomSheet(
-            onDismiss = { bottomSheetShow = false },
-            song = track?.toSongEntity(),
-            navController = navController,
-        )
-    }
-
-    Column(
-        Modifier
-            .padding(vertical = 8.dp)
-            .onGloballyPositioned { coordinates ->
-                with(density) {
-                    widthDp = (coordinates.size.width).toDp()
-                }
-            },
-    ) {
-        Text(
-            text = stringResource(Res.string.let_s_start_with_a_radio),
-            style = typo().bodySmall,
-        )
-        Text(
-            text = stringResource(Res.string.quick_picks),
-            style = typo().headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 5.dp),
-        )
-        // BoxWithConstraints, not the Column's onGloballyPositioned width: that measured the
-        // container rather than the space the grid actually gets, so the computed column width was
-        // slightly too large. Five columns then overflowed by a sliver — the last one clipped at
-        // the edge, while the overflow was too small for the grid to offer any meaningful scroll
-        // range, leaving a scrollbar whose thumb filled the track and moved nowhere.
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val shelfColumnWidth = maxWidth.asShelfColumnWidth()
-        LazyHorizontalGrid(
-            rows = GridCells.Fixed(4),
-            modifier = Modifier.height(256.dp),
-            state = lazyListState,
-            flingBehavior = snapperFlingBehavior,
-        ) {
-            items(homeItem.contents, key = { it.hashCode() }) {
-                if (it != null) {
-                    QuickPicksItem(
-                        onClick = {
-                            val firstQueue: Track = it.toTrack()
-                            viewModel.setQueueData(
-                                QueueData.Data(
-                                    listTracks = arrayListOf(firstQueue),
-                                    firstPlayedTrack = firstQueue,
-                                    playlistId = "RDAMVM${it.videoId}",
-                                    playlistName = "\"${it.title}\" Radio",
-                                    playlistType = PlaylistType.RADIO,
-                                    continuation = null,
-                                ),
-                            )
-                            viewModel.loadMediaItem(
-                                firstQueue,
-                                type = Config.SONG_CLICK,
-                            )
-                        },
-                        onLongClick = {
-                            track = it.toTrack()
-                            bottomSheetShow = true
-                        },
-                        data = it,
-                        widthDp = shelfColumnWidth,
-                    )
-                }
-            }
-        }
-        }
-        HorizontalLazyGridScrollbar(
-            state = lazyListState,
-            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-        )
-    }
-}
-
-@Composable
-fun MoodMomentAndGenre(
-    mood: Mood,
-    navController: NavController,
-) {
-    Column(
-        Modifier
-            .padding(vertical = 8.dp),
-    ) {
-        Text(
-            text = stringResource(Res.string.let_s_pick_a_playlist_for_you),
-            style = typo().bodyMedium,
-        )
-        // One block per section YouTube returned, headed by ITS OWN title. Hard-coding
-        // "Moods & moment" / "Genre" here (and reading mood.moodsMoments / mood.genres by
-        // index) mislabelled every row as soon as a signed-in account got an extra
-        // "For you" section, and hid the real Genres section altogether.
-        mood.sections.forEach { section ->
-            val gridState = rememberLazyGridState()
-            val flingBehavior = rememberSnapFlingBehavior(SnapLayoutInfoProvider(lazyGridState = gridState))
-            Text(
-                text = section.title,
-                style = typo().headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 5.dp),
-            )
-            LazyHorizontalGrid(
-                rows = GridCells.Fixed(3),
-                modifier = Modifier.height(210.dp),
-                state = gridState,
-                flingBehavior = flingBehavior,
-            ) {
-                items(section.items, key = { it.params }) { item ->
-                    MoodMomentAndGenreHomeItem(
-                        title = item.title,
-                        stripeColor = item.stripeColor,
-                    ) {
-                        navController.navigate(
-                            MoodDestination(
-                                item.params,
-                            ),
-                        )
+                if (homeListState == ListState.PAGINATING) {
+                    item(key = "more") {
+                        Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                        }
                     }
                 }
+                item(key = "end") { Spacer(Modifier.height(16.dp)) }
             }
         }
     }
-}
-
-@Composable
-fun ChartTitle() {
-    Column {
-        Text(
-            text = stringResource(Res.string.what_is_best_choice_today),
-            style = typo().bodyMedium,
-        )
-        Text(
-            text = stringResource(Res.string.chart),
-            style = typo().headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 5.dp),
-        )
-    }
-}
-
-@Composable
-fun ChartData(
-    chart: Chart,
-    navController: NavController,
-) {
-    var gridWidthDp by remember {
-        mutableStateOf(0.dp)
-    }
-    val density = LocalDensity.current
-
-    val lazyListState2 = rememberLazyGridState()
-    val snapperFlingBehavior2 = rememberSnapFlingBehavior(SnapLayoutInfoProvider(lazyGridState = lazyListState2))
-
-    Column(
-        Modifier.onGloballyPositioned { coordinates ->
-            with(density) {
-                gridWidthDp = (coordinates.size.width).toDp()
-            }
-        },
-    ) {
-        chart.listChartItem.forEach { item ->
-            Text(
-                text = item.title,
-                style = typo().headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 10.dp),
-            )
-            val lazyListState = rememberLazyListState()
-            val snapperFlingBehavior = rememberSnapFlingBehavior(SnapLayoutInfoProvider(lazyListState = lazyListState))
-            LazyRow(flingBehavior = snapperFlingBehavior) {
-                items(item.playlists.size, key = { index ->
-                    val data = item.playlists[index]
-                    data.id + data.title + index
-                }) {
-                    HomeItemContentPlaylist(
-                        onClick = {
-                            navController.navigate(
-                                PlaylistDestination(
-                                    playlistId = item.playlists[it].id,
-                                    isYourYouTubePlaylist = false,
-                                ),
-                            )
-                        },
-                        data = item.playlists[it],
-                    )
-                }
-            }
-        }
-        Text(
-            text = stringResource(Res.string.top_artists),
-            style = typo().headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 1,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 10.dp),
-        )
-        LazyHorizontalGrid(
-            rows = GridCells.Fixed(3),
-            modifier = Modifier.height(240.dp),
-            state = lazyListState2,
-            flingBehavior = snapperFlingBehavior2,
-        ) {
-            items(chart.artists.itemArtists.size, key = { index ->
-                val item = chart.artists.itemArtists[index]
-                item.title + item.browseId + index
-            }) {
-                val data = chart.artists.itemArtists[it]
-                ItemArtistChart(
-                    onClick = {
-                        navController.navigate(
-                            ArtistDestination(
-                                channelId = data.browseId,
-                            ),
-                        )
-                    },
-                    data = data,
-                    widthDp = gridWidthDp.asShelfColumnWidth(),
-                )
-            }
-        }
-    }
-}
-
-/**
- * Comfortable width for one column of a horizontally paged shelf.
- *
- * These shelves size each entry to the *whole* shelf width, which is right on a phone: one
- * full-width row per column, swipe for the next page. On a desktop window that makes a single
- * entry nearly two thousand dp wide — its content sits at the left, the rest of the row is empty,
- * and the following column is off-screen with no way to scroll a lazy grid to it.
- *
- * Fitting as many columns as will hold a readable row keeps the phone behaviour intact (a narrow
- * window still yields one column) while a wide window fills with content instead of gap.
- */
-private val SHELF_TARGET_COLUMN_WIDTH = 360.dp
-
-private fun Dp.asShelfColumnWidth(): Dp {
-    if (this <= 0.dp) return this
-    val columns = (this / SHELF_TARGET_COLUMN_WIDTH).toInt().coerceAtLeast(1)
-    return this / columns
 }
