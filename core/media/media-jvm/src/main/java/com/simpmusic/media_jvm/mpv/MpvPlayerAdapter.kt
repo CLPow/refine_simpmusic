@@ -416,6 +416,9 @@ class MpvPlayerAdapter(
                 try {
                     player.seekTo(positionMs)
                     Logger.d(TAG, "Seeked to position: $positionMs")
+                    // Same contract as the Android adapter: every seek is reported, whoever asked
+                    // for it (seek bar, lyric tap, ±5 s, Control Center, SponsorBlock).
+                    notifyListeners { onSeeked(positionMs) }
                 } catch (e: Exception) {
                     // Same reasoning as the null case: the bar has already moved, so the position
                     // has to be applied somewhere or the two stay disagreeing.
@@ -799,14 +802,28 @@ class MpvPlayerAdapter(
         when (internalRepeatMode) {
             PlayerConstants.REPEAT_MODE_ONE -> true
             PlayerConstants.REPEAT_MODE_ALL -> true
-            else -> localCurrentMediaItemIndex < playlist.size - 1
+            else ->
+                if (internalShuffleModeEnabled && shuffleOrder.isNotEmpty()) {
+                    val currentShufflePos =
+                        shuffleIndices.getOrNull(localCurrentMediaItemIndex) ?: -1
+                    currentShufflePos >= 0 && currentShufflePos < shuffleOrder.lastIndex
+                } else {
+                    localCurrentMediaItemIndex < playlist.size - 1
+                }
         }
 
     override fun hasPreviousMediaItem(): Boolean =
         when (internalRepeatMode) {
             PlayerConstants.REPEAT_MODE_ONE -> true
             PlayerConstants.REPEAT_MODE_ALL -> true
-            else -> localCurrentMediaItemIndex > 0
+            else ->
+                if (internalShuffleModeEnabled && shuffleOrder.isNotEmpty()) {
+                    val currentShufflePos =
+                        shuffleIndices.getOrNull(localCurrentMediaItemIndex) ?: -1
+                    currentShufflePos > 0
+                } else {
+                    localCurrentMediaItemIndex > 0
+                }
         }
 
     private fun getNextMediaItemIndex(): Int =
@@ -1718,7 +1735,7 @@ class MpvPlayerAdapter(
                 }
 
                 else -> {
-                    if (localCurrentMediaItemIndex < playlist.size - 1) {
+                    if (hasNextMediaItem()) {
                         seekToNext()
                     }
                 }

@@ -730,8 +730,25 @@ interface DatabaseDao {
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun insertSetVideoId(setVideoIdEntity: SetVideoIdEntity)
 
-    @Query("SELECT * FROM set_video_id WHERE videoId = :videoId")
-    suspend fun getSetVideoId(videoId: String): SetVideoIdEntity?
+    /**
+     * A setVideoId names one entry of one playlist, so the playlist is part of the key. Looked up by
+     * videoId alone, SQLite returned the row whose playlist id sorts first — an entry of whichever
+     * other playlist also holds the song. Pass every spelling the playlist id is stored under.
+     */
+    @Query(
+        "SELECT * FROM set_video_id WHERE videoId = :videoId AND youtubePlaylistId IN (:youtubePlaylistIds) " +
+            "AND setVideoId IS NOT NULL LIMIT 1",
+    )
+    suspend fun getSetVideoId(
+        videoId: String,
+        youtubePlaylistIds: List<String>,
+    ): SetVideoIdEntity?
+
+    @Query("DELETE FROM set_video_id WHERE videoId = :videoId AND youtubePlaylistId = :youtubePlaylistId")
+    suspend fun deleteSetVideoId(
+        videoId: String,
+        youtubePlaylistId: String,
+    )
 
     // PairSongLocalPlaylist
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
@@ -847,6 +864,36 @@ interface DatabaseDao {
         from: Int,
         to: Int,
     )
+
+    /**
+     * Move the song at [fromIndex] to [toIndex] (0-based, in position order) as ONE transaction.
+     *
+     * A move is a read, a range shift and a final placement. Run apart, the table sits between the
+     * shift and the placement with two songs on one position and a gap at the target: a process
+     * death there leaves it that way, and a second move reading it computes its range from
+     * positions that are about to change. As one transaction the three steps commit together or
+     * not at all, and a second move only reads once the first has committed.
+     *
+     * @return false when either index is outside the playlist.
+     */
+    @Transaction
+    suspend fun moveSongInPlaylist(
+        playlistId: Long,
+        fromIndex: Int,
+        toIndex: Int,
+    ): Boolean {
+        val pairs = getAllPlaylistPairSongByPosition(playlistId)
+        if (fromIndex !in pairs.indices || toIndex !in pairs.indices) return false
+        val moved = pairs[fromIndex]
+        val target = pairs[toIndex].position
+        if (fromIndex < toIndex) {
+            shiftPositionsBackward(playlistId, moved.position, target)
+        } else {
+            shiftPositionsForward(playlistId, target, moved.position)
+        }
+        editPositionOfSongInPlaylist(playlistId, moved.songId, target)
+        return true
+    }
 
     @Query(
         "SELECT * FROM pair_song_local_playlist WHERE playlistId = :playlistId AND position >= :from AND position < :to ORDER BY position " +
@@ -1034,7 +1081,11 @@ interface DatabaseDao {
                 ),
             )
 
-        channelIds.forEach { channelId ->
+        // A track can credit the same channel twice (YouTube lists it in both the artist and the
+        // featured runs). `event_artist` is keyed on (eventId, channelId), so the second insert
+        // aborts the whole transaction and the exception surfaces as a crash mid-playback (#2521).
+        // One play counts once per artist anyway.
+        channelIds.distinct().forEach { channelId ->
             insertEventArtist(
                 EventArtistEntity(
                     eventId = eventId,

@@ -91,6 +91,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.koin.mp.KoinPlatform.getKoin
@@ -271,6 +273,7 @@ class JvmMediaPlayerHandlerImpl(
     private var toggleLikeJob: Job? = null
 
     private var loadJob: Job? = null
+    private val restoreQueueMutex = Mutex()
 
     private var songEntityJob: Job? = null
 
@@ -2183,34 +2186,32 @@ class JvmMediaPlayerHandlerImpl(
     override fun mayBeSaveRecentSong(runBlocking: Boolean) {
         val unit =
             suspend {
-                if (dataStoreManager.saveRecentSongAndQueue.first() == TRUE) {
-                    // Skip while the playing song is unknown or the queue is mid-rebuild:
-                    // updateCatalog clears listTracks and re-inserts the current track only at
-                    // the end, so saving in that window persists a queue missing the current
-                    // track (plus a blank media id), which desyncs the next restore.
-                    val videoId = nowPlayingState.value.songEntity?.videoId
-                    if (videoId != null && queueData.value.queueState == QueueData.StateSource.STATE_INITIALIZED) {
-                        dataStoreManager.saveRecentSong(
-                            videoId,
-                            player.contentPosition,
-                        )
-                        dataStoreManager.setPlaylistFromSaved(queueData.value.data.playlistName ?: "")
-                        Logger.d(
-                            "Check saved",
-                            player.currentMediaItem
-                                ?.metadata
-                                ?.title
-                                .toString(),
-                        )
-                        val temp: ArrayList<Track> = ArrayList()
-                        temp.clear()
-                        temp.addAll(_queueData.value.data.listTracks)
-                        Logger.w("Check recover queue", temp.toString())
-                        songRepository.recoverQueue(
-                            temp,
-                            playlistType = _queueData.value.data.playlistType?.name,
-                        )
-                    }
+                // Skip while the playing song is unknown or the queue is mid-rebuild:
+                // updateCatalog clears listTracks and re-inserts the current track only at
+                // the end, so saving in that window persists a queue missing the current
+                // track (plus a blank media id), which desyncs the next restore.
+                val videoId = nowPlayingState.value.songEntity?.videoId
+                if (videoId != null && queueData.value.queueState == QueueData.StateSource.STATE_INITIALIZED) {
+                    dataStoreManager.saveRecentSong(
+                        videoId,
+                        player.contentPosition,
+                    )
+                    dataStoreManager.setPlaylistFromSaved(queueData.value.data.playlistName ?: "")
+                    Logger.d(
+                        "Check saved",
+                        player.currentMediaItem
+                            ?.metadata
+                            ?.title
+                            .toString(),
+                    )
+                    val temp: ArrayList<Track> = ArrayList()
+                    temp.clear()
+                    temp.addAll(_queueData.value.data.listTracks)
+                    Logger.w("Check recover queue", temp.toString())
+                    songRepository.recoverQueue(
+                        temp,
+                        playlistType = _queueData.value.data.playlistType?.name,
+                    )
                 }
             }
         if (runBlocking) {
@@ -2228,10 +2229,8 @@ class JvmMediaPlayerHandlerImpl(
      */
     private fun mayBeSaveRecentPosition() {
         coroutineScope.launch {
-            if (dataStoreManager.saveRecentSongAndQueue.first() == TRUE) {
-                val videoId = nowPlayingState.value.songEntity?.videoId ?: return@launch
-                dataStoreManager.saveRecentSong(videoId, player.contentPosition)
-            }
+            val videoId = nowPlayingState.value.songEntity?.videoId ?: return@launch
+            dataStoreManager.saveRecentSong(videoId, player.contentPosition)
         }
     }
 
@@ -2277,65 +2276,82 @@ class JvmMediaPlayerHandlerImpl(
     }
 
     override fun mayBeRestoreQueue() {
-        coroutineScope.launch {
-            if (dataStoreManager.saveRecentSongAndQueue.first() == TRUE) {
-                val currentPlayingTrack = songRepository.getSongById(dataStoreManager.recentMediaId.first()).lastOrNull()?.toTrack()
-                if (currentPlayingTrack != null) {
-                    // Snapshot the position before touching the player: loading the queue fires
-                    // onMediaItemTransition -> mayBeSaveRecentSong, which rewrites the stored
-                    // position before the seek below would otherwise read it.
-                    val savedPosition = dataStoreManager.recentPosition.first().toLongOrNull() ?: 0L
-                    val savedQueueEntity =
-                        songRepository
-                            .getSavedQueue()
-                            .singleOrNull()
-                            ?.firstOrNull()
-                    val savedTracks =
-                        savedQueueEntity
-                            ?.listTrack
-                            .orEmpty()
-                    // The saved queue may not contain the saved track (e.g. persisted while the
-                    // queue was being rebuilt). Put the track at the front then: updateCatalog
-                    // skips listTracks[index] as "already in the player", so index must point at
-                    // the playing track or the UI queue and the player playlist end up shifted
-                    // against each other.
-                    var index = savedTracks.indexOfFirst { it.videoId == currentPlayingTrack.videoId }
-                    val listTracks =
-                        if (index == -1) {
-                            index = 0
-                            (listOf(currentPlayingTrack) + savedTracks).toCollection(arrayListOf())
-                        } else {
-                            savedTracks.toCollection(arrayListOf())
-                        }
-                    setQueueData(
-                        QueueData.Data(
-                            listTracks = listTracks,
-                            firstPlayedTrack = currentPlayingTrack,
-                            playlistId = LOCAL_PLAYLIST_ID_SAVED_QUEUE,
-                            playlistName = dataStoreManager.playlistFromSaved.first(),
-                            playlistType =
-                                runCatching {
-                                    savedQueueEntity?.playlistType?.let {
-                                        PlaylistType.valueOf(it)
-                                    }
-                                }.getOrNull() ?: PlaylistType.PLAYLIST,
-                            continuation = null,
-                        ),
-                    )
-                    addMediaItem(currentPlayingTrack.toGenericMediaItem(), playWhenReady = false)
-                    loadPlaylistOrAlbum(index = index)
-                    loadJob?.join()
-                    resetCrossfade()
-                    player.seekTo(index, savedPosition)
-                    // Announce the restored position once. Nothing plays after a restore
-                    // (playWhenReady = false above), and startProgressUpdate only runs while
-                    // isPlaying — so no state is ever published and the UI sits at 0:00 on a
-                    // queue the user left half-finished, until they press play.
-                    _simpleMediaState.value = SimpleMediaState.Progress(savedPosition)
-                }
-            }
-        }
+        coroutineScope.launch { restoreSavedQueue(playWhenReady = false) }
     }
+
+    override suspend fun restoreQueueAndPlay(): Boolean = restoreSavedQueue(playWhenReady = true)
+
+    /**
+     * Loads the persisted queue back into the player.
+     *
+     * [playWhenReady] separates startup restore (prime the player only) from playback
+     * resumption - a `play` from MPRIS, SMTC or NowPlayingCenter while nothing is loaded -
+     * which has to end up playing. Serialized so the two callers cannot load the queue twice;
+     * see the Android handler for why resumption starts the track before the queue behind it.
+     */
+    private suspend fun restoreSavedQueue(playWhenReady: Boolean): Boolean =
+        restoreQueueMutex.withLock {
+            if (player.mediaItemCount > 0) {
+                // Already restored, or the app was running all along.
+                if (playWhenReady) player.play()
+                return@withLock true
+            }
+            val currentPlayingTrack =
+                songRepository
+                    .getSongById(dataStoreManager.recentMediaId.first())
+                    .lastOrNull()
+                    ?.toTrack() ?: return@withLock false
+            // Snapshot the position before touching the player: loading the queue fires
+            // onMediaItemTransition -> mayBeSaveRecentSong, which rewrites the stored
+            // position before the seek below would otherwise read it.
+            val savedPosition = dataStoreManager.recentPosition.first().toLongOrNull() ?: 0L
+            val savedQueueEntity =
+                songRepository
+                    .getSavedQueue()
+                    .singleOrNull()
+                    ?.firstOrNull()
+            val savedTracks = savedQueueEntity?.listTrack.orEmpty()
+            // The saved queue may not contain the saved track (e.g. persisted while the
+            // queue was being rebuilt). Put the track at the front then: updateCatalog
+            // skips listTracks[index] as "already in the player", so index must point at
+            // the playing track or the UI queue and the player playlist end up shifted
+            // against each other.
+            var index = savedTracks.indexOfFirst { it.videoId == currentPlayingTrack.videoId }
+            val listTracks =
+                if (index == -1) {
+                    index = 0
+                    (listOf(currentPlayingTrack) + savedTracks).toCollection(arrayListOf())
+                } else {
+                    savedTracks.toCollection(arrayListOf())
+                }
+            setQueueData(
+                QueueData.Data(
+                    listTracks = listTracks,
+                    firstPlayedTrack = currentPlayingTrack,
+                    playlistId = LOCAL_PLAYLIST_ID_SAVED_QUEUE,
+                    playlistName = dataStoreManager.playlistFromSaved.first(),
+                    playlistType =
+                        runCatching {
+                            savedQueueEntity?.playlistType?.let { PlaylistType.valueOf(it) }
+                        }.getOrNull() ?: PlaylistType.PLAYLIST,
+                    continuation = null,
+                ),
+            )
+            // playWhenReady is the whole difference: the track starts loading (and so reaches
+            // BUFFERING) right here, before the queue behind it, and the seek below then lands
+            // it on the saved index and position.
+            addMediaItem(currentPlayingTrack.toGenericMediaItem(), playWhenReady = playWhenReady)
+            loadPlaylistOrAlbum(index = index)
+            loadJob?.join()
+            resetCrossfade()
+            player.seekTo(index, savedPosition)
+            // Announce the restored position once. Nothing plays after a restore
+            // (playWhenReady = false above), and startProgressUpdate only runs while
+            // isPlaying — so no state is ever published and the UI sits at 0:00 on a
+            // queue the user left half-finished, until they press play.
+            _simpleMediaState.value = SimpleMediaState.Progress(savedPosition)
+            true
+        }
 
     override fun shouldReleaseOnTaskRemoved() =
         runBlocking {
@@ -2476,6 +2492,15 @@ class JvmMediaPlayerHandlerImpl(
         }
         updateNextPreviousTrackAvailability()
         updateMacOSPlaybackState(isPlaying)
+    }
+
+    override fun onSeeked(positionMs: Long) {
+        // Paused, the progress ticker is stopped, so nothing else tells the UI the position moved:
+        // every seek bar, clock and lyric line would wait for play to catch up (#2480). Unlike the
+        // Android twin there is no Discord refresh here: each seek branch already does it.
+        if (!player.isPlaying) {
+            _simpleMediaState.value = SimpleMediaState.Progress(positionMs)
+        }
     }
 
     override fun onMediaItemTransition(

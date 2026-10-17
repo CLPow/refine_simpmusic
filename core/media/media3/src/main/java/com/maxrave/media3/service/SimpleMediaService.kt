@@ -32,7 +32,13 @@ import com.maxrave.logger.Logger
 import com.maxrave.media3.R
 import com.maxrave.media3.extension.toCommandButton
 import com.maxrave.media3.utils.CoilBitmapLoader
+import com.maxrave.media3.utils.sizeLimitedForSession
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -56,6 +62,9 @@ internal class SimpleMediaService :
     private val dataStoreManager: DataStoreManager by inject<DataStoreManager>()
 
     private val binder = MusicBinder()
+
+    /** Work started by the service itself (off the creation path); cancelled in [onDestroy]. */
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var playerNotificationManager: PlayerNotificationManager? = null
 
@@ -124,7 +133,11 @@ internal class SimpleMediaService :
         val sessionToken = SessionToken(this, ComponentName(this, SimpleMediaService::class.java))
         selfControllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
 
-        if (runBlocking { dataStoreManager.keepServiceAlive.first() == DataStoreManager.TRUE }) {
+        // Read off the service-creation path. When a media button starts this service the
+        // system is already counting down to the foreground-start deadline, and a blocking
+        // DataStore read on the main thread spends part of that budget on disk I/O.
+        coroutineScope.launch {
+            if (dataStoreManager.keepServiceAlive.first() != DataStoreManager.TRUE) return@launch
             val notificationManager = getSystemService<NotificationManager>()
             notificationManager?.run {
                 createNotificationChannel(
@@ -141,7 +154,7 @@ internal class SimpleMediaService :
             }
             playerNotificationManager =
                 PlayerNotificationManager
-                    .Builder(this, 2026, "media_playback_channel")
+                    .Builder(this@SimpleMediaService, 2026, "media_playback_channel")
                     .setNotificationListener(
                         object : PlayerNotificationManager.NotificationListener {
                             // Posted on every metadata, play/pause and artwork change. It used to
@@ -243,6 +256,7 @@ internal class SimpleMediaService :
     @UnstableApi
     override fun onDestroy() {
         Logger.w("Service", "Simple Media Service Destroyed")
+        coroutineScope.cancel()
         val killOnExit = simpleMediaServiceHandler.shouldReleaseOnTaskRemoved()
         releaseServiceResources()
         super.onDestroy()
@@ -277,7 +291,22 @@ internal class SimpleMediaService :
                 player,
                 callback,
             ).setId(this.javaClass.name)
-            .setBitmapLoader(coilBitmapLoader)
+            // Capped at the platform's own artwork limit so the framework never rescales the shared
+            // bitmap in setMetadata — see sizeLimitedForSession (#2500). Falls back to the plain
+            // loader if the limit cannot be read.
+            .setBitmapLoader(sizeLimitedForSession(service, coilBitmapLoader))
+            // Tapping the media notification opens whatever the session activity points at, and the
+            // only other place that sets it is MainActivity's bind. A service started without that
+            // bind — a headset/Bluetooth play, Android Auto, a widget, a restart after the process
+            // was killed — would otherwise post a notification that opens nothing. The launcher
+            // activity is resolved at runtime, so this module never has to name MainActivity.
+            .apply {
+                service.packageManager.getLaunchIntentForPackage(service.packageName)?.let { launch ->
+                    setSessionActivity(
+                        PendingIntent.getActivity(service, 0, launch, PendingIntent.FLAG_IMMUTABLE),
+                    )
+                }
+            }
             .build()
 
     private fun isAppInForeground(): Boolean {

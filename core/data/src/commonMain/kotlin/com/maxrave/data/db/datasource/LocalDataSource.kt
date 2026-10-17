@@ -486,7 +486,15 @@ internal class LocalDataSource(
 
     suspend fun insertSetVideoId(setVideoIdEntity: SetVideoIdEntity) = databaseDao.insertSetVideoId(setVideoIdEntity)
 
-    suspend fun getSetVideoId(videoId: String) = databaseDao.getSetVideoId(videoId)
+    suspend fun getSetVideoId(
+        videoId: String,
+        youtubePlaylistIds: List<String>,
+    ) = databaseDao.getSetVideoId(videoId, youtubePlaylistIds)
+
+    suspend fun deleteSetVideoId(
+        videoId: String,
+        youtubePlaylistId: String,
+    ) = databaseDao.deleteSetVideoId(videoId, youtubePlaylistId)
 
     suspend fun insertPairSongLocalPlaylist(pairSongLocalPlaylist: PairSongLocalPlaylist) =
         databaseDao.insertPairSongLocalPlaylist(pairSongLocalPlaylist)
@@ -567,6 +575,12 @@ internal class LocalDataSource(
     }
 
     suspend fun getNewestPlaylistPairSong(playlistId: Long) = databaseDao.getNewestPlaylistPairSong(playlistId)
+
+    suspend fun moveSongInPlaylist(
+        playlistId: Long,
+        fromIndex: Int,
+        toIndex: Int,
+    ) = databaseDao.moveSongInPlaylist(playlistId, fromIndex, toIndex)
 
     suspend fun editPositionOfSongInPlaylist(
         playlistId: Long,

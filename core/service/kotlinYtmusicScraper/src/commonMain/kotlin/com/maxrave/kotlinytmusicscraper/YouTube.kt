@@ -7,6 +7,8 @@ import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.kotlinytmusicscraper.YouTube.Companion.DEFAULT_VISITOR_DATA
 import com.maxrave.kotlinytmusicscraper.extension.toListFormat
 import com.maxrave.kotlinytmusicscraper.extractor.ExtractSource
+import com.maxrave.kotlinytmusicscraper.extractor.contentLengthOf
+import com.maxrave.kotlinytmusicscraper.extractor.orderByAudioTrack
 import com.maxrave.kotlinytmusicscraper.models.AccountInfo
 import com.maxrave.kotlinytmusicscraper.models.AlbumItem
 import com.maxrave.kotlinytmusicscraper.models.Artist
@@ -75,6 +77,7 @@ import com.maxrave.kotlinytmusicscraper.pages.RelatedPage
 import com.maxrave.kotlinytmusicscraper.pages.SearchPage
 import com.maxrave.kotlinytmusicscraper.pages.SearchResult
 import com.maxrave.kotlinytmusicscraper.pages.SearchSuggestionPage
+import com.maxrave.kotlinytmusicscraper.parser.fromPlaylistContinuationToTrackWithSetVideoId
 import com.maxrave.kotlinytmusicscraper.parser.fromPlaylistContinuationToTracks
 import com.maxrave.kotlinytmusicscraper.parser.fromPlaylistToTrack
 import com.maxrave.kotlinytmusicscraper.parser.fromPlaylistToTrackWithSetVideoId
@@ -186,6 +189,12 @@ class YouTube {
         get() = ytMusic.pageId
         set(value) {
             ytMusic.pageId = value
+        }
+
+    var authUser: Int
+        get() = ytMusic.authUser
+        set(value) {
+            ytMusic.authUser = value
         }
 
     /**
@@ -701,19 +710,28 @@ class YouTube {
                 response.fromPlaylistToTrackWithSetVideoId(),
             )
             var continuation = response.getPlaylistContinuation()
-            while (continuation != null) {
+            // A token seen twice would loop forever.
+            val seenContinuations = mutableSetOf<String>()
+            while (continuation != null && seenContinuations.add(continuation)) {
+                // A page that fails ends the walk but keeps the pages already read, rather than
+                // failing the whole result.
                 val continuationResponse =
-                    ytMusic
-                        .browse(
-                            client = WEB_REMIX,
-                            setLogin = true,
-                            params = null,
-                            continuation = continuation,
-                        ).body<BrowseResponse>()
+                    runCatching {
+                        ytMusic
+                            .browse(
+                                client = WEB_REMIX,
+                                setLogin = true,
+                                params = null,
+                                continuation = continuation,
+                            ).body<BrowseResponse>()
+                    }.getOrNull() ?: break
+                // Continuation pages carry their rows in a different shape from the first page:
+                // read with the first-page parser they yielded nothing, so every track past the
+                // first page (100) was missing.
                 listPair.addAll(
-                    continuationResponse.fromPlaylistToTrackWithSetVideoId(),
+                    continuationResponse.fromPlaylistContinuationToTrackWithSetVideoId(),
                 )
-                continuation = continuationResponse.getContinuePlaylistContinuation()
+                continuation = continuationResponse.getPlaylistContinuation()
             }
 
             return@runCatching listPair
@@ -1240,6 +1258,7 @@ class YouTube {
         videoId: String,
         tempRes: PlayerResponse,
         extracted: (suspend () -> List<Pair<Int, String>>)? = null,
+        preferredAudioLanguage: String? = null,
     ): PlayerResponse? {
         val listUrlSig = mutableListOf<String>()
         var decodedSigResponse: PlayerResponse?
@@ -1250,7 +1269,7 @@ class YouTube {
         } else {
             sigResponse = tempRes
         }
-        val streamsList = extracted?.invoke() ?: ytMusic.getNewPipePlayer(videoId)
+        val streamsList = (extracted?.invoke() ?: ytMusic.getNewPipePlayer(videoId)).orderByAudioTrack(preferredAudioLanguage)
         if (streamsList.isEmpty()) return null
 
         decodedSigResponse =
@@ -1259,14 +1278,18 @@ class YouTube {
                     sigResponse.streamingData?.copy(
                         formats =
                             sigResponse.streamingData.formats?.map { format ->
+                                val url = streamsList.find { it.first == format.itag }?.second
                                 format.copy(
-                                    url = streamsList.find { it.first == format.itag }?.second,
+                                    url = url,
+                                    contentLength = url?.let(::contentLengthOf) ?: format.contentLength,
                                 )
                             },
                         adaptiveFormats =
                             sigResponse.streamingData.adaptiveFormats.map { adaptiveFormats ->
+                                val url = streamsList.find { it.first == adaptiveFormats.itag }?.second
                                 adaptiveFormats.copy(
-                                    url = streamsList.find { it.first == adaptiveFormats.itag }?.second,
+                                    url = url,
+                                    contentLength = url?.let(::contentLengthOf) ?: adaptiveFormats.contentLength,
                                 )
                             },
                         hlsManifestUrl = streamsList.firstOrNull { it.first == 96 }?.second,
@@ -1339,6 +1362,7 @@ class YouTube {
         videoId: String,
         playlistId: String? = null,
         noLogIn: Boolean = false,
+        preferredAudioLanguage: String? = null,
     ): Result<Triple<String?, PlayerResponse, MediaType>> =
         runCatching {
             val cpn =
@@ -1434,7 +1458,7 @@ class YouTube {
 
             val response =
                 try {
-                    newPipePlayer(videoId, tempRes) { extraction.await() }
+                    newPipePlayer(videoId, tempRes, { extraction.await() }, preferredAudioLanguage)
                 } finally {
                     extraction.cancel()
                 }
@@ -1754,7 +1778,7 @@ class YouTube {
                 .jsonArray[0]
                 .jsonArray[2]
                 .jsonArray
-                .first { (it as? JsonPrimitive)?.content?.startsWith(VISITOR_DATA_PREFIX) == true }
+                .first { (it as? JsonPrimitive)?.content?.let(VISITOR_DATA_REGEX::containsMatchIn) == true }
                 .jsonPrimitive.content
         } catch (e: Exception) {
             e.printStackTrace()
@@ -2143,7 +2167,11 @@ class YouTube {
     companion object {
         const val MAX_GET_QUEUE_SIZE = 1000
 
-        private const val VISITOR_DATA_PREFIX = "Cgt"
+        // Visitor data is a base64 protobuf: bytes 0x0a 0x0b (field 1, length 11) then an 11-char
+        // id. "Cg" is fixed; the third char encodes the top 2 bits of the id's first byte, so it is
+        // "s" for a digit or "-" and "t" for a letter or "_" ("u"/"v" only for a non-ASCII byte).
+        // Matching "Cgt" alone missed every id starting with a digit.
+        private val VISITOR_DATA_REGEX = Regex("^Cg[stuv][A-Za-z0-9_-]{15,}")
 
         const val DEFAULT_VISITOR_DATA = "CgtsZG1ySnZiQWtSbyiMjuGSBg%3D%3D"
 
