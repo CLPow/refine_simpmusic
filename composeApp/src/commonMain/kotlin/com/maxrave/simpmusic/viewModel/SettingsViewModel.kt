@@ -1589,6 +1589,7 @@ class SettingsViewModel(
                                                         ?.url ?: "",
                                                 cache = accountRepository.getYouTubeCookie(),
                                                 pageId = it.first().pageId,
+                                                authUser = it.first().authUser,
                                                 isUsed = true,
                                             ),
                                         ).singleOrNull()
@@ -1614,6 +1615,7 @@ class SettingsViewModel(
     ): Boolean {
         val currentCookie = dataStoreManager.cookie.first()
         val currentPageId = dataStoreManager.pageId.first()
+        val currentAuthUser = dataStoreManager.authUser.first()
         val currentLoggedIn = dataStoreManager.loggedIn.first() == DataStoreManager.TRUE
         try {
             runBlocking {
@@ -1668,6 +1670,7 @@ class SettingsViewModel(
                                     isUsed = index == 0,
                                     netscapeCookie = cookieItem,
                                     pageId = account.pageId,
+                                    authUser = account.authUser,
                                 ),
                             ).firstOrNull()
                             ?.let {
@@ -1675,7 +1678,7 @@ class SettingsViewModel(
                             }
                     }
                     dataStoreManager.setLoggedIn(true)
-                    dataStoreManager.setCookie(cookie, accountInfoList.first().pageId)
+                    dataStoreManager.setCookie(cookie, accountInfoList.first().pageId, accountInfoList.first().authUser)
                     getAllGoogleAccount()
                     getLoggedIn()
                     // Deliberately NOT importing followed artists here.
@@ -1690,7 +1693,7 @@ class SettingsViewModel(
                 } ?: run {
                 Logger.w("getAllGoogleAccount", "addAccount: Account info is null")
                 runBlocking {
-                    dataStoreManager.setCookie(currentCookie, currentPageId)
+                    dataStoreManager.setCookie(currentCookie, currentPageId, currentAuthUser)
                     dataStoreManager.setLoggedIn(currentLoggedIn)
                 }
                 false
@@ -1699,7 +1702,7 @@ class SettingsViewModel(
             e.printStackTrace()
             Logger.e("getAllGoogleAccount", "addAccount: ${e.message}")
             runBlocking {
-                dataStoreManager.setCookie(currentCookie, currentPageId)
+                dataStoreManager.setCookie(currentCookie, currentPageId, currentAuthUser)
                 dataStoreManager.setLoggedIn(currentLoggedIn)
             }
             return false
@@ -1728,7 +1731,7 @@ class SettingsViewModel(
                 acc.netscapeCookie?.let { commonRepository.writeTextToFile(it, (getFileDir() + "/ytdlp-cookie.txt")) }.let {
                     Logger.d("getAllGoogleAccount", "addAccount: write cookie file: $it")
                 }
-                dataStoreManager.setCookie(acc.cache ?: "", acc.pageId)
+                dataStoreManager.setCookie(acc.cache ?: "", acc.pageId, acc.authUser)
                 dataStoreManager.setLoggedIn(true)
                 delay(500)
                 getAllGoogleAccount()
