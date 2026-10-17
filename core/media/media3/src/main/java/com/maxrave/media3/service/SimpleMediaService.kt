@@ -33,7 +33,12 @@ import com.maxrave.media3.R
 import com.maxrave.media3.extension.toCommandButton
 import com.maxrave.media3.utils.CoilBitmapLoader
 import com.maxrave.media3.utils.sizeLimitedForSession
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -57,6 +62,9 @@ internal class SimpleMediaService :
     private val dataStoreManager: DataStoreManager by inject<DataStoreManager>()
 
     private val binder = MusicBinder()
+
+    /** Work started by the service itself (off the creation path); cancelled in [onDestroy]. */
+    private val coroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private var playerNotificationManager: PlayerNotificationManager? = null
 
@@ -248,6 +256,7 @@ internal class SimpleMediaService :
     @UnstableApi
     override fun onDestroy() {
         Logger.w("Service", "Simple Media Service Destroyed")
+        coroutineScope.cancel()
         val killOnExit = simpleMediaServiceHandler.shouldReleaseOnTaskRemoved()
         releaseServiceResources()
         super.onDestroy()
