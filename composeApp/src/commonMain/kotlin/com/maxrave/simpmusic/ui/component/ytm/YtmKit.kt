@@ -1,5 +1,7 @@
 package com.maxrave.simpmusic.ui.component.ytm
 
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.HorizontalPager
 import kotlinx.coroutines.launch
 import com.maxrave.simpmusic.ui.icon.ArrowForwardIos
 import androidx.compose.foundation.layout.widthIn
@@ -496,10 +498,13 @@ fun YtmShelf(
     val wideLayout = LocalWideLayout.current
     val rowState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    val cardRow = !item.isSpeedDial && !item.isListShelf
+    // Speed dial is the phone app's; the web (and so the desktop layout) shows the same shelf as
+    // YouTube sends it, "Listen again", a row of cards.
+    val speedDial = item.isSpeedDial && !wideLayout
+    val cardRow = !speedDial && !item.isListShelf
     YtmShelfHeader(
         // The phone app's name for the account's own shelf; the web feed sends "Listen again".
-        title = if (item.isSpeedDial) "Speed dial" else item.title,
+        title = if (speedDial) "Speed dial" else item.title,
         strapline = item.subtitle,
         thumbnail = item.thumbnail?.lastOrNull()?.url,
         roundThumbnail = channelId != null,
@@ -536,7 +541,7 @@ fun YtmShelf(
             },
     )
     when {
-        item.isSpeedDial ->
+        speedDial ->
             YtmSpeedDial(
                 contents = contents,
                 onClick = { openContent(it, navController, sharedViewModel) },
@@ -574,9 +579,11 @@ fun YtmShelf(
 }
 
 /**
- * Speed dial, the account's own shelf at the top of YouTube Music's Home: tiles three to a row,
- * three rows deep, paging sideways a screen at a time. Each tile is the cover with its name over
- * the bottom of it; artists are round.
+ * Speed dial, the account's own shelf at the top of YouTube Music's Home, as the phone app draws
+ * it: pages of exactly three by three square tiles, swiped a page at a time, with page dots
+ * under them. Every tile is the picture with its name over the bottom; an artist's picture is a
+ * circle filling the tile, and anything that opens a page (artist, playlist, mix, album) has a
+ * chevron after its name. Songs play and have none. A wide window fits more columns per page.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -586,28 +593,45 @@ fun YtmSpeedDial(
     onLongClick: (Content) -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val gap = 8.dp
-        // Three to a row on a phone; a wide window fits more of about the same size.
+        val gap = 6.dp
         val columns = maxOf(3, ((maxWidth - 32.dp + gap) / (168.dp + gap)).toInt())
         val tile = (maxWidth - 32.dp - gap * (columns - 1)) / columns
-        val rows =
-            when {
-                contents.size >= 7 -> 3
-                contents.size >= 4 -> 2
-                else -> 1
+        val perPage = columns * 3
+        val pages = remember(contents, perPage) { contents.chunked(perPage) }
+        val pagerState = rememberPagerState { pages.size }
+        Column(Modifier.fillMaxWidth()) {
+            HorizontalPager(
+                state = pagerState,
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                pageSpacing = gap,
+                verticalAlignment = Alignment.Top,
+                modifier = Modifier.fillMaxWidth(),
+            ) { page ->
+                Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+                    pages[page].chunked(columns).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                            row.forEach { content ->
+                                SpeedDialTile(content, tile, { onClick(content) }, { onLongClick(content) })
+                            }
+                        }
+                    }
+                }
             }
-        val state = rememberLazyGridState()
-        LazyHorizontalGrid(
-            rows = GridCells.Fixed(rows),
-            state = state,
-            flingBehavior = rememberSnapFlingBehavior(state),
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(gap),
-            verticalArrangement = Arrangement.spacedBy(gap),
-            modifier = Modifier.fillMaxWidth().height(tile * rows + gap * (rows - 1)),
-        ) {
-            items(contents) { content ->
-                SpeedDialTile(content, tile, { onClick(content) }, { onLongClick(content) })
+            if (pages.size > 1) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 12.dp),
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    repeat(pages.size) { index ->
+                        Box(
+                            Modifier
+                                .padding(horizontal = 3.dp)
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(if (index == pagerState.currentPage) Color.White else Color.White.copy(alpha = 0.3f)),
+                        )
+                    }
+                }
             }
         }
     }
@@ -622,6 +646,8 @@ private fun SpeedDialTile(
     onLongClick: () -> Unit,
 ) {
     val artist = content.isArtist()
+    // Anything that is not a song opens a page, and says so with a chevron.
+    val opensPage = content.videoId.isNullOrEmpty()
     Box(
         Modifier
             .size(side)
@@ -629,33 +655,38 @@ private fun SpeedDialTile(
             .background(Ytm.Surface)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
-        if (artist) {
-            Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.TopCenter) {
-                Thumb(content.thumbnails.lastOrNull()?.url, side * 0.66f, CircleShape)
-            }
-        } else {
-            Thumb(content.thumbnails.lastOrNull()?.url, side, RoundedCornerShape(8.dp))
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(side / 2)
-                    .align(Alignment.BottomCenter)
-                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f)))),
-            )
-        }
-        Text(
-            content.title,
-            style = typo().bodySmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold, lineHeight = 14.sp),
-            color = Color.White,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = if (artist) TextAlign.Center else TextAlign.Start,
-            modifier =
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
+        Thumb(content.thumbnails.lastOrNull()?.url, side, if (artist) CircleShape else RoundedCornerShape(8.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(side * 0.4f)
+                .align(Alignment.BottomCenter)
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.7f)))),
         )
+        Row(
+            Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .padding(start = 8.dp, end = 4.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                content.title,
+                style = typo().bodyMedium.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium, lineHeight = 16.sp),
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false),
+            )
+            if (opensPage) {
+                Icon(
+                    SimpIcons.ArrowForwardIos,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.padding(start = 4.dp).size(12.dp),
+                )
+            }
+        }
     }
 }
 

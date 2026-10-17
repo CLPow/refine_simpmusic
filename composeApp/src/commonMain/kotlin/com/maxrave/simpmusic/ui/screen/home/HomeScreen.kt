@@ -173,7 +173,18 @@ fun HomeScreen(
         )
     }
 
-    Column(Modifier.fillMaxSize().background(Ytm.Background)) {
+    // YouTube Music's Home sits on a dark slate wash that fades into the page from the top.
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Ytm.Background)
+            .background(
+                androidx.compose.ui.graphics.Brush.verticalGradient(
+                    0f to Color(0xFF1C2B36),
+                    0.45f to Ytm.Background,
+                ),
+            ),
+    ) {
         YtmTopBar(navController = navController)
         PullToRefreshBox(
             isRefreshing = refreshing,
