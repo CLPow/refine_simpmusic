@@ -37,8 +37,8 @@ object WindowsProtocolRegistrar {
             return
         }
 
-        register(SCHEME, "URL:SimpMusic Protocol", exePath)
-        register(LASTFM_SCHEME, "URL:SimpMusic Last.fm Callback", exePath)
+        register(SCHEME, "URL:Refine Music Protocol", exePath)
+        register(LASTFM_SCHEME, "URL:Refine Music Last.fm Callback", exePath)
     }
 
     private fun register(
@@ -105,10 +105,12 @@ object WindowsProtocolRegistrar {
         }
 
         if (appDir != null) {
-            val exeFile = java.io.File(appDir, "SimpMusic.exe")
-            if (exeFile.exists()) {
-                return exeFile.absolutePath
-            }
+            // The launcher was renamed RefineMusic.exe; looking only for SimpMusic.exe meant the
+            // link handlers were never registered on an installed build.
+            listOf("RefineMusic.exe", "SimpMusic.exe")
+                .map { java.io.File(appDir, it) }
+                .firstOrNull { it.exists() }
+                ?.let { return it.absolutePath }
         }
 
         // Fallback: running from IDE/dev environment, use current process

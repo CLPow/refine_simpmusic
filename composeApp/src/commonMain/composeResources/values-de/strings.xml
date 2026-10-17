@@ -242,7 +242,7 @@
     <string name="saved_to_local_playlist">In lokaler Playlist gespeichert</string>
     <string name="if_you_want_to_unsync_this_playlist_please_go_to_local_playlist">Wenn du die Synchronisierung dieser Playlist aufheben möchtest, gehe bitte zur lokalen Playlist</string>
     <string name="log_in_to_get_YouTube_playlist">Melde dich an, um die YouTube-Playlist zu erhalten</string>
-    <string name="sync_playlist_warning">SimpMusic erstellt automatisch eine YouTube Music-Playlist. Bist du dir sicher?</string>
+    <string name="sync_playlist_warning">Refine Music erstellt automatisch eine YouTube Music-Playlist. Bist du dir sicher?</string>
     <string name="syncing">Synchronisierung</string>
     <string name="unsync_playlist_warning">"Synchronisierung dieser Playlist aufheben? Diese Playlist wird nicht aus YouTube Music entfernt"</string>
     <string name="unsyncing">Synchronisierung wird aufgehoben</string>
@@ -259,7 +259,7 @@
     <string name="email">E-Mail</string>
     <string name="password">Passwort</string>
     <string name="please_enter_your_email_and_password">Bitte gebe deine E-Mail-Adresse und dein Passwort ein</string>
-    <string name="translation_language_message">Gebe den Sprachcode ein (z. B. de) (2 Buchstaben). Wenn du die Sprache SimpMusic nutzen möchtest, lasse dieses Feld leer.</string>
+    <string name="translation_language_message">Gebe den Sprachcode ein (z. B. de) (2 Buchstaben). Wenn du die Sprache Refine Music nutzen möchtest, lasse dieses Feld leer.</string>
     <string name="invalid_language_code">Ungültiger Sprachcode</string>
     <string name="lyrics_provider_youtube">Songtexte von YouTube</string>
     <string name="lyrics_provider_betterlyrics">Liedtexte zur Verfügung gestellt von BetterLyrics</string>
@@ -376,7 +376,7 @@
     <string name="loading">Wird geladen</string>
     <string name="updating">Updating</string>
     <string name="go_to_log_in_page">Zur Anmeldeseite</string>
-    <string name="log_in_warning">YouTube Music erfordert jetzt das Einloggen um Musik zu streamen, Piped Instance kann manchmal nicht funktionieren. Du solltest dich bei YouTube anmelden, um ein besseres Erlebnis mit SimpMusic zu bekommen.</string>
+    <string name="log_in_warning">YouTube Music erfordert jetzt das Einloggen um Musik zu streamen, Piped Instance kann manchmal nicht funktionieren. Du solltest dich bei YouTube anmelden, um ein besseres Erlebnis mit Refine Music zu bekommen.</string>
     <string name="spotify_canvas_cache">Spotify Canvas-Cache</string>
     <string name="clear_canvas_cache">Leere Canvas-Cache</string>
     <string name="proxy">Proxy</string>
@@ -417,7 +417,7 @@
     <string name="later">später</string>
     <string name="give_a_star">Gebe einen Stern</string>
     <string name="enjoying_simpmusic">Spaß an SimpMusic</string>
-    <string name="if_you_enjoy_using_simpmusic_star_simpmusic_on_github_or_leave_a_review_on">Wenn dir SimpMusic gefällt, gib SimpMusic einen Stern auf Github oder lasse eine Rezension da</string>
+    <string name="if_you_enjoy_using_simpmusic_star_simpmusic_on_github_or_leave_a_review_on">Wenn dir Refine Music gefällt, gib Refine Music einen Stern auf Github oder lasse eine Rezension da</string>
     <string name="if_you_love_my_work_consider">"Wenn Sie meine Arbeit lieben, denken Sie darüber nach "</string>
     <string name="buying_me_a_coffee">Mir einen Kaffee zu kaufen.</string>
     <string name="fade_audio_effect">Fade Audioeffekt</string>
@@ -516,8 +516,8 @@
     <string name="intro_login_to_lastfm">Melde dich an, um zu scrobbeln, was du hörst</string>
     <string name="enable_scrobbling">Scrobbling aktivieren</string>
     <string name="scrobbling_info">Sende das, was du dir Anhörst, an dein Last.fm Profil</string>
-    <string name="lastfm_login_step_1">Öffnen die Last.fm Seite und gewähre SimpMusic Zugriff auf dein Konto.</string>
-    <string name="lastfm_login_step_2">SimpMusic öffnet sich wieder eigenständig, sobald Du den Zugriff gewährt hast.</string>
+    <string name="lastfm_login_step_1">Öffnen die Last.fm Seite und gewähre Refine Music Zugriff auf dein Konto.</string>
+    <string name="lastfm_login_step_2">Refine Music öffnet sich wieder eigenständig, sobald Du den Zugriff gewährt hast.</string>
     <string name="lastfm_open_authorize_page">Last.fm öffnen</string>
     <string name="lastfm_login_failed">Anmeldung bei Last.fm fehlgeschlagen. Bitte versuche es erneut.</string>
     <string name="lastfm_paste_callback_title">Ist nicht automatisch zurückgekehrt?</string>
@@ -553,7 +553,7 @@
     <string name="downvote">Negativ bewerten</string>
     <string name="vote_submitted">Danke für die Abstimmung über diesen Songtext!</string>
     <string name="vote_error">Fehler beim Senden</string>
-    <string name="open_app">SimpMusic öffnen</string>
+    <string name="open_app">Refine Music öffnen</string>
     <string name="close_miniplayer">Mini-Player schließen</string>
     <string name="open_miniplayer">Mini-Player öffnen</string>
     <string name="quit_app">App beenden</string>
