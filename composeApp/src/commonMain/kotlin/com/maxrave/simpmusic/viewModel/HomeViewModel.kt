@@ -1,5 +1,6 @@
 package com.maxrave.simpmusic.viewModel
 
+import com.maxrave.domain.data.model.home.HomeChip
 import androidx.lifecycle.viewModelScope
 import com.maxrave.common.SELECTED_LANGUAGE
 import com.maxrave.common.SUPPORTED_LANGUAGE
@@ -110,6 +111,9 @@ class HomeViewModel(
     private var _params: MutableStateFlow<String?> = MutableStateFlow(null)
     val params: StateFlow<String?> = _params
 
+    /** The chips YouTube sent with the feed, in its order (they differ by account and region). */
+    val homeChips: StateFlow<List<HomeChip>> = homeRepository.homeChips
+
     // For showing alert that should log in to YouTube
     private val _showLogInAlert: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val showLogInAlert: StateFlow<Boolean> = _showLogInAlert
@@ -135,52 +139,37 @@ class HomeViewModel(
             regionCodeChart.value = dataStoreManager.chartKey.first()
             language = dataStoreManager.getString(SELECTED_LANGUAGE).first()
                 ?: SUPPORTED_LANGUAGE.codes.first()
-            //  refresh when region change
+            // One load per change of region, language, account or chip. These used to be five
+            // collectors, each starting (and cancelling) its own load at launch, one of them only
+            // after a fixed one-second wait whenever a cookie existed: every cold start paid it.
+            var lastCookie: String? = null
             val job1 =
                 launch {
-                    dataStoreManager.location.distinctUntilChanged().collect {
-                        regionCode = it
-                        getHomeItemList(params.value)
-                    }
-                }
-            //  refresh when language change
-            val job2 =
-                launch {
-                    dataStoreManager.language.distinctUntilChanged().collect {
-                        language = it
-                        getHomeItemList(params.value)
-                    }
-                }
-            val job3 =
-                launch {
-                    dataStoreManager.cookie.distinctUntilChanged().collect {
-                        getHomeItemList(params.value)
-                        _accountInfo.emit(
-                            Pair(
-                                dataStoreManager.getString("AccountName").first(),
-                                dataStoreManager.getString("AccountThumbUrl").first(),
-                            ),
-                        )
-                    }
-                }
-            val job4 =
-                launch {
-                    params.collectLatest {
-                        getHomeItemList(it)
-                    }
-                }
-            val job5 =
-                launch {
-                    dataStoreManager
-                        .cookie
-                        .distinctUntilChanged()
-                        .collectLatest {
-                            if (it.isNotEmpty()) {
-                                Logger.w(tag, "Cookie changed, refreshing home")
+                    combine(
+                        dataStoreManager.location.distinctUntilChanged(),
+                        dataStoreManager.language.distinctUntilChanged(),
+                        dataStoreManager.cookie.distinctUntilChanged(),
+                        params,
+                    ) { location, lang, cookie, chip -> Triple(location to lang, cookie, chip) }
+                        .collectLatest { (locale, cookie, chip) ->
+                            regionCode = locale.first
+                            language = locale.second
+                            val accountSwitched = lastCookie != null && lastCookie != cookie
+                            lastCookie = cookie
+                            if (accountSwitched) {
+                                // A sign-in or account switch: the client picks the new cookie up
+                                // from the same store, a moment after this flow sees it.
+                                Logger.w(tag, "Account changed, refreshing home")
                                 loading.value = true
-                                delay(1000) // To wait for the cookie to be saved properly
-                                getHomeItemList(params.value)
+                                delay(1000)
                             }
+                            getHomeItemList(chip)
+                            _accountInfo.emit(
+                                Pair(
+                                    dataStoreManager.getString("AccountName").first(),
+                                    dataStoreManager.getString("AccountThumbUrl").first(),
+                                ),
+                            )
                         }
                 }
             val job6 =
@@ -197,10 +186,6 @@ class HomeViewModel(
                     }
                 }
             job1.join()
-            job2.join()
-            job3.join()
-            job4.join()
-            job5.join()
             job6.join()
         }
     }

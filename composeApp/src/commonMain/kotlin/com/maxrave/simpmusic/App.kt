@@ -1,5 +1,8 @@
 package com.maxrave.simpmusic
 
+import com.maxrave.simpmusic.ui.component.ytm.LocalWideLayout
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.layout.padding
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -253,12 +256,13 @@ fun App(viewModel: SharedViewModel = koinInject()) {
     val isWide = windowSize.isWidthAtLeastBreakpoint(WIDTH_DP_MEDIUM_LOWER_BOUND) || getPlatform() == Platform.Desktop
 
     AppTheme(themeMode = DataStoreManager.THEME_MODE_YTM, liquidGlassEnabled = false) {
+      CompositionLocalProvider(LocalWideLayout provides isWide) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             bottomBar = {
                 if (isWide) {
                     AnimatedVisibility(isShowMiniPlayer, enter = slideInVertically { it }, exit = slideOutVertically { it }) {
-                        DesktopPlayerBar(onOpenPlayer = { isShowNowPlaylistScreen = true })
+                        DesktopPlayerBar(navController = navController, onOpenPlayer = { isShowNowPlaylistScreen = true })
                     }
                 } else {
                     AnimatedVisibility(isNavBarVisible, enter = fadeIn(), exit = fadeOut()) {
@@ -287,7 +291,9 @@ fun App(viewModel: SharedViewModel = koinInject()) {
                             viewModel.reloadDestination(klass)
                         }
                     }
-                    Box(Modifier.weight(1f).fillMaxSize()) {
+                    // Pages end above the bottom bar, mini player and desktop player bar: without
+                    // this the last row of every page sat underneath them and could not be read.
+                    Box(Modifier.weight(1f).fillMaxSize().padding(bottom = innerPadding.calculateBottomPadding())) {
                         AppNavigationGraph(
                             innerPadding = innerPadding,
                             navController = navController,
@@ -397,5 +403,6 @@ fun App(viewModel: SharedViewModel = koinInject()) {
                 }
             },
         )
+      }
     }
 }

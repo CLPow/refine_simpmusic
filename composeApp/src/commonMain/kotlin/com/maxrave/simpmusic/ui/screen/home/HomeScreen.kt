@@ -73,8 +73,11 @@ import simpmusic.composeapp.generated.resources.sad
 import simpmusic.composeapp.generated.resources.sleep
 import simpmusic.composeapp.generated.resources.workout
 
-/** YouTube Music's Home chips, each a filter of the same feed. Tapping the selected one clears it. */
-private val homeChips: List<Pair<StringResource, String>> =
+/**
+ * Chips shown until YouTube's own arrive with the first page. The feed's chips are what YouTube
+ * Music shows, in its order; these are only the stand-in for the first frame.
+ */
+private val fallbackChips: List<Pair<StringResource, String>> =
     listOf(
         Res.string.energize to HOME_PARAMS_ENERGIZE,
         Res.string.relax to HOME_PARAMS_RELAX,
@@ -89,8 +92,9 @@ private val homeChips: List<Pair<StringResource, String>> =
     )
 
 /**
- * YouTube Music's Home: the logo bar, the mood chips, then YouTube's own feed for the account,
- * shelf after shelf (Quick picks as its song grid, everything else as cards), loading more as it
+ * YouTube Music's Home: the logo bar, YouTube's chips, then YouTube's own feed for the account,
+ * shelf after shelf in the order it sent them (Speed dial as its grid of tiles, Quick picks as its
+ * song grid, video shelves as 16:9 cards, everything else as square cards), loading more as it
  * scrolls. The feed reloads when you come back to the app after a while, as YouTube Music's does,
  * so what you have been listening to shows up in it.
  */
@@ -108,6 +112,7 @@ fun HomeScreen(
     val failed by viewModel.recommendationsFailed.collectAsStateWithLifecycle()
     val params by viewModel.params.collectAsStateWithLifecycle()
     val homeListState by viewModel.homeListState.collectAsStateWithLifecycle()
+    val serverChips by viewModel.homeChips.collectAsStateWithLifecycle()
     val continuation by viewModel.continuation.collectAsStateWithLifecycle()
     val reloadDestination by sharedViewModel.reloadDestination.collectAsStateWithLifecycle()
     val shouldShowLogInAlert by viewModel.showLogInAlert.collectAsStateWithLifecycle()
@@ -184,12 +189,19 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 item(key = "chips") {
-                    val selected = homeChips.indexOfFirst { it.second == params }.takeIf { it >= 0 }
+                    // Tapping the selected chip clears it, back to the whole feed.
+                    val chips: List<Pair<String, String>> =
+                        if (serverChips.isNotEmpty()) {
+                            serverChips.map { it.title to it.params }
+                        } else {
+                            fallbackChips.map { stringResource(it.first) to it.second }
+                        }
+                    val selected = chips.indexOfFirst { it.second == params }.takeIf { it >= 0 }
                     YtmChips(
-                        labels = homeChips.map { stringResource(it.first) },
+                        labels = chips.map { it.first },
                         selected = selected,
                         onSelect = { index ->
-                            viewModel.setParams(if (index == selected) null else homeChips[index].second)
+                            viewModel.setParams(if (index == selected) null else chips[index].second)
                         },
                         modifier = Modifier.padding(vertical = 8.dp),
                     )
@@ -213,7 +225,7 @@ fun HomeScreen(
                         }
                     }
                 }
-                items(homeData, key = { it.title + it.subtitle.orEmpty() + it.contents.size }) { shelf ->
+                items(homeData, key = { it.title + it.subtitle.orEmpty() + it.contents.size + it.isSpeedDial }) { shelf ->
                     YtmShelf(item = shelf, navController = navController)
                 }
                 if (homeListState == ListState.PAGINATING) {

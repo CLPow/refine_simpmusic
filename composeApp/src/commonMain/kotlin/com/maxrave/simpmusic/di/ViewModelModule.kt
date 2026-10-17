@@ -3,13 +3,11 @@ package com.maxrave.simpmusic.di
 import com.maxrave.simpmusic.viewModel.AlbumViewModel
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.ArtistViewModel
-import com.maxrave.simpmusic.viewModel.ExploreViewModel
 import com.maxrave.simpmusic.viewModel.HomeViewModel
 import com.maxrave.simpmusic.viewModel.LibraryDynamicPlaylistViewModel
 import com.maxrave.simpmusic.viewModel.LibraryViewModel
 import com.maxrave.simpmusic.viewModel.LocalPlaylistViewModel
 import com.maxrave.simpmusic.viewModel.LogInViewModel
-import com.maxrave.simpmusic.viewModel.MoodViewModel
 import com.maxrave.simpmusic.viewModel.MoreAlbumsViewModel
 import com.maxrave.simpmusic.viewModel.NotificationViewModel
 import com.maxrave.simpmusic.viewModel.NowPlayingBottomSheetViewModel
@@ -80,12 +78,6 @@ val viewModelModule =
             )
         }
         viewModel {
-            ExploreViewModel(
-                get(),
-                get(),
-            )
-        }
-        viewModel {
             HomeViewModel(
                 get(),
                 get(),
@@ -141,12 +133,6 @@ val viewModelModule =
         }
         viewModel {
             NotificationViewModel(
-                get(),
-            )
-        }
-        viewModel {
-            MoodViewModel(
-                get(),
                 get(),
             )
         }

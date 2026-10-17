@@ -1,5 +1,7 @@
 package com.maxrave.data.repository
 
+import com.maxrave.domain.data.model.searchResult.SearchSummary
+import com.maxrave.data.parser.search.parseSearchSummary
 import com.maxrave.data.db.datasource.LocalDataSource
 import com.maxrave.data.mapping.toDomainSearchSuggestions
 import com.maxrave.data.parser.parsePodcast
@@ -55,7 +57,9 @@ internal class SearchRepositoryImpl(
                 return@flow
             }
             val listSongs: ArrayList<SongsResult> = arrayListOf()
-            listSongs.addAll(parseSearchSong(result))
+            listSongs.addAll(parseSearchSong(result).filter { MusicVideoType.isPlayableSong(it.videoType) })
+            // The first page shows at once; more follows while it is on screen.
+            emit(Resource.Success<ArrayList<SongsResult>>(ArrayList(listSongs)))
             var continueParam = result.continuation
             var count = 0
             while (count < 2 && continueParam != null) {
@@ -80,6 +84,7 @@ internal class SearchRepositoryImpl(
                         parseSearchVideo(result).let { list ->
                             listSongs.addAll(list)
                         }
+                        emit(Resource.Success<ArrayList<VideosResult>>(ArrayList(listSongs)))
                         var count = 0
                         while (count < 2 && countinueParam != null) {
                             youTube
@@ -153,6 +158,7 @@ internal class SearchRepositoryImpl(
                         parseSearchPlaylist(result).let { list ->
                             listPlaylist.addAll(list)
                         }
+                        emit(Resource.Success<ArrayList<PlaylistsResult>>(ArrayList(listPlaylist)))
                         var count = 0
                         while (count < 2 && countinueParam != null) {
                             youTube
@@ -188,6 +194,7 @@ internal class SearchRepositoryImpl(
                         parseSearchArtist(result).let { list ->
                             listArtist.addAll(list)
                         }
+                        emit(Resource.Success<ArrayList<ArtistsResult>>(ArrayList(listArtist)))
                         var count = 0
                         while (count < 2 && countinueParam != null) {
                             youTube
@@ -223,6 +230,7 @@ internal class SearchRepositoryImpl(
                         parseSearchAlbum(result).let { list ->
                             listAlbum.addAll(list)
                         }
+                        emit(Resource.Success<ArrayList<AlbumsResult>>(ArrayList(listAlbum)))
                         var count = 0
                         while (count < 2 && countinueParam != null) {
                             youTube
@@ -280,6 +288,17 @@ internal class SearchRepositoryImpl(
                         emit(Resource.Error<ArrayList<PlaylistsResult>>(e.message.toString()))
                     }
             }
+        }.flowOn(Dispatchers.IO)
+
+    override fun getSearchSummary(query: String): Flow<Resource<SearchSummary>> =
+        flow {
+            youTube
+                .searchSummary(query)
+                .onSuccess { emit(Resource.Success(parseSearchSummary(it))) }
+                .onFailure { e ->
+                    Logger.w("Search", "Search page failed: ${e.message}")
+                    emit(Resource.Error<SearchSummary>(e.message.toString()))
+                }
         }.flowOn(Dispatchers.IO)
 
     override fun getSuggestQuery(query: String): Flow<Resource<SearchSuggestions>> =

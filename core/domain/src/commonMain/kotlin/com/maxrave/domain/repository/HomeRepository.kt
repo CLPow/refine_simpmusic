@@ -1,5 +1,7 @@
 package com.maxrave.domain.repository
 
+import kotlinx.coroutines.flow.StateFlow
+import com.maxrave.domain.data.model.home.HomeChip
 import com.maxrave.domain.data.model.home.HomeItem
 import com.maxrave.domain.data.model.home.chart.Chart
 import com.maxrave.domain.data.model.mood.Mood
@@ -9,6 +11,9 @@ import com.maxrave.domain.utils.Resource
 import kotlinx.coroutines.flow.Flow
 
 interface HomeRepository {
+    /** The filter chips YouTube sent with the last Home page, in its order; empty until one loads. */
+    val homeChips: StateFlow<List<HomeChip>>
+
     /**
      * Shelves built from the user's own listening, to sit above YouTube's feed.
      *

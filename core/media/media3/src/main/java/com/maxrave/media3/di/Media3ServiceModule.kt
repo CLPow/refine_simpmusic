@@ -1,5 +1,6 @@
 package com.maxrave.media3.di
 
+import com.maxrave.domain.repository.AlbumRepository
 import android.app.Activity
 import android.content.Context
 import android.content.Context.BIND_AUTO_CREATE
@@ -221,6 +222,7 @@ private val mediaServiceModule =
                 get<HomeRepository>(),
                 get<ArtistRepository>(),
                 get<StreamRepository>(),
+                get<AlbumRepository>(),
             )
         }
 

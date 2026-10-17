@@ -1,5 +1,6 @@
 package com.maxrave.simpmusic.viewModel
 
+import com.maxrave.domain.data.model.searchResult.SearchSummary
 import androidx.lifecycle.viewModelScope
 import com.maxrave.common.SELECTED_LANGUAGE
 import com.maxrave.domain.data.entities.SearchHistory
@@ -51,6 +52,9 @@ data class SearchScreenState(
     val searchPodcastsResult: List<PlaylistsResult> = emptyList(),
     val suggestQueries: List<String> = emptyList(),
     val suggestYTItems: List<SearchResultType> = emptyList(),
+    /** YouTube Music's unfiltered results page for [query]: top result, chips, ranked rows. */
+    val summary: SearchSummary? = null,
+    val query: String = "",
 )
 
 // Loại tìm kiếm
@@ -119,7 +123,6 @@ class SearchViewModel(
         regionCode = runBlocking { dataStoreManager.location.first() }
         language = runBlocking { dataStoreManager.getString(SELECTED_LANGUAGE).first() }
         getSearchHistory()
-        getMoodAndGenres()
     }
 
     /**
@@ -209,112 +212,65 @@ class SearchViewModel(
         }
     }
 
+    /**
+     * YouTube Music's search: one unfiltered request, answered with the top result, the chips in
+     * the order YouTube ranks them for this query, and the ranked rows. The filtered lists are
+     * fetched only when their chip is tapped. This used to fire five filtered searches of three
+     * pages each before showing anything, and invent the top result from the first artist.
+     */
     fun searchAll(query: String) {
         _searchScreenUIState.value = SearchScreenUIState.Loading
+        _searchScreenState.update {
+            SearchScreenState(
+                searchType = SearchType.ALL,
+                query = query,
+                suggestQueries = it.suggestQueries,
+                suggestYTItems = it.suggestYTItems,
+            )
+        }
         viewModelScope.launch {
-            var song = ArrayList<SongsResult>()
-            val video = ArrayList<VideosResult>()
-            var album = ArrayList<AlbumsResult>()
-            var artist = ArrayList<ArtistsResult>()
-            var playlist = ArrayList<PlaylistsResult>()
-            var featuredPlaylist = ArrayList<PlaylistsResult>()
-            var podcast = ArrayList<PlaylistsResult>()
-            val temp: ArrayList<SearchResultType> = ArrayList()
+            searchRepository.getSearchSummary(query).collect { result ->
+                if (_searchScreenState.value.query != query) return@collect
+                when (result) {
+                    is Resource.Success -> {
+                        _searchScreenState.update { it.copy(summary = result.data) }
+                        _searchScreenUIState.value = SearchScreenUIState.Success
+                    }
 
-            val job1 =
-                launch {
-                    searchRepository.getSearchDataSong(query).collect { values ->
-                        when (values) {
-                            is Resource.Success -> values.data?.let { song = it }
-                            is Resource.Error -> {}
-                        }
-                    }
+                    is Resource.Error -> _searchScreenUIState.value = SearchScreenUIState.Error
                 }
-            val job2 =
-                launch {
-                    searchRepository.getSearchDataArtist(query).collect { values ->
-                        when (values) {
-                            is Resource.Success -> values.data?.let { artist = it }
-                            is Resource.Error -> {}
-                        }
-                    }
-                }
-            val job3 =
-                launch {
-                    searchRepository
-                        .getSearchDataAlbum(query)
-                        .collect { values ->
-                            when (values) {
-                                is Resource.Success -> values.data?.let { album = it }
-                                is Resource.Error -> {}
-                            }
-                        }
-                }
-            val job4 =
-                launch {
-                    searchRepository.getSearchDataPlaylist(query).collect { values ->
-                        when (values) {
-                            is Resource.Success -> values.data?.let { playlist = it }
-                            is Resource.Error -> {}
-                        }
-                    }
-                }
-            // Songs only: no video or podcast search is requested; `video` and `podcast` stay
-            // empty so every list below that still mentions them contributes nothing.
-            val job6 =
-                launch {
-                    searchRepository.getSearchDataFeaturedPlaylist(query).collect { values ->
-                        when (values) {
-                            is Resource.Success -> values.data?.let { featuredPlaylist = it }
-                            is Resource.Error -> {}
-                        }
-                    }
-                }
-            job1.join()
-            job2.join()
-            job3.join()
-            job4.join()
-            job6.join()
-
-            try {
-                if (artist.size >= 3) {
-                    for (i in 0..2) {
-                        temp += artist[i]
-                    }
-                    temp.addAll(song)
-                    temp.addAll(video)
-                    temp.addAll(album)
-                    temp.addAll(playlist)
-                    temp.addAll(featuredPlaylist)
-                    temp.addAll(podcast)
-                } else {
-                    temp.addAll(artist)
-                    temp.addAll(song)
-                    temp.addAll(video)
-                    temp.addAll(album)
-                    temp.addAll(playlist)
-                    temp.addAll(featuredPlaylist)
-                    temp.addAll(podcast)
-                }
-
-                _searchScreenState.update { state ->
-                    state.copy(
-                        searchType = SearchType.ALL,
-                        searchAllResult = temp,
-                        searchSongsResult = song,
-                        searchArtistsResult = artist,
-                        searchAlbumsResult = album,
-                        searchPlaylistsResult = playlist,
-                        searchVideosResult = video,
-                        searchFeaturedPlaylistsResult = featuredPlaylist,
-                        searchPodcastsResult = podcast,
-                    )
-                }
-                _searchScreenUIState.value = SearchScreenUIState.Success
-            } catch (e: Exception) {
-                e.printStackTrace()
-                _searchScreenUIState.value = SearchScreenUIState.Error
             }
+        }
+    }
+
+    /** A chip: the filtered list is fetched the first time it is shown for this query. */
+    fun selectFilter(type: SearchType) {
+        val state = _searchScreenState.value
+        setSearchType(type)
+        val query = state.query.takeIf { it.isNotBlank() } ?: return
+        val loaded =
+            when (type) {
+                SearchType.ALL -> true
+                SearchType.SONGS -> state.searchSongsResult.isNotEmpty()
+                SearchType.VIDEOS -> state.searchVideosResult.isNotEmpty()
+                SearchType.ALBUMS -> state.searchAlbumsResult.isNotEmpty()
+                SearchType.ARTISTS -> state.searchArtistsResult.isNotEmpty()
+                SearchType.PLAYLISTS -> state.searchPlaylistsResult.isNotEmpty()
+                SearchType.FEATURED_PLAYLISTS -> state.searchFeaturedPlaylistsResult.isNotEmpty()
+                SearchType.PODCASTS -> true
+            }
+        if (loaded) {
+            _searchScreenUIState.value = SearchScreenUIState.Success
+            return
+        }
+        when (type) {
+            SearchType.SONGS -> searchSongs(query)
+            SearchType.VIDEOS -> searchVideos(query)
+            SearchType.ALBUMS -> searchAlbums(query)
+            SearchType.ARTISTS -> searchArtists(query)
+            SearchType.PLAYLISTS -> searchPlaylists(query)
+            SearchType.FEATURED_PLAYLISTS -> searchFeaturedPlaylist(query)
+            else -> Unit
         }
     }
 

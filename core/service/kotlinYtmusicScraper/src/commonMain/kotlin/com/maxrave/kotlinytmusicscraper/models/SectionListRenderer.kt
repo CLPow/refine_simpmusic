@@ -47,7 +47,20 @@ data class SectionListRenderer(
         val musicResponsiveHeaderRenderer: MusicResponsiveHeaderRenderer?,
         val musicEditablePlaylistDetailHeaderRenderer: BrowseResponse.Header.MusicEditablePlaylistDetailHeaderRenderer?,
         val gridRenderer: GridRenderer?,
+        /** Search (2026): after the top result, each result row comes in a section of its own. */
+        val itemSectionRenderer: ItemSectionRenderer? = null,
     ) {
+        @Serializable
+        data class ItemSectionRenderer(
+            val contents: List<ItemContent>? = null,
+        ) {
+            @Serializable
+            data class ItemContent(
+                val musicResponsiveListItemRenderer: MusicResponsiveListItemRenderer? = null,
+                val musicShelfRenderer: MusicShelfRenderer? = null,
+            )
+        }
+
         @Serializable
         data class MusicResponsiveHeaderRenderer(
             val description: Description?,

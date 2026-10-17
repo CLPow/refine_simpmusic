@@ -1,5 +1,10 @@
 package com.maxrave.simpmusic.ui.component
 
+import androidx.compose.ui.unit.sp
+import com.maxrave.simpmusic.ui.icon.Favorite
+import com.maxrave.simpmusic.ui.icon.ThumbUp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutLinearInEasing
@@ -1635,271 +1640,197 @@ fun NowPlayingBottomSheet(
     }
 
     if (isBottomSheetVisible) {
+        // YouTube Music's song menu: the song at the top, three big actions (Play next, Save to
+        // playlist, Share), then the list.
+        val song = uiState.songUIState
+        val liked = song.liked
         ModalBottomSheet(
             onDismissRequest = onDismiss,
             sheetState = modelBottomSheetState,
-            containerColor = Color.Transparent,
-            contentColor = Color.Transparent,
+            containerColor = Color(0xFF212121),
+            contentColor = Color.White,
             dragHandle = null,
             scrimColor = Color.Black.copy(alpha = .5f),
+            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
             contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
         ) {
-            Card(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .wrapContentHeight(),
-                shape = RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp),
-                colors = CardDefaults.cardColors().copy(containerColor = rememberSurfaceDarkColors().container),
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.verticalScroll(rememberScrollState()),
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Spacer(modifier = Modifier.height(5.dp))
-                    Card(
-                        modifier =
-                            Modifier
-                                .width(60.dp)
-                                .height(4.dp),
-                        colors =
-                            CardDefaults.cardColors().copy(
-                                containerColor = rememberSurfaceDarkColors().handle,
-                            ),
-                        shape = RoundedCornerShape(50),
-                    ) {}
-                    Spacer(modifier = Modifier.height(5.dp))
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .height(65.dp)
-                                .padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val thumb = uiState.songUIState.thumbnails
-                        AsyncImage(
-                            model =
-                                ImageRequest
-                                    .Builder(LocalPlatformContext.current)
-                                    .data(thumb)
-                                    .diskCachePolicy(CachePolicy.ENABLED)
-                                    .diskCacheKey(thumb)
-                                    .crossfade(550)
-                                    .build(),
-                            placeholder = rememberHolderPainter(),
-                            error = rememberHolderPainter(),
-                            contentDescription = null,
-                            contentScale = ContentScale.Inside,
-                            modifier =
-                                Modifier
-                                    .align(Alignment.CenterVertically)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .size(60.dp),
+                    AsyncImage(
+                        model =
+                            ImageRequest
+                                .Builder(LocalPlatformContext.current)
+                                .data(song.thumbnails)
+                                .diskCachePolicy(CachePolicy.ENABLED)
+                                .diskCacheKey(song.thumbnails)
+                                .crossfade(200)
+                                .build(),
+                        placeholder = rememberHolderPainter(),
+                        error = rememberHolderPainter(),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
+                    )
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            song.title,
+                            style = typo().bodyLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium),
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(modifier = Modifier.width(20.dp))
-                        Column(verticalArrangement = Arrangement.Center) {
-                            Text(
-                                text = uiState.songUIState.title,
-                                style = typo().labelMedium,
-                                // typo() bakes a colour into the style, computed from the app's own
-                                // scheme — on this always-dark sheet that reads as washed out next
-                                // to the ActionButton rows below, which take their colour from here.
-                                color = rememberSurfaceDarkColors().content,
-                                maxLines = 1,
-                                modifier =
-                                    Modifier
-                                        .wrapContentHeight(Alignment.CenterVertically)
-                                        .basicMarquee(animationMode = MarqueeAnimationMode.Immediately)
-                                        .focusable(),
-                            )
-                            Text(
-                                text =
-                                    uiState.songUIState.listArtists
-                                        .toListName()
-                                        .connectArtists(),
-                                style = typo().bodyMedium,
-                                color = rememberSurfaceDarkColors().subtitle,
-                                maxLines = 1,
-                                modifier =
-                                    Modifier
-                                        .wrapContentHeight(Alignment.CenterVertically)
-                                        .basicMarquee(animationMode = MarqueeAnimationMode.Immediately)
-                                        .focusable(),
-                            )
-                        }
+                        Text(
+                            song.listArtists.toListName().connectArtists(),
+                            style = typo().bodyMedium,
+                            color = Color(0xFFAAAAAA),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                     }
-                    Spacer(modifier = Modifier.height(5.dp))
-                    HorizontalDivider(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                        thickness = 1.dp,
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Crossfade(targetState = onDelete != null) {
-                        if (it) {
-                            ActionButton(
-                                icon = SimpIcons.Delete,
-                                text = Res.string.delete_song_from_playlist,
-                            ) {
-                                hideModalBottomSheet()
-                                onDelete?.invoke()
-                            }
-                        }
+                    IconButton(onClick = { viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.ToggleLike) }) {
+                        Icon(
+                            if (liked) SimpIcons.ThumbUp else SimpIcons.ThumbUp,
+                            contentDescription = if (liked) "Remove from liked songs" else "Like",
+                            tint = if (liked) Color.White else Color(0xFFAAAAAA),
+                        )
                     }
-                    Crossfade(targetState = onLibraryDelete != null) {
-                        if (it) {
-                            ActionButton(
-                                icon = SimpIcons.Delete,
-                                text = Res.string.delete,
-                            ) {
-                                hideModalBottomSheet()
-                                onLibraryDelete?.invoke()
-                            }
-                        }
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    YtmMenuTile(SimpIcons.PlayCircle, "Play next", Modifier.weight(1f)) {
+                        viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.PlayNext)
+                        hideModalBottomSheet()
                     }
-                    CheckBoxActionButton(
-                        defaultChecked = uiState.songUIState.liked,
-                        isHeartIcon = true,
-                        onChangeListener = {
-                            viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.ToggleLike)
-                        },
-                    )
-                    ActionButton(
-                        icon =
-                            when (uiState.songUIState.downloadState) {
-                                DownloadState.STATE_NOT_DOWNLOADED -> SimpIcons.DownloadForOfflineOutlined
-                                DownloadState.STATE_DOWNLOADING -> SimpIcons.Downloading
-                                DownloadState.STATE_DOWNLOADED -> SimpIcons.DownloadForOffline
-                                DownloadState.STATE_PREPARING -> SimpIcons.Downloading
-                                else -> SimpIcons.DownloadForOfflineOutlined
-                            },
-                        // The old baseline_downloaded.xml carried #FF00A0CB baked in; the shared
-                        // symbol is neutral, so the "done" state has to say the colour out loud.
-                        iconColor =
-                            if (uiState.songUIState.downloadState == DownloadState.STATE_DOWNLOADED) {
-                                Color(0xFF00A0CB)
-                            } else {
-                                Color.Unspecified
-                            },
-                        text =
-                            when (uiState.songUIState.downloadState) {
-                                DownloadState.STATE_NOT_DOWNLOADED -> Res.string.download
-                                DownloadState.STATE_DOWNLOADING -> Res.string.downloading
-                                DownloadState.STATE_DOWNLOADED -> Res.string.downloaded
-                                DownloadState.STATE_PREPARING -> Res.string.downloading
-                                else -> Res.string.download
-                            },
-                    ) {
-                        viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.Download)
-                    }
-                    ActionButton(
-                        icon = SimpIcons.PlaylistAdd,
-                        text = Res.string.add_to_a_playlist,
-                    ) {
+                    YtmMenuTile(SimpIcons.PlaylistAdd, "Save to playlist", Modifier.weight(1f)) {
                         viewModel.resetPlaylists()
                         addToAPlaylist = true
                     }
-                    ActionButton(
-                        icon = SimpIcons.PlayCircle,
-                        text = Res.string.play_next,
-                    ) {
-                        viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.PlayNext)
+                    YtmMenuTile(SimpIcons.Share, "Share", Modifier.weight(1f)) {
+                        viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.Share)
                     }
-                    ActionButton(
-                        icon = SimpIcons.QueueMusic,
-                        text = Res.string.add_to_queue,
-                    ) {
-                        viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.AddToQueue)
+                }
+                Spacer(Modifier.height(8.dp))
+                if (onDelete != null) {
+                    YtmMenuRow(SimpIcons.Delete, "Remove from playlist") {
+                        hideModalBottomSheet()
+                        onDelete.invoke()
                     }
-                    ActionButton(
-                        icon = SimpIcons.PeopleAlt,
-                        text = Res.string.artists,
-                    ) {
-                        artist = true
+                }
+                if (onLibraryDelete != null) {
+                    YtmMenuRow(SimpIcons.Delete, "Remove from library") {
+                        hideModalBottomSheet()
+                        onLibraryDelete.invoke()
                     }
-                    ActionButton(
-                        icon = SimpIcons.Album,
-                        // Three states, not two. A track can carry an album ID with no title: the
-                        // row it was parsed from links an album but never spells its name out.
-                        // That case still navigates, so it must not read "No album" — but the name
-                        // is genuinely unknown, so fall back to the generic label rather than
-                        // showing a blank row. The parser deliberately leaves the name empty
-                        // instead of inventing one, because a made-up title would travel out to
-                        // MediaSession and into external scrobblers.
-                        text =
-                            when {
-                                uiState.songUIState.album == null -> Res.string.no_album
-                                uiState.songUIState.album
-                                    ?.name
-                                    .isNullOrBlank() -> Res.string.album
-                                else -> null
-                            },
-                        textString =
-                            uiState.songUIState.album
-                                ?.name
-                                ?.takeIf { it.isNotBlank() },
-                        enable = uiState.songUIState.album != null,
-                    ) {
-                        uiState.songUIState.album?.id?.let { id ->
+                }
+                YtmMenuRow(SimpIcons.Sensors, "Start radio") {
+                    viewModel.onUIEvent(
+                        NowPlayingBottomSheetUIEvent.StartRadio(
+                            videoId = song.videoId,
+                            name = "\"${song.title}\" ${runBlocking { getString(Res.string.radio) }}",
+                        ),
+                    )
+                    hideModalBottomSheet()
+                }
+                YtmMenuRow(SimpIcons.QueueMusic, "Add to queue") {
+                    viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.AddToQueue)
+                    hideModalBottomSheet()
+                }
+                YtmMenuRow(if (liked) SimpIcons.Favorite else SimpIcons.FavoriteBorder, if (liked) "Remove from liked songs" else "Add to liked songs") {
+                    viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.ToggleLike)
+                }
+                YtmMenuRow(
+                    when (song.downloadState) {
+                        DownloadState.STATE_DOWNLOADED -> SimpIcons.DownloadForOffline
+                        DownloadState.STATE_DOWNLOADING, DownloadState.STATE_PREPARING -> SimpIcons.Downloading
+                        else -> SimpIcons.DownloadForOfflineOutlined
+                    },
+                    when (song.downloadState) {
+                        DownloadState.STATE_DOWNLOADED -> "Remove download"
+                        DownloadState.STATE_DOWNLOADING, DownloadState.STATE_PREPARING -> "Downloading…"
+                        else -> "Download"
+                    },
+                ) {
+                    viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.Download)
+                }
+                if (song.album?.id != null) {
+                    YtmMenuRow(SimpIcons.Album, "Go to album") {
+                        song.album?.id?.let { id ->
+                            hideModalBottomSheet()
                             onNavigateToOtherScreen()
                             navController.navigate(AlbumDestination(browseId = id))
                         }
                     }
-                    ActionButton(
-                        icon = SimpIcons.Sensors,
-                        text = Res.string.start_radio,
-                    ) {
-                        viewModel.onUIEvent(
-                            NowPlayingBottomSheetUIEvent.StartRadio(
-                                videoId = uiState.songUIState.videoId,
-                                name = "\"${uiState.songUIState.title}\" ${runBlocking { getString(Res.string.radio) }}",
-                            ),
-                        )
-                        hideModalBottomSheet()
-                    }
-                    Crossfade(targetState = setSleepTimerEnable) {
-                        val sleepTimerState = uiState.sleepTimer
-                        if (it) {
-                            // timeRemaining > 0 → countdown mode, -1 → end-of-song mode, 0 → off
-                            val isEndOfSong = sleepTimerState.timeRemaining == -1
-                            val isRunning = sleepTimerState.timeRemaining > 0 || isEndOfSong
-                            Crossfade(targetState = isRunning) { running ->
-                                if (running) {
-                                    ActionButton(
-                                        icon = SimpIcons.AccessAlarm,
-                                        textString =
-                                            if (isEndOfSong) {
-                                                stringResource(Res.string.sleep_timer_end_of_song)
-                                            } else {
-                                                stringResource(Res.string.sleep_timer, sleepTimerState.timeRemaining.toString())
-                                            },
-                                        text = null,
-                                        textColor = seed,
-                                        iconColor = seed,
-                                    ) {
-                                        sleepTimerWarning = true
-                                    }
-                                } else {
-                                    ActionButton(
-                                        icon = SimpIcons.AccessAlarm,
-                                        text = Res.string.sleep_timer_off,
-                                    ) {
-                                        sleepTimer = true
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    ActionButton(
-                        icon = SimpIcons.Share,
-                        text = Res.string.share,
-                    ) {
-                        viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.Share)
-                    }
-                    EndOfModalBottomSheet()
                 }
+                if (song.listArtists.isNotEmpty()) {
+                    YtmMenuRow(SimpIcons.PeopleAlt, "Go to artist") {
+                        artist = true
+                    }
+                }
+                if (setSleepTimerEnable) {
+                    val sleepTimerState = uiState.sleepTimer
+                    // timeRemaining > 0 → countdown, -1 → end of song, 0 → off
+                    val isEndOfSong = sleepTimerState.timeRemaining == -1
+                    val isRunning = sleepTimerState.timeRemaining > 0 || isEndOfSong
+                    YtmMenuRow(
+                        SimpIcons.AccessAlarm,
+                        when {
+                            isEndOfSong -> stringResource(Res.string.sleep_timer_end_of_song)
+                            isRunning -> stringResource(Res.string.sleep_timer, sleepTimerState.timeRemaining.toString())
+                            else -> "Sleep timer"
+                        },
+                    ) {
+                        if (isRunning) sleepTimerWarning = true else sleepTimer = true
+                    }
+                }
+                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.navigationBars))
             }
         }
+    }
+}
+
+/** One of the three big actions at the top of YouTube Music's song menu. */
+@Composable
+private fun YtmMenuTile(
+    icon: ImageVector,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color.White.copy(alpha = 0.1f))
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(6.dp))
+        Text(label, style = typo().bodySmall.copy(fontSize = 12.sp), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** A row of YouTube Music's song menu: icon, then label. */
+@Composable
+private fun YtmMenuRow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(24.dp))
+        Text(label, style = typo().bodyLarge.copy(fontSize = 15.sp), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

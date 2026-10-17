@@ -26,7 +26,6 @@ import com.maxrave.kotlinytmusicscraper.models.response.DownloadProgress
 import com.maxrave.kotlinytmusicscraper.models.response.RemoteConfig
 import com.maxrave.kotlinytmusicscraper.utils.parseCookieString
 import com.maxrave.kotlinytmusicscraper.utils.sha1
-import com.maxrave.ktorext.curl.CurlLogger
 import com.maxrave.ktorext.encoding.brotli
 import com.maxrave.ktorext.getEngine
 import com.maxrave.logger.Logger
@@ -38,9 +37,6 @@ import io.ktor.client.plugins.HttpSend
 import io.ktor.client.plugins.compression.ContentEncoding
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.defaultRequest
-import io.ktor.client.plugins.logging.DEFAULT
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.accept
 import io.ktor.client.request.get
@@ -164,16 +160,9 @@ class Ytmusic {
     private fun createClient() =
         HttpClient(getEngine()) {
             expectSuccess = true
-            install(CurlLogger) {
-                logger = { Logger.d(TAG, it) }
-            }
             install(HttpRedirect) {
                 checkHttpMethod = false
                 allowHttpsDowngrade = true
-            }
-            install(Logging) {
-                logger = io.ktor.client.plugins.logging.Logger.DEFAULT
-                level = LogLevel.ALL
             }
             install(ContentNegotiation) {
                 protobuf()
@@ -250,7 +239,6 @@ class Ytmusic {
                     val currentTime = now().toInstant(TimeZone.currentSystemDefault()).epochSeconds
                     val sapisidCookie = cookieMap["SAPISID"] ?: cookieMap["__Secure-3PAPISID"]
                     val sapisidHash = sha1("$currentTime $sapisidCookie https://music.youtube.com")
-                    Logger.d(TAG, "SAPI SID Hash: SAPISIDHASH ${currentTime}_$sapisidHash")
                     append("Authorization", "SAPISIDHASH ${currentTime}_$sapisidHash")
                 }
             }

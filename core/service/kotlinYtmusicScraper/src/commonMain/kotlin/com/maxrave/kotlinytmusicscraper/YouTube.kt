@@ -317,6 +317,14 @@ class YouTube {
         }
 
     /**
+     * YouTube Music's own search page: one request with no filter, answered with the top result
+     * card, the chips in the order YouTube ranks them for this query, and the results YouTube
+     * ranked below. Returned as sent; the data layer reads it.
+     */
+    suspend fun searchSummary(query: String): Result<SearchResponse> =
+        runCatching { ytMusic.search(WEB_REMIX, query).body<SearchResponse>() }
+
+    /**
      * Song search that deliberately carries no session.
      *
      * Used by the Spotify import, which issues one query per track being matched. Those are the
@@ -1317,17 +1325,10 @@ class YouTube {
                     ?.let { addAll(it) }
             },
         )
-        listUrlSig.forEach {
-            Logger.d(TAG, "YouTube NewPipe URL $it")
-        }
-        val randomUrl = listUrlSig.randomOrNull() ?: return null
-        if (listUrlSig.isNotEmpty() && !is403Url(randomUrl)) {
-            Logger.d(TAG, "YouTube NewPipe Found URL $randomUrl")
-            return decodedSigResponse
-        } else {
-            Logger.d(TAG, "YouTube NewPipe No URL Found")
-            return null
-        }
+        // A freshly extracted URL is used as is, as YouTube Music does. Probing one first cost a
+        // full round trip before every song; a URL that is refused anyway goes through the
+        // player's own recovery, which drops it and resolves a new one.
+        return if (listUrlSig.isNotEmpty()) decodedSigResponse else null
     }
 
     fun isManifestUrl(url: String): Boolean = url.contains(".m3u8") || url.contains(".mpd") || url.contains("manifest")

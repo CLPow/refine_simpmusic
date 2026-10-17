@@ -1,5 +1,6 @@
 package com.maxrave.domain.repository
 
+import com.maxrave.domain.data.model.searchResult.SearchSummary
 import com.maxrave.domain.data.entities.SearchHistory
 import com.maxrave.domain.data.model.searchResult.SearchSuggestions
 import com.maxrave.domain.data.model.searchResult.albums.AlbumsResult
@@ -32,4 +33,7 @@ interface SearchRepository {
     fun getSearchDataPlaylist(query: String): Flow<Resource<ArrayList<PlaylistsResult>>>
 
     fun getSuggestQuery(query: String): Flow<Resource<SearchSuggestions>>
+
+    /** YouTube Music's unfiltered search page: top result, chips and ranked results, one request. */
+    fun getSearchSummary(query: String): Flow<Resource<SearchSummary>>
 }

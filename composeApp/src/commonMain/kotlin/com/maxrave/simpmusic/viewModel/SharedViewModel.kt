@@ -1,5 +1,6 @@
 package com.maxrave.simpmusic.viewModel
 
+import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.viewModelScope
 import com.maxrave.common.Config.ALBUM_CLICK
@@ -1918,6 +1919,36 @@ class SharedViewModel(
             // value for the same selection depending on iteration order, which makes the DataStore
             // flow emit on a change that did not happen.
             dataStoreManager.setRomanizationLanguages(languages.map { it.name }.sorted().joinToString(","))
+        }
+    }
+
+    /**
+     * Starts the radio behind [endpoint] (a mix, a station, an artist's shuffle) and plays its first
+     * song, as YouTube Music's Mix and Shuffle buttons do. Songs only: video rows are left out by
+     * the repository, so a station that is itself a live video plays the music around it.
+     */
+    fun playRadio(
+        endpoint: YouTubeWatchEndpoint,
+        title: String,
+    ) {
+        viewModelScope.launch {
+            val result = songRepository.getRadioFromEndpoint(endpoint).firstOrNull()
+            val tracks = result?.data?.first.orEmpty()
+            if (result !is Resource.Success || tracks.isEmpty()) {
+                makeToast(result?.message ?: "Couldn't start this radio")
+                return@launch
+            }
+            setQueueData(
+                QueueData.Data(
+                    listTracks = ArrayList(tracks),
+                    firstPlayedTrack = tracks.first(),
+                    playlistId = endpoint.playlistId,
+                    playlistName = title,
+                    playlistType = PlaylistType.RADIO,
+                    continuation = result.data?.second,
+                ),
+            )
+            loadMediaItem(tracks.first(), PLAYLIST_CLICK, 0)
         }
     }
 

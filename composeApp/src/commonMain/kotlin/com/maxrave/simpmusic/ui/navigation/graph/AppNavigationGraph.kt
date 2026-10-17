@@ -11,11 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import com.maxrave.simpmusic.ui.navigation.destination.home.ExploreDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.HomeDestination
 import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDestination
 import com.maxrave.simpmusic.ui.navigation.destination.search.SearchDestination
-import com.maxrave.simpmusic.ui.screen.home.ExploreScreen
 import com.maxrave.simpmusic.ui.screen.home.HomeScreen
 import com.maxrave.simpmusic.ui.screen.library.LibraryScreen
 import com.maxrave.simpmusic.ui.screen.other.SearchScreen
@@ -54,9 +52,6 @@ fun AppNavigationGraph(
                 onScrolling = onScrolling,
                 navController = navController,
             )
-        }
-        composable<ExploreDestination> {
-            ExploreScreen(navController = navController)
         }
         composable<SearchDestination> {
             SearchScreen(

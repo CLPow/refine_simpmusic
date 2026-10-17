@@ -1,5 +1,15 @@
 package com.maxrave.simpmusic.ui.component.ytm
 
+import kotlinx.coroutines.launch
+import com.maxrave.simpmusic.ui.icon.ArrowForwardIos
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.Brush
+import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
+import com.maxrave.domain.utils.MusicVideoType
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -101,6 +111,12 @@ import org.koin.compose.viewmodel.koinViewModel
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.mono
 
+/**
+ * True on Desktop and tablets, where the app takes YouTube Music's web layout: sidebar, search
+ * field in the top bar, shelf arrows and 180dp cards.
+ */
+val LocalWideLayout = staticCompositionLocalOf { false }
+
 /** YouTube Music's palette, as used across every page. */
 object Ytm {
     val Background = Color(0xFF030303)
@@ -115,7 +131,8 @@ object Ytm {
 
 /**
  * YouTube Music's top bar. On a tab page it carries the logo; on a sub-page, a back arrow and the
- * page title. Notifications, search and the account avatar sit on the right of both.
+ * page title. Notifications and the account avatar sit on the right of both, and sub-pages add
+ * search (tab pages have the Search tab right below them).
  */
 @Composable
 fun YtmTopBar(
@@ -147,6 +164,25 @@ fun YtmTopBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
+        } else if (LocalWideLayout.current) {
+            // The web's top bar: the search field over the page (the logo is in the sidebar).
+            Row(
+                Modifier
+                    .padding(start = 40.dp)
+                    .widthIn(max = 480.dp)
+                    .weight(1f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.White.copy(alpha = 0.1f))
+                    .clickable { navController.navigate(SearchDestination) { launchSingleTop = true } }
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(SimpIcons.Search, contentDescription = null, tint = Ytm.TextSecondary, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(12.dp))
+                Text("Search songs, albums, artists", style = typo().bodyLarge, color = Ytm.TextSecondary, maxLines = 1)
+            }
+            Spacer(Modifier.weight(0.4f))
         } else {
             YtmLogo()
             Spacer(Modifier.weight(1f))
@@ -154,8 +190,10 @@ fun YtmTopBar(
         IconButton(onClick = { navController.navigate(NotificationDestination) }) {
             Icon(SimpIcons.Notifications, contentDescription = "Notifications", tint = Color.White)
         }
-        IconButton(onClick = { navController.navigate(SearchDestination) }) {
-            Icon(SimpIcons.Search, contentDescription = "Search", tint = Color.White)
+        if (onBack != null) {
+            IconButton(onClick = { navController.navigate(SearchDestination) }) {
+                Icon(SimpIcons.Search, contentDescription = "Search", tint = Color.White)
+            }
         }
         AccountAvatar(size = 28.dp, modifier = Modifier.padding(horizontal = 10.dp)) { showAccount = true }
     }
@@ -379,6 +417,8 @@ fun YtmShelfHeader(
     onTitleClick: (() -> Unit)? = null,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
+    onPrevious: (() -> Unit)? = null,
+    onNext: (() -> Unit)? = null,
 ) {
     Row(
         Modifier
@@ -411,6 +451,31 @@ fun YtmShelfHeader(
             Spacer(Modifier.width(8.dp))
             YtmOutlinedPill(actionLabel, onAction)
         }
+        if (onPrevious != null && onNext != null) {
+            Spacer(Modifier.width(12.dp))
+            ShelfArrow(SimpIcons.ArrowBackIosNew, "Previous", onPrevious)
+            Spacer(Modifier.width(8.dp))
+            ShelfArrow(SimpIcons.ArrowForwardIos, "Next", onNext)
+        }
+    }
+}
+
+/** The web's round outlined arrow beside a shelf title. */
+@Composable
+private fun ShelfArrow(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(16.dp))
     }
 }
 
@@ -428,8 +493,13 @@ fun YtmShelf(
     val contents = remember(item) { item.contents.filterNotNull() }
     val channelId = item.channelId
     val songs = contents.filter { !it.videoId.isNullOrEmpty() }
+    val wideLayout = LocalWideLayout.current
+    val rowState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    val cardRow = !item.isSpeedDial && !item.isListShelf
     YtmShelfHeader(
-        title = item.title,
+        // The phone app's name for the account's own shelf; the web feed sends "Listen again".
+        title = if (item.isSpeedDial) "Speed dial" else item.title,
         strapline = item.subtitle,
         thumbnail = item.thumbnail?.lastOrNull()?.url,
         roundThumbnail = channelId != null,
@@ -441,27 +511,158 @@ fun YtmShelf(
             } else {
                 null
             },
+        // On the web layout a card shelf pages by a screenful with its arrows.
+        onPrevious =
+            if (wideLayout && cardRow) {
+                {
+                    scope.launch {
+                        val page = rowState.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+                        rowState.animateScrollToItem((rowState.firstVisibleItemIndex - page).coerceAtLeast(0))
+                    }
+                }
+            } else {
+                null
+            },
+        onNext =
+            if (wideLayout && cardRow) {
+                {
+                    scope.launch {
+                        val page = (rowState.layoutInfo.visibleItemsInfo.size - 1).coerceAtLeast(1)
+                        rowState.animateScrollToItem((rowState.firstVisibleItemIndex + page).coerceAtMost((contents.size - 1).coerceAtLeast(0)))
+                    }
+                }
+            } else {
+                null
+            },
     )
-    if (item.isListShelf) {
-        YtmQuickPicks(
-            contents = contents,
-            onClick = { openContent(it, navController, sharedViewModel) },
-            onMore = { menuTrack = it.toTrack() },
-        )
-    } else {
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(contents) { content ->
-                YtmCard(
-                    content = content,
-                    onClick = { openContent(content, navController, sharedViewModel) },
-                    onLongClick = if (!content.videoId.isNullOrEmpty()) ({ menuTrack = content.toTrack() }) else null,
-                )
+    when {
+        item.isSpeedDial ->
+            YtmSpeedDial(
+                contents = contents,
+                onClick = { openContent(it, navController, sharedViewModel) },
+                onLongClick = { if (!it.videoId.isNullOrEmpty()) menuTrack = it.toTrack() },
+            )
+
+        item.isListShelf ->
+            YtmQuickPicks(
+                contents = contents,
+                onClick = { openContent(it, navController, sharedViewModel) },
+                onMore = { menuTrack = it.toTrack() },
+            )
+
+        else -> {
+            // Video shelves ("Music videos for you", "Listen together") are 16:9 cards, as YouTube
+            // sends them; everything else is square.
+            val wide = contents.count { it.isWideArtwork() } * 2 > contents.size
+            LazyRow(
+                state = rowState,
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(if (wideLayout) 24.dp else 12.dp),
+            ) {
+                items(contents) { content ->
+                    YtmCard(
+                        content = content,
+                        onClick = { openContent(content, navController, sharedViewModel) },
+                        onLongClick = if (!content.videoId.isNullOrEmpty()) ({ menuTrack = content.toTrack() }) else null,
+                        width = if (wideLayout) 180.dp else 152.dp,
+                        wide = wide,
+                    )
+                }
             }
         }
     }
+}
+
+/**
+ * Speed dial, the account's own shelf at the top of YouTube Music's Home: tiles three to a row,
+ * three rows deep, paging sideways a screen at a time. Each tile is the cover with its name over
+ * the bottom of it; artists are round.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun YtmSpeedDial(
+    contents: List<Content>,
+    onClick: (Content) -> Unit,
+    onLongClick: (Content) -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val gap = 8.dp
+        // Three to a row on a phone; a wide window fits more of about the same size.
+        val columns = maxOf(3, ((maxWidth - 32.dp + gap) / (168.dp + gap)).toInt())
+        val tile = (maxWidth - 32.dp - gap * (columns - 1)) / columns
+        val rows =
+            when {
+                contents.size >= 7 -> 3
+                contents.size >= 4 -> 2
+                else -> 1
+            }
+        val state = rememberLazyGridState()
+        LazyHorizontalGrid(
+            rows = GridCells.Fixed(rows),
+            state = state,
+            flingBehavior = rememberSnapFlingBehavior(state),
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(gap),
+            verticalArrangement = Arrangement.spacedBy(gap),
+            modifier = Modifier.fillMaxWidth().height(tile * rows + gap * (rows - 1)),
+        ) {
+            items(contents) { content ->
+                SpeedDialTile(content, tile, { onClick(content) }, { onLongClick(content) })
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SpeedDialTile(
+    content: Content,
+    side: Dp,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val artist = content.isArtist()
+    Box(
+        Modifier
+            .size(side)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Ytm.Surface)
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+    ) {
+        if (artist) {
+            Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.TopCenter) {
+                Thumb(content.thumbnails.lastOrNull()?.url, side * 0.66f, CircleShape)
+            }
+        } else {
+            Thumb(content.thumbnails.lastOrNull()?.url, side, RoundedCornerShape(8.dp))
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(side / 2)
+                    .align(Alignment.BottomCenter)
+                    .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f)))),
+            )
+        }
+        Text(
+            content.title,
+            style = typo().bodySmall.copy(fontSize = 12.sp, fontWeight = FontWeight.Bold, lineHeight = 14.sp),
+            color = Color.White,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = if (artist) TextAlign.Center else TextAlign.Start,
+            modifier =
+                Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+        )
+    }
+}
+
+/** True for a 16:9 cover (a video), from the size YouTube gave the artwork. */
+private fun Content.isWideArtwork(): Boolean {
+    val art = thumbnails.lastOrNull() ?: return false
+    return art.width > 0 && art.height > 0 && art.width * 10 > art.height * 13
 }
 
 /** YouTube Music's two-line card: square cover (round for an artist), title, subtitle. */
@@ -472,20 +673,39 @@ fun YtmCard(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     width: Dp = 152.dp,
+    wide: Boolean = false,
 ) {
     val isArtist = content.isArtist()
+    val cardWidth = if (wide) (if (LocalWideLayout.current) 320.dp else 256.dp) else width
     Column(
         Modifier
-            .width(width)
+            .width(cardWidth)
             .clip(RoundedCornerShape(4.dp))
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
         horizontalAlignment = if (isArtist) Alignment.CenterHorizontally else Alignment.Start,
     ) {
-        Thumb(
-            content.thumbnails.lastOrNull()?.url,
-            width,
-            if (isArtist) CircleShape else RoundedCornerShape(4.dp),
-        )
+        if (wide) {
+            AsyncImage(
+                model =
+                    ImageRequest
+                        .Builder(LocalPlatformContext.current)
+                        .data(content.thumbnails.lastOrNull()?.url)
+                        .diskCachePolicy(CachePolicy.ENABLED)
+                        .crossfade(200)
+                        .build(),
+                placeholder = rememberHolderPainter(),
+                error = rememberHolderPainter(),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.width(cardWidth).aspectRatio(16f / 9f).clip(RoundedCornerShape(4.dp)),
+            )
+        } else {
+            Thumb(
+                content.thumbnails.lastOrNull()?.url,
+                cardWidth,
+                if (isArtist) CircleShape else RoundedCornerShape(4.dp),
+            )
+        }
         Spacer(Modifier.height(8.dp))
         Text(
             content.title,
@@ -640,6 +860,16 @@ fun openContent(
     val browseId = content.browseId
     val playlistId = content.playlistId
     when {
+        // A video that is not official music (a live "Listen together" station, an upload):
+        // its radio of songs plays instead, since Refine plays music only.
+        !videoId.isNullOrEmpty() &&
+            !MusicVideoType.isPlayableSong(content.videoType) &&
+            !MusicVideoType.isOfficialVideo(content.videoType) ->
+            sharedViewModel.playRadio(
+                YouTubeWatchEndpoint(videoId = videoId, playlistId = "RDAMVM$videoId"),
+                content.title,
+            )
+
         !videoId.isNullOrEmpty() -> {
             val track = content.toTrack()
             sharedViewModel.setQueueData(

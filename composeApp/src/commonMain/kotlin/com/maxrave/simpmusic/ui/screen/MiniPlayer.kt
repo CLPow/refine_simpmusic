@@ -1,5 +1,9 @@
 package com.maxrave.simpmusic.ui.screen
 
+import com.maxrave.simpmusic.ui.icon.MoreVert
+import com.maxrave.simpmusic.ui.component.NowPlayingBottomSheet
+import androidx.compose.ui.draw.rotate
+import androidx.navigation.NavController
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.hoverable
@@ -177,10 +181,15 @@ fun MiniPlayer(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DesktopPlayerBar(
+    navController: NavController,
     modifier: Modifier = Modifier,
     sharedViewModel: SharedViewModel = koinInject(),
     onOpenPlayer: () -> Unit,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+    if (showMenu) {
+        NowPlayingBottomSheet(onDismiss = { showMenu = false }, navController = navController, song = null, setSleepTimerEnable = true)
+    }
     val screenData by sharedViewModel.nowPlayingScreenData.collectAsStateWithLifecycle()
     val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
     val timeline by sharedViewModel.timeline.collectAsStateWithLifecycle()
@@ -278,6 +287,10 @@ fun DesktopPlayerBar(
                         tint = if (controllerState.isLiked) Color.White else TextSecondary,
                     )
                 }
+                // The web bar's action menu: the song menu for what is playing.
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(SimpIcons.MoreVert, contentDescription = "Action menu", tint = Color.White)
+                }
             }
             // Right: volume, repeat, shuffle, open.
             Row(
@@ -305,7 +318,8 @@ fun DesktopPlayerBar(
                         SimpIcons.KeyboardArrowDown,
                         contentDescription = "Open player",
                         tint = Color.White,
-                        modifier = Modifier.padding(0.dp).size(28.dp).then(Modifier),
+                        // Points up while the player is closed, as the web's does.
+                        modifier = Modifier.size(28.dp).rotate(180f),
                     )
                 }
             }

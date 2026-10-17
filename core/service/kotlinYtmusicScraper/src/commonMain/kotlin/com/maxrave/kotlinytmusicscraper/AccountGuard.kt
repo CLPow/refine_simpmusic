@@ -9,16 +9,6 @@ import kotlin.time.ExperimentalTime
 
 private const val TAG = "AccountGuard"
 
-/**
- * Smallest gap between two requests that carry the signed-in account.
- *
- * Chosen to be invisible while a person browses — opening a screen fires a handful of calls and
- * still feels instant — while making it impossible for any feature to burst hundreds of
- * account-bearing requests at the service. A bulk sweep is what unusual traffic looks like, and
- * this fork has already degraded one account's recommendations that way.
- */
-private const val MIN_INTERVAL_MS = 350L
-
 /** First pause after a refusal; doubles per consecutive refusal up to [MAX_COOLDOWN_MS]. */
 private const val BASE_COOLDOWN_MS = 30_000L
 private const val MAX_COOLDOWN_MS = 15 * 60_000L
@@ -33,7 +23,7 @@ private const val MAX_BACKOFF_DOUBLINGS = 5
 private const val FORBIDDEN_STREAK_BEFORE_BACKOFF = 8
 
 /**
- * Paces and, when refused, stops traffic that carries the user's account.
+ * Stops traffic that carries the user's account while the service is refusing it.
  *
  * The app is an unofficial client, so the account is the thing with something to lose. Two failure
  * shapes matter, and neither is hypothetical here: a feature firing a burst of authenticated
@@ -50,7 +40,6 @@ private const val FORBIDDEN_STREAK_BEFORE_BACKOFF = 8
 @OptIn(ExperimentalTime::class)
 class AccountGuard {
     private val mutex = Mutex()
-    private var nextAllowedAt = 0L
     private var cooldownUntil = 0L
     private var consecutiveRefusals = 0
     private var consecutiveForbidden = 0
@@ -64,25 +53,18 @@ class AccountGuard {
         get() = cooldownRemainingMs > 0L
 
     /**
-     * Suspends until this request may go out.
+     * Suspends while the service is refusing this account, and not otherwise.
+     *
+     * Requests are not spaced out. YouTube Music fires a page's calls together (player, next,
+     * lyrics, related, the listening pings), and the 350 ms gap this used to impose queued every
+     * one of them behind the last: opening a song, searching and paging Home all waited in line.
      *
      * Loops rather than sleeping once, because a refusal arriving while this call is waiting must
-     * extend the wait — otherwise the request that triggered the cooldown is followed straight
-     * away by the one queued behind it.
+     * extend the wait.
      */
     suspend fun awaitTurn() {
         while (true) {
-            val waitMs =
-                mutex.withLock {
-                    val now = now()
-                    val readyAt = maxOf(cooldownUntil, nextAllowedAt)
-                    if (now >= readyAt) {
-                        nextAllowedAt = now + MIN_INTERVAL_MS
-                        0L
-                    } else {
-                        readyAt - now
-                    }
-                }
+            val waitMs = mutex.withLock { (cooldownUntil - now()).coerceAtLeast(0L) }
             if (waitMs <= 0L) return
             delay(waitMs)
         }

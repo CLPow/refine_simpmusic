@@ -1,5 +1,10 @@
 package com.maxrave.data.repository
 
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import com.maxrave.domain.data.model.home.HomeChip
 import com.maxrave.data.parser.parseChart
 import com.maxrave.data.parser.parseGenreObject
 import com.maxrave.data.parser.parseMixedContent
@@ -53,6 +58,8 @@ internal class HomeRepositoryImpl(
     private val youTube: YouTube,
     private val localDataSource: LocalDataSource,
 ) : HomeRepository {
+    private val _homeChips = MutableStateFlow<List<HomeChip>>(emptyList())
+    override val homeChips: StateFlow<List<HomeChip>> = _homeChips
     override fun getLocalShelves(
         onRepeatTitle: String,
         buriedTitle: String,
@@ -91,11 +98,38 @@ internal class HomeRepositoryImpl(
     ): Flow<Resource<Pair<String?, List<HomeItem>>>> =
         flow {
             runCatching {
-                val limit = dataStoreManager.homeLimit.first()
+                // The client is handed the signed-in cookie by its own collector, a moment after
+                // start. Asking before it has it loads the signed-out feed, so wait for it -- only
+                // as long as it actually takes, where the caller used to sleep a fixed second.
+                if (youTube.cookie.isNullOrEmpty() && dataStoreManager.cookie.first().isNotEmpty()) {
+                    withTimeoutOrNull(3_000) {
+                        while (youTube.cookie.isNullOrEmpty()) delay(50)
+                    }
+                }
                 youTube
                     .customQuery(browseId = "FEmusic_home", params = params)
                     .onSuccess { result ->
                         val list: ArrayList<HomeItem> = arrayListOf()
+                        val sectionList =
+                            result.contents
+                                ?.singleColumnBrowseResultsRenderer
+                                ?.tabs
+                                ?.firstOrNull()
+                                ?.tabRenderer
+                                ?.content
+                                ?.sectionListRenderer
+                        sectionList
+                            ?.header
+                            ?.chipCloudRenderer
+                            ?.chips
+                            ?.mapNotNull { chip ->
+                                val renderer = chip.chipCloudChipRenderer
+                                val title = renderer.text?.runs?.joinToString("") { it.text }
+                                val chipParams = renderer.navigationEndpoint.browseEndpoint?.params
+                                if (title.isNullOrBlank() || chipParams.isNullOrBlank()) null else HomeChip(title, chipParams)
+                            }?.takeIf { it.isNotEmpty() }
+                            ?.let { _homeChips.value = it }
+                        var hasAccountShelf = false
                         if (result.contents
                                 ?.singleColumnBrowseResultsRenderer
                                 ?.tabs
@@ -162,6 +196,7 @@ internal class HomeRepositoryImpl(
                             if (accountName != "" && accountThumbUrl != "") {
                                 dataStoreManager.putString("AccountName", accountName)
                                 dataStoreManager.putString("AccountThumbUrl", accountThumbUrl)
+                                hasAccountShelf = params == null
                             }
                         }
                         val continueParam =
@@ -195,6 +230,9 @@ internal class HomeRepositoryImpl(
                                 songString,
                             ),
                         )
+                        if (hasAccountShelf && list.isNotEmpty()) {
+                            list[0] = list[0].copy(isSpeedDial = true)
+                        }
 //                        var count = 0
 //                        while (count < limit && continueParam != null) {
 //                            youTube

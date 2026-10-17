@@ -25,5 +25,7 @@
         <item quantity="other">%d songs</item>
     </plurals>
     <string name="recently_played">Recently played</string>
+    <string name="albums">Albums</string>
+    <string name="liked_music">Liked music</string>
     <string name="your_artists">Your artists</string>
 </resources>
