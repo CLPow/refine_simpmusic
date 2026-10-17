@@ -1,5 +1,6 @@
 package com.maxrave.simpmusic.ui.component.ytm
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.HorizontalPager
 import kotlinx.coroutines.launch
@@ -111,7 +112,7 @@ import org.jetbrains.compose.resources.painterResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import simpmusic.composeapp.generated.resources.Res
-import simpmusic.composeapp.generated.resources.mono
+import simpmusic.composeapp.generated.resources.logo_mark
 
 /**
  * True on Desktop and tablets, where the app takes YouTube Music's web layout: sidebar, search
@@ -204,14 +205,13 @@ fun YtmTopBar(
     }
 }
 
-/** The app mark: the logo in red beside the name, YouTube Music's top-left. */
+/** The app mark: the logo in colour beside the name, YouTube Music's top-left. */
 @Composable
 fun YtmLogo() {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            painter = painterResource(Res.drawable.mono),
+        Image(
+            painter = painterResource(Res.drawable.logo_mark),
             contentDescription = null,
-            tint = YtmRed,
             modifier = Modifier.size(28.dp),
         )
         Spacer(Modifier.width(4.dp))

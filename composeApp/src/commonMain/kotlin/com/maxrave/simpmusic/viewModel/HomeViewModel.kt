@@ -1,5 +1,7 @@
 package com.maxrave.simpmusic.viewModel
 
+import kotlinx.coroutines.flow.lastOrNull
+import kotlinx.coroutines.withTimeoutOrNull
 import com.maxrave.domain.data.model.home.HomeChip
 import androidx.lifecycle.viewModelScope
 import com.maxrave.common.SELECTED_LANGUAGE
@@ -79,8 +81,11 @@ class HomeViewModel(
     val newRelease: StateFlow<List<HomeItem>> = _newRelease
     var regionCodeChart: MutableStateFlow<String?> = MutableStateFlow(null)
 
-    /** Ceiling on a home refresh before the spinner is released regardless of the sources. */
-    private val HOME_LOAD_TIMEOUT_MS = 30_000L
+    /** Ceiling on one attempt at the feed; a slower answer counts as a failed attempt. */
+    private val HOME_ATTEMPT_TIMEOUT_MS = 20_000L
+
+    /** Attempts before Home gives up and shows its Retry card (about a minute and a half in all). */
+    private val HOME_MAX_ATTEMPTS = 6
 
     /**
      * When the feed last loaded. The music service keeps the process alive for days, so a feed
@@ -89,9 +94,10 @@ class HomeViewModel(
      */
     private var lastLoadedAtMs = 0L
 
-    /** Reloads Home when the shown feed is older than [STALE_AFTER_MS] (YouTube Music's behaviour on return). */
+    /** Reloads Home when the shown feed is older than [STALE_AFTER_MS] (YouTube Music's behaviour on return), or when it failed. */
     fun refreshIfStale() {
-        if (lastLoadedAtMs != 0L && currentTimeMs() - lastLoadedAtMs > STALE_AFTER_MS && !loading.value) {
+        if (loading.value) return
+        if (_recommendationsFailed.value || (lastLoadedAtMs != 0L && currentTimeMs() - lastLoadedAtMs > STALE_AFTER_MS)) {
             getHomeItemList(params.value)
         }
     }
@@ -217,82 +223,67 @@ class HomeViewModel(
                 // "On repeat" / "Buried favourites" shelves kept old songs pinned at the top.
                 val previous = _homeItemList.value
 
-                var homeDone = false
-                launch {
-                    delay(HOME_LOAD_TIMEOUT_MS)
-                    if (!homeDone && loading.value) {
-                        Logger.w("HomeViewModel", "Home load timed out after ${HOME_LOAD_TIMEOUT_MS}ms")
-                        loading.value = false
-                        _homeListState.value = ListState.IDLE
-                        if (_homeItemList.value.isEmpty()) {
-                            _recommendationsFailed.value = true
+                // YouTube Music never parks Home on an error at launch: it keeps the spinner and
+                // asks again. A failed, empty or slow answer (a cold network, a 429 cooldown, the
+                // cookie arriving late) is retried with a growing pause; only after every attempt
+                // fails does the "Couldn't load" card with its Retry button show.
+                var home: Resource<Pair<String?, List<HomeItem>>>? = null
+                for (attempt in 0 until HOME_MAX_ATTEMPTS) {
+                    if (attempt > 0) delay(minOf(1_000L shl (attempt - 1), 15_000L))
+                    home =
+                        try {
+                            withTimeoutOrNull(HOME_ATTEMPT_TIMEOUT_MS) {
+                                homeRepository
+                                    .getHomeData(
+                                        params,
+                                        getString(Res.string.view_count),
+                                        getString(Res.string.song),
+                                    ).lastOrNull()
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            Resource.Error<Pair<String?, List<HomeItem>>>(e.message ?: "Home unavailable")
                         }
+                    if (home is Resource.Success && !home.data?.second.isNullOrEmpty()) break
+                    Logger.w(
+                        "HomeViewModel",
+                        "Home attempt ${attempt + 1}/$HOME_MAX_ATTEMPTS failed: " +
+                            when (home) {
+                                null -> "timed out"
+                                is Resource.Error -> home.message
+                                else -> "no shelves"
+                            },
+                    )
+                }
+                if (home is Resource.Success && !home.data?.second.isNullOrEmpty()) {
+                    _recommendationsFailed.value = false
+                    _continuation.value = home.data?.first
+                    _homeItemList.value = home.data?.second ?: listOf()
+                    lastLoadedAtMs = currentTimeMs()
+                } else {
+                    _recommendationsFailed.value = true
+                    _continuation.value = null
+                    _homeItemList.value = previous
+                }
+                _homeListState.value =
+                    if (continuation.value.isNullOrEmpty()) {
+                        ListState.PAGINATION_EXHAUST
+                    } else {
+                        ListState.IDLE
+                    }
+                runCatching {
+                    val cookie = dataStoreManager.cookie.first()
+                    if (cookie.isNotEmpty()) {
+                        _accountInfo.emit(
+                            Pair(
+                                dataStoreManager.getString("AccountName").first(),
+                                dataStoreManager.getString("AccountThumbUrl").first(),
+                            ),
+                        )
                     }
                 }
-
-                // Primary YouTube home feed. Must not use runCatching: it swallows
-                // CancellationException and would mark a cancelled refresh as a failed load.
-                try {
-                    homeRepository
-                        .getHomeData(
-                            params,
-                            getString(Res.string.view_count),
-                            getString(Res.string.song),
-                        ).collect { home ->
-                            homeDone = true
-                            when {
-                                home is Resource.Success && !home.data?.second.isNullOrEmpty() -> {
-                                    _recommendationsFailed.value = false
-                                    _continuation.value = home.data?.first
-                                    _homeItemList.value = home.data?.second ?: listOf()
-                                    lastLoadedAtMs = currentTimeMs()
-                                }
-
-                                home is Resource.Success -> {
-                                    Logger.w("HomeViewModel", "Home returned no shelves; treating as a failed load")
-                                    _recommendationsFailed.value = true
-                                    _continuation.value = null
-                                    _homeItemList.value = previous
-                                }
-
-                                else -> {
-                                    Logger.e("HomeViewModel", "Home load failed: ${home.message}")
-                                    _recommendationsFailed.value = true
-                                    _continuation.value = null
-                                    _homeItemList.value = previous
-                                }
-                            }
-                            _homeListState.value =
-                                if (continuation.value.isNullOrEmpty()) {
-                                    ListState.PAGINATION_EXHAUST
-                                } else {
-                                    ListState.IDLE
-                                }
-                            runCatching {
-                                val cookie = dataStoreManager.cookie.first()
-                                if (cookie.isNotEmpty()) {
-                                    _accountInfo.emit(
-                                        Pair(
-                                            dataStoreManager.getString("AccountName").first(),
-                                            dataStoreManager.getString("AccountThumbUrl").first(),
-                                        ),
-                                    )
-                                }
-                            }
-                            if (home is Resource.Error) {
-                                home.message?.let { showSnackBarErrorState.emit(it) }
-                            }
-                            loading.value = false
-                        }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Logger.e("HomeViewModel", "Home collect failed: ${e.message}")
-                    homeDone = true
-                    loading.value = false
-                    _recommendationsFailed.value = true
-                    _homeListState.value = ListState.IDLE
-                }
+                loading.value = false
             }
     }
 
