@@ -1,5 +1,11 @@
 package com.maxrave.simpmusic.ui.screen.player.content
 
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import com.maxrave.simpmusic.ui.component.ytm.subtitle
+import com.maxrave.simpmusic.ui.component.ytm.YtmSongRow
+import com.maxrave.simpmusic.ui.component.ytm.YtmCard
+import com.maxrave.domain.data.model.home.HomeItem
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -198,7 +204,7 @@ fun NowPlayingContentYtm(
                         when (tab) {
                             PlayerTab.UpNext -> UpNextTab(state, actions)
                             PlayerTab.Lyrics -> LyricsTab(state, actions)
-                            PlayerTab.Related -> RelatedTab(state)
+                            PlayerTab.Related -> RelatedTab(state, actions)
                         }
                     }
                 }
@@ -628,7 +634,7 @@ private fun PlayerSheet(
             when (tab) {
                 PlayerTab.UpNext -> UpNextTab(state, actions)
                 PlayerTab.Lyrics -> LyricsTab(state, actions)
-                PlayerTab.Related -> RelatedTab(state)
+                PlayerTab.Related -> RelatedTab(state, actions)
             }
         }
     }
@@ -874,79 +880,65 @@ private fun LyricsProvider.displayName(): String =
         else -> name.lowercase().replaceFirstChar { it.uppercase() }
     }
 
-/** Related: "You might also like", fetched for the playing song; a tap starts that song's radio. */
+/**
+ * Related, as YouTube Music shows it: the song's own Related page from YouTube, shelf by shelf in
+ * its order ("You might also like" as song rows, then playlists, similar artists, "More from").
+ * A song starts its radio; anything else closes the player and opens its page.
+ */
 @Composable
 private fun RelatedTab(
     state: NowPlayingContentState,
-    sharedViewModel: SharedViewModel = koinInject(),
+    actions: NowPlayingContentActions,
     songRepository: SongRepository = koinInject(),
 ) {
     val videoId = state.artworkQueue.getOrNull(state.currentOrderIndex)?.videoId
-    val related by produceState<List<Track>?>(initialValue = null, videoId) {
+    val related by produceState<List<HomeItem>?>(initialValue = null, videoId) {
         value =
             if (videoId == null) {
                 emptyList()
             } else {
-                (songRepository.getRelatedData(videoId).lastOrNull() as? Resource.Success)?.data?.first.orEmpty()
+                (songRepository.getRelatedPage(videoId).lastOrNull() as? Resource.Success)?.data.orEmpty()
             }
     }
-    val list = related
-    if (list == null) {
+    val shelves = related
+    if (shelves == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(color = Color.White)
         }
         return
     }
+    if (shelves.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("Nothing related to show", style = typo().bodyMedium, color = TextSecondary)
+        }
+        return
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        Text(
-            "You might also like",
-            style = typo().titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
-            color = Color.White,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp),
-        )
-        list.forEach { track ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        sharedViewModel.setQueueData(
-                            QueueData.Data(
-                                listTracks = arrayListOf(track),
-                                firstPlayedTrack = track,
-                                playlistId = "RDAMVM${track.videoId}",
-                                playlistName = "\"${track.title}\" Radio",
-                                playlistType = PlaylistType.RADIO,
-                                continuation = null,
-                            ),
-                        )
-                        sharedViewModel.loadMediaItem(track, Config.SONG_CLICK)
-                    }.padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AsyncImage(
-                    model = track.thumbnails?.lastOrNull()?.url,
-                    placeholder = rememberHolderPainter(),
-                    error = rememberHolderPainter(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(48.dp).clip(RoundedCornerShape(4.dp)),
-                )
-                Spacer(Modifier.width(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        track.title,
-                        style = typo().bodyLarge.copy(fontSize = 15.sp),
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+        shelves.forEach { shelf ->
+            val contents = shelf.contents.filterNotNull()
+            Text(
+                shelf.title,
+                style = typo().titleLarge.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
+                color = Color.White,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 8.dp),
+            )
+            if (shelf.isListShelf) {
+                contents.forEach { content ->
+                    YtmSongRow(
+                        title = content.title,
+                        subtitle = content.subtitle(),
+                        thumbnail = content.thumbnails.lastOrNull()?.url,
+                        onClick = { actions.onOpenContent(content) },
                     )
-                    Text(
-                        track.artists?.toListName()?.connectArtists().orEmpty(),
-                        style = typo().bodyMedium,
-                        color = TextSecondary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                }
+            } else {
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(contents) { content ->
+                        YtmCard(content = content, onClick = { actions.onOpenContent(content) }, width = 136.dp)
+                    }
                 }
             }
         }

@@ -99,7 +99,7 @@ class TurntableWidget :
                 var artwork by remember { mutableStateOf<Bitmap?>(null) }
                 LaunchedEffect(screenData.thumbnailURL, layout) {
                     val art = context.loadWidgetArtwork(screenData.thumbnailURL)
-                    artwork = if (layout == Layout.Square) art?.toCircle() else art
+                    artwork = if (layout == Layout.Square) art?.let { runCatching { it.toCircle() }.getOrNull() } else art
                 }
 
                 var recent by remember { mutableStateOf<List<RecentTile>>(emptyList()) }
@@ -148,7 +148,7 @@ class TurntableWidget :
         val WIDE_MIN_WIDTH = 200.dp
         val STRIP_MIN_HEIGHT = 170.dp
         const val RECENT_COUNT = 5
-        const val RECENT_ART_PX = 160
+        const val RECENT_ART_PX = 112
     }
 }
 

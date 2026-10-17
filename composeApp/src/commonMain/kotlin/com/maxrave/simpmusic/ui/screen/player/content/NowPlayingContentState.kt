@@ -1,5 +1,6 @@
 package com.maxrave.simpmusic.ui.screen.player.content
 
+import com.maxrave.domain.data.model.home.Content
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector4D
 import androidx.compose.foundation.ScrollState
@@ -134,4 +135,6 @@ class NowPlayingContentActions(
     val onMoveQueueItem: (from: Int, to: Int) -> Unit,
     /** Removes one queue entry. `index` is an absolute index into [NowPlayingContentState.artworkQueue]. */
     val onRemoveQueueItem: (index: Int) -> Unit,
+    /** Opens a Related item: a song plays its radio; an album, artist or playlist closes the player and opens its page. */
+    val onOpenContent: (Content) -> Unit = {},
 )

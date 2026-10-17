@@ -1,5 +1,7 @@
 package com.maxrave.data.repository
 
+import com.maxrave.data.parser.parseMixedContent
+import com.maxrave.domain.data.model.home.HomeItem
 import com.maxrave.common.MERGING_DATA_TYPE
 import com.maxrave.data.db.datasource.LocalDataSource
 import com.maxrave.data.extension.getFullDataFromDB
@@ -527,6 +529,27 @@ internal class SongRepositoryImpl(
                     emit(Resource.Success(groups))
                 }.onFailure { error ->
                     emit(Resource.Error<List<Pair<String, List<Track>>>>(error.message ?: "History unavailable"))
+                }
+        }.flowOn(Dispatchers.IO)
+
+    override fun getRelatedPage(videoId: String): Flow<Resource<List<HomeItem>>> =
+        flow {
+            val endpoint =
+                youTube
+                    .next(WatchEndpoint(videoId = videoId))
+                    .getOrNull()
+                    ?.relatedEndpoint
+            if (endpoint == null) {
+                emit(Resource.Error<List<HomeItem>>("No related page"))
+                return@flow
+            }
+            youTube
+                .customQuery(browseId = endpoint.browseId, params = endpoint.params)
+                .onSuccess { response ->
+                    val sections = response.contents?.sectionListRenderer?.contents
+                    emit(Resource.Success(parseMixedContent(sections, "", "Song")))
+                }.onFailure { e ->
+                    emit(Resource.Error<List<HomeItem>>(e.message ?: "Related unavailable"))
                 }
         }.flowOn(Dispatchers.IO)
 

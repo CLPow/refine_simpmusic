@@ -1159,7 +1159,9 @@ internal class DataStoreManagerImpl(
 
     override val endlessQueue =
         settingsDataStore.data.map { preferences ->
-            preferences[ENDLESS_QUEUE] ?: FALSE
+            // On unless turned off, as YouTube Music's Autoplay is: an album or single runs on into
+            // similar songs instead of stopping at its last track.
+            preferences[ENDLESS_QUEUE] ?: TRUE
         }
 
     override suspend fun setEndlessQueue(endlessQueue: Boolean) {

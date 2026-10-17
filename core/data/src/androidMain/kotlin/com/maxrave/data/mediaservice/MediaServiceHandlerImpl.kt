@@ -1180,7 +1180,8 @@ internal class MediaServiceHandlerImpl(
         // Separate local and remote data
         // Local Add Prefix to PlaylistID to differentiate between local and remote
         // Local: LC-PlaylistID
-        val playlistId = _queueData.value.data.playlistId ?: return
+        // A queue without a playlist id ("Play all", a single from a shelf) still reaches Autoplay below.
+        val playlistId = _queueData.value.data.playlistId ?: ""
         Logger.w("Check loadMore", playlistId.toString())
         val continuation = _queueData.value.data.continuation
         Logger.w("Check loadMore", continuation.toString())

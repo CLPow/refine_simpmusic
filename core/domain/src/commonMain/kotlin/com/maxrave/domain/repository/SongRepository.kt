@@ -1,5 +1,6 @@
 package com.maxrave.domain.repository
 
+import com.maxrave.domain.data.model.home.HomeItem
 import com.maxrave.domain.data.entities.QueueEntity
 import com.maxrave.domain.data.entities.SongEntity
 import com.maxrave.domain.data.entities.SongInfoEntity
@@ -140,6 +141,12 @@ interface SongRepository {
     ): Flow<DownloadProgress>
 
     fun getRelatedData(videoId: String): Flow<Resource<Pair<List<Track>, String?>>>
+
+    /**
+     * YouTube Music's Related tab for [videoId], as YouTube sends it: "You might also like",
+     * "Recommended playlists", "Similar artists", "More from ...", in its order.
+     */
+    fun getRelatedPage(videoId: String): Flow<Resource<List<HomeItem>>>
 
     /** The account's YouTube history (FEmusic_history), grouped as YouTube groups it: Today, Yesterday… */
     fun getYouTubeHistory(): Flow<Resource<List<Pair<String, List<Track>>>>>

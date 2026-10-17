@@ -115,6 +115,15 @@ internal suspend fun Context.loadWidgetArtwork(
     px: Int = WIDGET_ART_PX,
 ): Bitmap? {
     if (url.isNullOrBlank()) return null
+    // Never throws: an exception here surfaces inside the widget's composition, and Glance then
+    // replaces the whole widget with "Can't show content". A cover that fails is just no cover.
+    return runCatching { decodeWidgetArtwork(url, px) }.getOrNull()
+}
+
+private suspend fun Context.decodeWidgetArtwork(
+    url: String,
+    px: Int,
+): Bitmap? {
     val request =
         ImageRequest
             .Builder(this)
@@ -127,7 +136,12 @@ internal suspend fun Context.loadWidgetArtwork(
     return (ImageLoader(this).execute(request) as? SuccessResult)?.image?.toBitmap()
 }
 
-private const val WIDGET_ART_PX = 360
+/**
+ * Every bitmap in a widget travels in one binder transaction, capped near 1 MB. The 4x2 layout
+ * carries the cover and five recent covers; at 360 px and 160 px that came to about 1 MB and a
+ * large enough set failed the update outright. 240 px is still sharp at widget size.
+ */
+private const val WIDGET_ART_PX = 240
 
 /**
  * The bitmap cut to a circle, centre-cropped. Done on the bitmap rather than with a corner radius

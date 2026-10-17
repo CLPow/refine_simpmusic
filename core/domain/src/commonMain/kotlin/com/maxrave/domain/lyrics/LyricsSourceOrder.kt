@@ -29,10 +29,12 @@ object LyricsSourceOrder {
      */
     val DEFAULT: List<String> =
         listOf(
-            DataStoreManager.SIMPMUSIC,
-            SPOTIFY,
-            DataStoreManager.LRCLIB,
+            // Best timing first (2.3.2): BetterLyrics carries Apple Music's professionally timed
+            // lyrics, the closest to YouTube Music's own; LRCLIB is matched on the track's length.
+            // SimpMusic's crowd-sourced timings were often off, so they now only fill gaps.
             DataStoreManager.BETTER_LYRICS,
+            DataStoreManager.LRCLIB,
+            DataStoreManager.SIMPMUSIC,
             DataStoreManager.YOUTUBE,
         )
 

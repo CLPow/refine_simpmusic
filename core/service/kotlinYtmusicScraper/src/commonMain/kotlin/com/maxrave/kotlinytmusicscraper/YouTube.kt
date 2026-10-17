@@ -1,5 +1,6 @@
 package com.maxrave.kotlinytmusicscraper
 
+import com.maxrave.kotlinytmusicscraper.models.Tabs
 import com.eygraber.uri.toKmpUri
 import com.maxrave.common.ITAG
 import com.maxrave.domain.utils.MusicVideoType
@@ -1644,21 +1645,13 @@ class YouTube {
                                         ?.tabbedRenderer
                                         ?.watchNextTabbedResultsRenderer
                                         ?.tabs
-                                        ?.getOrNull(
-                                            1,
-                                        )?.tabRenderer
-                                        ?.endpoint
-                                        ?.browseEndpoint,
+                                        ?.tabEndpoint(BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.MUSIC_PAGE_TYPE_TRACK_LYRICS),
                                 relatedEndpoint =
                                     response.contents.singleColumnMusicWatchNextResultsRenderer
                                         ?.tabbedRenderer
                                         ?.watchNextTabbedResultsRenderer
                                         ?.tabs
-                                        ?.getOrNull(
-                                            2,
-                                        )?.tabRenderer
-                                        ?.endpoint
-                                        ?.browseEndpoint,
+                                        ?.tabEndpoint(BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.MUSIC_PAGE_TYPE_TRACK_RELATED),
                                 currentIndex = playlistPanelRenderer.songIndexOf(playlistPanelRenderer.currentIndex),
                                 endpoint =
                                     playlistPanelRenderer.contents
@@ -1686,21 +1679,13 @@ class YouTube {
                             ?.tabbedRenderer
                             ?.watchNextTabbedResultsRenderer
                             ?.tabs
-                            ?.getOrNull(
-                                1,
-                            )?.tabRenderer
-                            ?.endpoint
-                            ?.browseEndpoint,
+                            ?.tabEndpoint(BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.MUSIC_PAGE_TYPE_TRACK_LYRICS),
                     relatedEndpoint =
                         response.contents.singleColumnMusicWatchNextResultsRenderer
                             ?.tabbedRenderer
                             ?.watchNextTabbedResultsRenderer
                             ?.tabs
-                            ?.getOrNull(
-                                2,
-                            )?.tabRenderer
-                            ?.endpoint
-                            ?.browseEndpoint,
+                            ?.tabEndpoint(BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.MUSIC_PAGE_TYPE_TRACK_RELATED),
                     continuation = playlistPanelRenderer.continuations?.getContinuation(),
                     endpoint = endpoint,
                 )
@@ -2164,3 +2149,14 @@ class YouTube {
 
     }
 }
+
+/**
+ * The browse endpoint of the watch page's tab with [pageType] (lyrics, related). Found by type, not
+ * position: YouTube added a Comments tab in 2026, which moved Related and broke index lookups.
+ */
+private fun List<Tabs.Tab>.tabEndpoint(pageType: String): BrowseEndpoint? =
+    firstNotNullOfOrNull { tab ->
+        tab.tabRenderer.endpoint?.browseEndpoint?.takeIf {
+            it.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType == pageType
+        }
+    }

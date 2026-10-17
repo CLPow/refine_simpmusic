@@ -2,6 +2,7 @@
 
 package com.maxrave.simpmusic.ui.screen.player
 
+import com.maxrave.simpmusic.ui.component.ytm.openContent
 import androidx.compose.animation.Animatable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.LinearEasing
@@ -685,6 +686,10 @@ fun NowPlayingScreenContent(
             },
             onRemoveQueueItem = { index ->
                 mediaPlayerHandler.removeMediaItem(index)
+            },
+            onOpenContent = { content ->
+                if (content.videoId.isNullOrEmpty()) onDismiss()
+                openContent(content, navController, sharedViewModel)
             },
         )
     // One player, in YouTube Music's layout (2.1.16).

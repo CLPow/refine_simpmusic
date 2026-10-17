@@ -1385,8 +1385,10 @@ class SharedViewModel(
             resetLyricsVoteState()
             // A fresh attempt: every source is eligible again for this track.
             triedLyricsSources.clear()
+            // No per-user provider any more (the setting went with the other non-YouTube-Music
+            // options): every track takes the same best-timed-first order.
             tryLyricsSource(
-                preferred = dataStoreManager.lyricsProvider.first(),
+                preferred = null,
                 videoId = videoId,
                 song = song,
                 artist = artist ?: "",
