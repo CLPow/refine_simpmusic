@@ -86,6 +86,9 @@ kotlin {
 
             api(libs.work.runtime.ktx)
 
+            // Login WebViews: startUpWebView moves Chromium startup off the main thread
+            implementation(libs.androidx.webkit)
+
             // Runtime
             api(libs.startup.runtime)
 
