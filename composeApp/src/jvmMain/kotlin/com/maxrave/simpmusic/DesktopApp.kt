@@ -417,6 +417,8 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             // taskbar button, as ytmdesktop adds them.
             LaunchedEffect(Unit) {
                 WindowsIntegration.attachTaskbar(window.windowHandle, onDesktopCommand)
+                // A decorated (VM) window already is a standard one.
+                if (!isVM) WindowsIntegration.enableSystemFrame()
                 launch {
                     sharedViewModel.controllerState.collect { WindowsIntegration.setPlaying(it.isPlaying) }
                 }

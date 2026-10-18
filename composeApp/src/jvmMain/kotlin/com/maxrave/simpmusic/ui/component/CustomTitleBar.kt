@@ -1,5 +1,6 @@
 package com.maxrave.simpmusic.ui.component
 
+import com.maxrave.simpmusic.desktop.WindowsIntegration
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -120,6 +121,8 @@ fun CustomTitleBar(
     // Track drag start position
     var dragStartX by remember { mutableStateOf(0) }
     var dragStartY by remember { mutableStateOf(0) }
+    // Windows is moving the window for this drag (see WindowsIntegration.beginSystemMove).
+    var systemMove by remember { mutableStateOf(false) }
 
     // Update isMaximized when window state changes
     LaunchedEffect(windowState.placement) {
@@ -161,9 +164,16 @@ fun CustomTitleBar(
                                 val mouseLocation = MouseInfo.getPointerInfo().location
                                 dragStartX = mouseLocation.x - window.x
                                 dragStartY = mouseLocation.y - window.y
+                                // Windows' own move loop is what FancyZones and Snap respond to.
+                                systemMove =
+                                    windowState.placement != WindowPlacement.Maximized &&
+                                    WindowsIntegration.beginSystemMove()
                             },
+                            onDragEnd = { systemMove = false },
+                            onDragCancel = { systemMove = false },
                             onDrag = { change, _ ->
                                 change.consume()
+                                if (systemMove) return@detectDragGestures
                                 val mouseLocation = MouseInfo.getPointerInfo().location
                                 // If maximized, restore before moving
                                 if (windowState.placement == WindowPlacement.Maximized) {
@@ -176,6 +186,10 @@ fun CustomTitleBar(
                                     mouseLocation.x - dragStartX,
                                     mouseLocation.y - dragStartY,
                                 )
+                                // Restored from maximized under the pointer: Windows takes the rest of the drag.
+                                if (windowState.placement != WindowPlacement.Maximized) {
+                                    systemMove = WindowsIntegration.beginSystemMove()
+                                }
                             },
                         )
                     },

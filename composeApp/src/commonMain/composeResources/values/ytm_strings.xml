@@ -50,6 +50,9 @@
     <string name="ytm_no_equalizer">No equalizer found on this device</string>
     <string name="ytm_autoplay">Autoplay</string>
     <string name="ytm_autoplay_summary">Add similar content for endless listening</string>
+    <string name="ytm_translate_lyrics">Translate lyrics</string>
+    <string name="ytm_translate_lyrics_summary">Show a translation under each line of lyrics, when one is available</string>
+    <string name="ytm_translation_language">Translation language</string>
     <string name="ytm_download_audio_quality">Download audio quality</string>
     <string name="ytm_using_space">Using %1$s</string>
     <string name="ytm_clear_downloads">Clear downloads</string>

@@ -2,6 +2,7 @@ package com.maxrave.simpmusic.desktop
 
 import com.maxrave.logger.Logger
 import com.sun.jna.CallbackReference
+import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
 import com.sun.jna.platform.win32.Advapi32Util
@@ -13,6 +14,8 @@ import com.sun.jna.platform.win32.WinDef
 import com.sun.jna.platform.win32.WinReg
 import com.sun.jna.platform.win32.WinUser
 import com.sun.jna.ptr.PointerByReference
+import com.sun.jna.win32.StdCallLibrary
+import com.sun.jna.win32.W32APIOptions
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.RenderingHints
@@ -34,6 +37,9 @@ import javax.imageio.ImageIO
  * ytmdesktop gets these from Electron (globalShortcut, BrowserWindow.setThumbarButtons,
  * setProgressBar); this is the same Win32 underneath, called through JNA:
  * RegisterHotKey for the media keys, and ITaskbarList3 for the taskbar.
+ *
+ * It also makes the borderless window a standard one to the shell (see [enableSystemFrame]), so
+ * FancyZones and Snap work on it.
  *
  * Everything degrades to a no-op off Windows or when a call fails: none of it may cost playback.
  */
@@ -190,6 +196,16 @@ object WindowsIntegration {
                             ID_PLAY_PAUSE -> onCommand(Command.PlayPause)
                             ID_NEXT -> onCommand(Command.Next)
                         }
+                    } else if (msg == WM_NCCALCSIZE && systemFrame && wParam.toLong() != 0L) {
+                        // The whole window stays client area: WS_THICKFRAME is there for the
+                        // shell to see, not to draw a border around the custom title bar.
+                        return@WindowProc WinDef.LRESULT(0)
+                    } else if (msg == WM_APP_SYSTEM_MOVE) {
+                        // On the window's own thread, which holds the mouse capture. Windows
+                        // runs its move loop here until the button is released.
+                        runCatching { User32Ext.INSTANCE?.ReleaseCapture() }
+                        User32.INSTANCE.DefWindowProc(h, WM_SYSCOMMAND, WinDef.WPARAM(SC_DRAGMOVE), WinDef.LPARAM(0))
+                        return@WindowProc WinDef.LRESULT(0)
                     } else if (msg == taskbarCreatedMessage) {
                         com.execute {
                             buttonsAdded = false
@@ -209,6 +225,79 @@ object WindowsIntegration {
             previousWndProc =
                 User32.INSTANCE.SetWindowLongPtr(handle, GWLP_WNDPROC, CallbackReference.getFunctionPointer(proc))
         }.onFailure { Logger.w(TAG, "Thumbnail buttons unavailable: ${it.message}") }
+    }
+
+    // endregion
+
+    // region Window snapping (FancyZones, Snap)
+
+    private const val GWL_STYLE = -16
+    private const val WS_THICKFRAME = 0x00040000
+    private const val WS_MINIMIZEBOX = 0x00020000
+    private const val WS_MAXIMIZEBOX = 0x00010000
+    private const val WM_NCCALCSIZE = 0x0083
+    private const val WM_SYSCOMMAND = 0x0112
+    private const val WM_APP_SYSTEM_MOVE = 0x8000 + 0x52
+    private const val SC_DRAGMOVE = 0xF012L
+    private const val SWP_NOSIZE = 0x0001
+    private const val SWP_NOMOVE = 0x0002
+    private const val SWP_NOZORDER = 0x0004
+    private const val SWP_NOACTIVATE = 0x0010
+    private const val SWP_FRAMECHANGED = 0x0020
+
+    @Volatile private var systemFrame = false
+
+    @Suppress("FunctionName")
+    private interface User32Ext : StdCallLibrary {
+        fun ReleaseCapture(): Boolean
+
+        companion object {
+            val INSTANCE: User32Ext? =
+                runCatching { Native.load("user32", User32Ext::class.java, W32APIOptions.DEFAULT_OPTIONS) }.getOrNull()
+        }
+    }
+
+    /**
+     * FancyZones only zones a borderless (WS_POPUP) window that also has a sizing frame and the
+     * minimize and maximize boxes, and it, like Snap, only reacts to Windows' own move loop. AWT's
+     * undecorated frame has neither, and the title bar used to move it by hand with setLocation,
+     * so the window was invisible to both. This adds the three styles, keeps the frame out of
+     * sight (WM_NCCALCSIZE above), and [beginSystemMove] hands title-bar drags to Windows.
+     *
+     * Needs the subclass from [attachTaskbar]; without it the frame would be drawn, so nothing is
+     * changed.
+     */
+    fun enableSystemFrame() {
+        val handle = hwnd ?: return
+        if (!isWindows || previousWndProc == null) return
+        runCatching {
+            systemFrame = true
+            val style = User32.INSTANCE.GetWindowLong(handle, GWL_STYLE)
+            User32.INSTANCE.SetWindowLong(handle, GWL_STYLE, style or WS_THICKFRAME or WS_MINIMIZEBOX or WS_MAXIMIZEBOX)
+            User32.INSTANCE.SetWindowPos(
+                handle,
+                null,
+                0,
+                0,
+                0,
+                0,
+                SWP_NOMOVE or SWP_NOSIZE or SWP_NOZORDER or SWP_NOACTIVATE or SWP_FRAMECHANGED,
+            )
+        }.onFailure {
+            systemFrame = false
+            Logger.w(TAG, "Window snapping unavailable: ${it.message}")
+        }
+    }
+
+    /**
+     * Lets Windows move the window for the drag in progress, as it does when a native title bar
+     * is dragged. Call while the left button is down. False when unavailable, in which case the
+     * caller moves the window itself.
+     */
+    fun beginSystemMove(): Boolean {
+        val handle = hwnd ?: return false
+        if (!systemFrame) return false
+        return User32.INSTANCE.PostMessage(handle, WM_APP_SYSTEM_MOVE, WinDef.WPARAM(0), WinDef.LPARAM(0)).let { true }
     }
 
     /** Swaps the middle thumbnail button between play and pause. */

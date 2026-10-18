@@ -137,6 +137,45 @@ data class MusicResponsiveListItemRenderer(
                     ?.videoId
 
     /**
+     * The recording this row stands for, read from its "View song credits" menu entry, whose
+     * browse id is `MPTC` + the audio track's video id. Null when the row has no such entry.
+     */
+    val creditsVideoId: String?
+        get() =
+            menu
+                ?.menuRenderer
+                ?.items
+                ?.firstNotNullOfOrNull { item ->
+                    item.menuNavigationItemRenderer
+                        ?.navigationEndpoint
+                        ?.browseEndpoint
+                        ?.browseId
+                        ?.takeIf { it.startsWith("MPTC") }
+                        ?.removePrefix("MPTC")
+                }?.takeIf { it.length == 11 }
+
+    /**
+     * The id to play for a track row on an album or artist page.
+     *
+     * A track that also has a music video is listed under the video's id, and YouTube points every
+     * language version of the track at the same video: on A2O MAY's "BAD HABITS TONITE" the
+     * "(Chinese Ver.)" row carries the English video tYzAC-pYkyM, while its credits entry names the
+     * Chinese recording 31p2FLnezZw. So when the credits name a different recording than the row's
+     * own id, that recording is the track; otherwise the Chinese row plays the English song. For an
+     * audio row the two ids are the same. The row's music config is not required: some video rows
+     * (NEON's single) carry none.
+     */
+    val songVideoId: String?
+        get() = songCounterpartId ?: videoId
+
+    /** [musicVideoType] for [songVideoId]: the audio type once the row resolved to its recording. */
+    val songMusicVideoType: String?
+        get() = if (songCounterpartId != null) "MUSIC_VIDEO_TYPE_ATV" else musicVideoType
+
+    private val songCounterpartId: String?
+        get() = creditsVideoId?.takeIf { it != videoId }
+
+    /**
      * The album/playlist id from the play button. The play endpoint switched from
      * watchPlaylistEndpoint to watchEndpoint in the 2026 web response, so check both.
      */

@@ -61,7 +61,7 @@ data class AlbumPage(
                 return null
             } else {
                 return SongItem(
-                    id = renderer.videoId ?: return null,
+                    id = renderer.songVideoId ?: return null,
                     title =
                         renderer.flexColumns
                             .firstOrNull()
@@ -117,7 +117,7 @@ data class AlbumPage(
                         renderer.badges?.find {
                             it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
                         } != null,
-                    musicVideoType = renderer.musicVideoType,
+                    musicVideoType = renderer.songMusicVideoType,
                 )
             }
         }

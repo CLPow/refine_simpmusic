@@ -915,6 +915,19 @@ private fun LyricsTab(
     val synced = data.lyrics.syncType != null && data.lyrics.syncType != "UNSYNCED"
     val timeline = state.timelineFlow.collectAsState()
     val starts = remember(lines) { lines.map { it.startTimeMs.toLongOrNull() ?: 0L } }
+    // Present only when translation is on in Settings. Matched to the original by start time,
+    // or by position when the translation carries no usable times.
+    val translatedLines = data.translatedLyrics?.first?.lines.orEmpty()
+    val translations =
+        remember(lines, translatedLines) {
+            val byStart = translatedLines.associateBy { it.startTimeMs }
+            lines.mapIndexed { index, line ->
+                (byStart[line.startTimeMs] ?: translatedLines.getOrNull(index)?.takeIf { translatedLines.size == lines.size })
+                    ?.words
+                    ?.stripRichSyncTimestamps()
+                    ?.takeIf { it.isNotBlank() && it.trim() != line.words.stripRichSyncTimestamps().trim() }
+            }
+        }
     // The sung line, recomputed per tick but only read (and recomposed) when it changes.
     val active by remember(starts, synced) {
         derivedStateOf {
@@ -965,18 +978,28 @@ private fun LyricsTab(
                 },
                 label = "lyricAlpha",
             )
-            Text(
-                text = line.words.stripRichSyncTimestamps(),
-                style = typo().headlineSmall.copy(fontSize = 24.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold),
-                color = Color.White.copy(alpha = alpha),
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable(enabled = synced) {
-                            val total = timeline.value.total
-                            if (total > 0) actions.onSeek(starts[index] * 100f / total)
-                        }.padding(vertical = 8.dp),
-            )
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = synced) {
+                        val total = timeline.value.total
+                        if (total > 0) actions.onSeek(starts[index] * 100f / total)
+                    }.padding(vertical = 8.dp),
+            ) {
+                Text(
+                    text = line.words.stripRichSyncTimestamps(),
+                    style = typo().headlineSmall.copy(fontSize = 24.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold),
+                    color = Color.White.copy(alpha = alpha),
+                )
+                translations.getOrNull(index)?.let { translated ->
+                    Text(
+                        text = translated,
+                        style = typo().bodyLarge.copy(fontSize = 17.sp, lineHeight = 24.sp),
+                        color = Color.White.copy(alpha = alpha * 0.7f),
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
+            }
         }
         item(key = "source") {
             Text(

@@ -463,8 +463,11 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
-    override val enableTranslateLyric: Flow<String> = flowOf(FALSE)
+    // Opt-in (2.3.6, the user's request): off unless turned on in Settings > Playback.
+    override val enableTranslateLyric: Flow<String> =
+        settingsDataStore.data.map { preferences ->
+            preferences[USE_TRANSLATION_LANGUAGE] ?: FALSE
+        }
 
     override suspend fun setEnableTranslateLyric(enable: Boolean) {
         withContext(Dispatchers.IO) {

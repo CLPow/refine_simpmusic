@@ -86,6 +86,9 @@ import simpmusic.composeapp.generated.resources.ytm_app_language
 import simpmusic.composeapp.generated.resources.ytm_app_version
 import simpmusic.composeapp.generated.resources.ytm_autoplay
 import simpmusic.composeapp.generated.resources.ytm_autoplay_summary
+import simpmusic.composeapp.generated.resources.ytm_translate_lyrics
+import simpmusic.composeapp.generated.resources.ytm_translate_lyrics_summary
+import simpmusic.composeapp.generated.resources.ytm_translation_language
 import simpmusic.composeapp.generated.resources.ytm_cache
 import simpmusic.composeapp.generated.resources.ytm_clear
 import simpmusic.composeapp.generated.resources.ytm_clear_cache
@@ -201,6 +204,8 @@ fun SettingScreen(
     val cacheSize by viewModel.cacheSize.collectAsStateWithLifecycle()
     val downloadedSize by viewModel.downloadedCacheSize.collectAsStateWithLifecycle()
     val autoplay by dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }.collectAsStateWithLifecycle(false)
+    val translateLyrics by viewModel.useTranslation.collectAsStateWithLifecycle()
+    val translationLanguage by viewModel.translationLanguage.collectAsStateWithLifecycle()
     val signInExpired by accountRepository.signInExpired.collectAsStateWithLifecycle()
     var choice by remember { mutableStateOf<ChoiceDialog?>(null) }
     var confirm by remember { mutableStateOf<ConfirmDialog?>(null) }
@@ -218,6 +223,7 @@ fun SettingScreen(
     val clearHistoryConfirm = stringResource(Res.string.ytm_clear_history_confirm)
     val clearHistoryConfirmBody = stringResource(Res.string.ytm_clear_history_confirm_body)
     val shareCrashLog = stringResource(Res.string.ytm_share_crash_log)
+    val translationLanguageTitle = stringResource(Res.string.ytm_translation_language)
 
     Column(Modifier.fillMaxSize().background(Ytm.Background)) {
         YtmTopBar(navController = navController, title = stringResource(category.title), onBack = { navController.navigateUp() }, showActions = false)
@@ -296,6 +302,26 @@ fun SettingScreen(
                         summary = stringResource(Res.string.ytm_autoplay_summary),
                         checked = autoplay,
                     ) { enabled -> scope.launch { dataStoreManager.setEndlessQueue(enabled) } }
+                    SwitchRow(
+                        title = stringResource(Res.string.ytm_translate_lyrics),
+                        summary = stringResource(Res.string.ytm_translate_lyrics_summary),
+                        checked = translateLyrics == DataStoreManager.TRUE,
+                    ) { viewModel.setUseTranslation(it) }
+                    if (translateLyrics == DataStoreManager.TRUE) {
+                        // Translations are stored per two-letter code, so regional variants
+                        // of one language collapse into a single choice.
+                        val languages =
+                            SUPPORTED_LANGUAGE.items
+                                .map { it.toString() }
+                                .distinctBy { SUPPORTED_LANGUAGE.getCodeFromLanguage(it).take(2) }
+                        val current = languages.find { SUPPORTED_LANGUAGE.getCodeFromLanguage(it).take(2) == translationLanguage }
+                        SettingRow(title = translationLanguageTitle, summary = current ?: translationLanguage.orEmpty()) {
+                            choice =
+                                ChoiceDialog(translationLanguageTitle, languages, languages.indexOf(current)) { index ->
+                                    viewModel.setTranslationLanguage(SUPPORTED_LANGUAGE.getCodeFromLanguage(languages[index]).take(2))
+                                }
+                        }
+                    }
                 }
                 SettingsCategory.DataSaving -> {
                     SettingRow(title = audioQuality, summary = quality.orEmpty()) {

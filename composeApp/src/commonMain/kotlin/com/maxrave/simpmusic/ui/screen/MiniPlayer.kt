@@ -48,7 +48,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -450,7 +452,10 @@ private fun ProgressLine(
  * YouTube Music's web volume control: the speaker icon on its own, the slider sliding out beside
  * it while the pointer is over either. A click on the icon mutes, and a second click restores the
  * level from before. The slider follows the drag locally, so it never lags behind the player.
+ * The mouse wheel over the icon or the slider moves the volume 5% per notch.
  */
+private const val VOLUME_WHEEL_STEP = 0.05f
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VolumeControl(
@@ -462,7 +467,26 @@ private fun VolumeControl(
     var dragging by remember { mutableStateOf<Float?>(null) }
     var beforeMute by remember { mutableFloatStateOf(volume.takeIf { it > 0f } ?: 1f) }
     val shown = hovered || dragging != null
-    Row(Modifier.hoverable(interaction), verticalAlignment = Alignment.CenterVertically) {
+    val currentVolume by rememberUpdatedState(volume)
+    val currentOnVolume by rememberUpdatedState(onVolume)
+    Row(
+        Modifier
+            .hoverable(interaction)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        if (event.type != PointerEventType.Scroll) continue
+                        val notches = event.changes.fold(0f) { sum, change -> sum + change.scrollDelta.y }
+                        if (notches == 0f) continue
+                        // Wheel up (negative delta) turns it up, as in YouTube Music on the web.
+                        currentOnVolume((currentVolume - notches * VOLUME_WHEEL_STEP).coerceIn(0f, 1f))
+                        event.changes.forEach { it.consume() }
+                    }
+                }
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         AnimatedVisibility(visible = shown, enter = expandHorizontally(expandFrom = Alignment.End) + fadeIn(), exit = shrinkHorizontally(shrinkTowards = Alignment.End) + fadeOut()) {
             Slider(
                 value = dragging ?: volume,

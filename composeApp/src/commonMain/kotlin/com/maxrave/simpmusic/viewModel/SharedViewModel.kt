@@ -1111,7 +1111,7 @@ class SharedViewModel(
         mediaPlayerHandler.loadPlaylistOrAlbum(index)
     }
 
-    private fun updateLyrics(
+    private suspend fun updateLyrics(
         videoId: String,
         duration: Int, // 0 if translated lyrics
         inputLyrics: Lyrics?,
@@ -1126,6 +1126,10 @@ class SharedViewModel(
             }
             return
         }
+
+        // Every translation source ends here, so this one check keeps them all off unless the
+        // user turned translation on.
+        if (isTranslatedLyrics && dataStoreManager.enableTranslateLyric.first() != TRUE) return
 
         val lyrics =
             inputLyrics.copy(
@@ -1608,6 +1612,7 @@ class SharedViewModel(
         videoId: String,
         lyrics: Lyrics,
     ) {
+        if (dataStoreManager.enableTranslateLyric.first() != TRUE) return
         val translationLanguage =
             dataStoreManager.translationLanguage.first()
         lyricsCanvasRepository.getSimpMusicTranslatedLyrics(videoId, translationLanguage).collectLatest { response ->
