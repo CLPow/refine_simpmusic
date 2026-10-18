@@ -129,13 +129,69 @@ import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import kotlin.math.roundToLong
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import com.maxrave.simpmusic.expect.ui.PlatformBackHandler
+import com.maxrave.simpmusic.extension.KeepScreenOn
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
+import com.maxrave.simpmusic.ui.icon.ThumbDown
+import kotlin.time.Clock
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.more
+import simpmusic.composeapp.generated.resources.ytm_close_player
+import simpmusic.composeapp.generated.resources.ytm_dislike
+import simpmusic.composeapp.generated.resources.ytm_like
+import simpmusic.composeapp.generated.resources.ytm_liked
+import simpmusic.composeapp.generated.resources.ytm_lyrics
+import simpmusic.composeapp.generated.resources.ytm_lyrics_source
+import simpmusic.composeapp.generated.resources.ytm_lyrics_unavailable
+import simpmusic.composeapp.generated.resources.ytm_next
+import simpmusic.composeapp.generated.resources.ytm_nothing_related
+import simpmusic.composeapp.generated.resources.ytm_off
+import simpmusic.composeapp.generated.resources.ytm_on
+import simpmusic.composeapp.generated.resources.ytm_pause
+import simpmusic.composeapp.generated.resources.ytm_play
+import simpmusic.composeapp.generated.resources.ytm_playing_from
+import simpmusic.composeapp.generated.resources.ytm_previous
+import simpmusic.composeapp.generated.resources.ytm_related
+import simpmusic.composeapp.generated.resources.ytm_reorder
+import simpmusic.composeapp.generated.resources.ytm_repeat
+import simpmusic.composeapp.generated.resources.ytm_repeat_all
+import simpmusic.composeapp.generated.resources.ytm_repeat_one
+import simpmusic.composeapp.generated.resources.ytm_save
+import simpmusic.composeapp.generated.resources.ytm_share
+import simpmusic.composeapp.generated.resources.ytm_shuffle
+import simpmusic.composeapp.generated.resources.ytm_up_next
 
-private val PageBlack = Color(0xFF030303)
-private val TextSecondary = Color(0xFFAAAAAA)
-private val SheetColor = Color(0xFF212121)
+private val PageBlack = Ytm.Background
+private val TextSecondary = Ytm.TextSecondary
+private val SheetColor = Ytm.Surface
 
 /** The three tabs along the bottom of YouTube Music's player, and of the sheet they open. */
-private enum class PlayerTab(val label: String) { UpNext("UP NEXT"), Lyrics("LYRICS"), Related("RELATED") }
+private enum class PlayerTab(val label: StringResource) {
+    UpNext(Res.string.ytm_up_next),
+    Lyrics(Res.string.ytm_lyrics),
+    Related(Res.string.ytm_related),
+}
+
+/**
+ * The artwork colour, darkened when it is so light that white icons over it would be hard to
+ * read (a white or yellow cover). YouTube Music's player stays dark whatever the cover.
+ */
+private fun Color.forPlayerBackground(): Color {
+    if (this == Color.Black) return Color(0xFF3A3A3A)
+    val lum = luminance()
+    return if (lum > 0.35f) lerp(this, Color.Black, ((lum - 0.35f) / 0.65f * 0.6f).coerceIn(0f, 0.6f)) else this
+}
 
 /**
  * Now Playing, as YouTube Music lays it out:
@@ -156,7 +212,7 @@ fun NowPlayingContentYtm(
     actions: NowPlayingContentActions,
 ) {
     var openTab by rememberSaveable { mutableStateOf<PlayerTab?>(null) }
-    val tint = state.startColor.value.let { if (it == Color.Black) Color(0xFF3A3A3A) else it }
+    val tint = state.startColor.value.forPlayerBackground()
     val background =
         remember(tint) {
             Brush.verticalGradient(
@@ -165,9 +221,6 @@ fun NowPlayingContentYtm(
                 1f to PageBlack,
             )
         }
-
-    // The toolbar flag belongs to the old scrolling styles; this page never scrolls.
-    LaunchedEffect(Unit) { actions.onToolbarVisibilityChange(false) }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(PageBlack).background(background)) {
         // YouTube Music's web player on a wide window: the cover and controls on the left, the
@@ -246,6 +299,8 @@ fun NowPlayingContentYtm(
             Spacer(Modifier.height(4.dp))
         }
 
+        // Back puts the Up next / Lyrics / Related sheet away before it closes the player.
+        PlatformBackHandler(enabled = openTab != null) { openTab = null }
         AnimatedVisibility(
             visible = openTab != null,
             enter = slideInVertically(tween(280)) { it },
@@ -270,12 +325,12 @@ private fun TopBar(
 ) {
     Row(Modifier.fillMaxWidth().height(56.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = actions.onDismiss) {
-            Icon(state.dismissIcon, contentDescription = "Close", tint = Color.White)
+            Icon(state.dismissIcon, contentDescription = stringResource(Res.string.ytm_close_player), tint = Color.White)
         }
         Spacer(Modifier.weight(1f))
         PlatformCastButton(tint = Color.White)
         IconButton(onClick = actions.onShowMoreSheet) {
-            Icon(SimpIcons.MoreVert, contentDescription = "More", tint = Color.White)
+            Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Color.White)
         }
     }
 }
@@ -297,7 +352,7 @@ private fun Artwork(
                 state = state.artworkPagerState,
                 modifier = Modifier.fillMaxSize(),
                 pageSpacing = 16.dp,
-                key = { page -> queue.getOrNull(page)?.videoId ?: page },
+                key = { page -> "$page-${queue.getOrNull(page)?.videoId}" },
             ) { page ->
                 val isCurrent = page == state.currentOrderIndex
                 val url =
@@ -326,6 +381,7 @@ private fun CoverImage(
                 .data(url)
                 .diskCachePolicy(CachePolicy.ENABLED)
                 .diskCacheKey(url + "BIGGER")
+                .size(ARTWORK_MAX_PX)
                 .crossfade(300)
                 .build(),
         placeholder = rememberHolderPainter(),
@@ -362,7 +418,10 @@ private fun TitleBlock(
     }
 }
 
-/** YouTube Music's row of pills under the title: like, save to a playlist, share. */
+/**
+ * YouTube Music's row of pills under the title: thumbs up and down, save to a playlist, share.
+ * The thumbs are the account's rating when signed in (see MediaPlayerHandler.toggleLike/dislike).
+ */
 @Composable
 private fun ActionPills(
     state: NowPlayingContentState,
@@ -375,16 +434,21 @@ private fun ActionPills(
         val liked = state.controllerState.isLiked
         Pill(
             icon = SimpIcons.ThumbUp,
-            label = if (liked) "Liked" else "Like",
+            label = stringResource(if (liked) Res.string.ytm_liked else Res.string.ytm_like),
             active = liked,
             onClick = { actions.onUIEvent(UIEvent.ToggleLike) },
         )
-        Pill(icon = SimpIcons.PlaylistAdd, label = "Save", onClick = actions.onShowAddToPlaylist)
+        Pill(
+            icon = SimpIcons.ThumbDown,
+            label = stringResource(Res.string.ytm_dislike),
+            onClick = { actions.onUIEvent(UIEvent.Dislike) },
+        )
+        Pill(icon = SimpIcons.PlaylistAdd, label = stringResource(Res.string.ytm_save), onClick = actions.onShowAddToPlaylist)
         val videoId = state.artworkQueue.getOrNull(state.currentOrderIndex)?.videoId
         if (videoId != null) {
             Pill(
                 icon = SimpIcons.Share,
-                label = "Share",
+                label = stringResource(Res.string.ytm_share),
                 onClick = { shareUrl(state.screenData.nowPlayingTitle, "https://music.youtube.com/watch?v=$videoId") },
             )
         }
@@ -401,9 +465,10 @@ private fun Pill(
     Row(
         modifier =
             Modifier
+                .minimumInteractiveComponentSize()
                 .clip(CircleShape)
                 .background(if (active) Color.White else Color.White.copy(alpha = 0.12f))
-                .clickable(onClick = onClick)
+                .toggleableIf(active, onClick)
                 .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -420,13 +485,23 @@ private fun SeekBar(
     state: NowPlayingContentState,
     actions: NowPlayingContentActions,
 ) {
-    val total = state.timelineState.total
-    val shown = if (total > 0) (total * (state.sliderValue / 100f)).roundToLong() else 0L
+    val timeline by state.timelineFlow.collectAsState()
+    val total = timeline.total
+    // While dragging, the thumb follows the finger; otherwise the song. Plain remember: a
+    // restored "dragging" after rotation never got its finish and froze the bar.
+    var dragging by remember { mutableStateOf<Float?>(null) }
+    val fraction = dragging ?: if (total > 0) (timeline.current.toFloat() / total).coerceIn(0f, 1f) else 0f
+    val shown = if (total > 0) (total * fraction).roundToLong() else 0L
     Column(Modifier.fillMaxWidth()) {
         Slider(
-            value = (state.sliderValue / 100f).coerceIn(0f, 1f),
-            onValueChange = { actions.onSliderChange(it * 100f) },
-            onValueChangeFinished = actions.onSliderChangeFinished,
+            value = fraction,
+            // Nothing to seek in until the song's length is known.
+            enabled = total > 0,
+            onValueChange = { dragging = it },
+            onValueChangeFinished = {
+                dragging?.let { actions.onSeek(it * 100f) }
+                dragging = null
+            },
             colors =
                 SliderDefaults.colors(
                     thumbColor = Color.White,
@@ -479,11 +554,16 @@ private fun Transport(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(onClick = { actions.onUIEvent(UIEvent.Shuffle) }) {
-            Icon(SimpIcons.Shuffle, contentDescription = "Shuffle", tint = if (controller.isShuffle) Color.White else TextSecondary)
+        val on = stringResource(Res.string.ytm_on)
+        val off = stringResource(Res.string.ytm_off)
+        IconButton(
+            onClick = { actions.onUIEvent(UIEvent.Shuffle) },
+            modifier = Modifier.semantics { stateDescription = if (controller.isShuffle) on else off },
+        ) {
+            Icon(SimpIcons.Shuffle, contentDescription = stringResource(Res.string.ytm_shuffle), tint = if (controller.isShuffle) Color.White else TextSecondary)
         }
         IconButton(onClick = { actions.onUIEvent(UIEvent.Previous) }, modifier = Modifier.size(56.dp)) {
-            Icon(SimpIcons.SkipPrevious, contentDescription = "Previous", tint = Color.White, modifier = Modifier.size(36.dp))
+            Icon(SimpIcons.SkipPrevious, contentDescription = stringResource(Res.string.ytm_previous), tint = Color.White, modifier = Modifier.size(36.dp))
         }
         PlayDisc(state, actions, 72)
         IconButton(
@@ -493,15 +573,24 @@ private fun Transport(
         ) {
             Icon(
                 SimpIcons.SkipNext,
-                contentDescription = "Next",
+                contentDescription = stringResource(Res.string.ytm_next),
                 tint = if (controller.isNextAvailable) Color.White else Color.White.copy(alpha = 0.38f),
                 modifier = Modifier.size(36.dp),
             )
         }
-        IconButton(onClick = { actions.onUIEvent(UIEvent.Repeat) }) {
+        val repeatState =
+            when (controller.repeatState) {
+                is RepeatState.One -> stringResource(Res.string.ytm_repeat_one)
+                is RepeatState.None -> off
+                else -> stringResource(Res.string.ytm_repeat_all)
+            }
+        IconButton(
+            onClick = { actions.onUIEvent(UIEvent.Repeat) },
+            modifier = Modifier.semantics { stateDescription = repeatState },
+        ) {
             Icon(
                 if (controller.repeatState is RepeatState.One) SimpIcons.RepeatOne else SimpIcons.Repeat,
-                contentDescription = "Repeat",
+                contentDescription = stringResource(Res.string.ytm_repeat),
                 tint = if (controller.repeatState is RepeatState.None) TextSecondary else Color.White,
             )
         }
@@ -515,20 +604,25 @@ private fun PlayDisc(
     actions: NowPlayingContentActions,
     side: Int,
 ) {
+    // Only the loading flag matters here, so the disc recomposes when it flips, not every tick.
+    val timeline = state.timelineFlow.collectAsState()
+    val loading by remember { derivedStateOf { timeline.value.loading } }
+    val label = stringResource(if (state.controllerState.isPlaying) Res.string.ytm_pause else Res.string.ytm_play)
     Box(
         Modifier
             .size(side.dp)
             .clip(CircleShape)
             .background(Color.White)
-            .clickable { actions.onUIEvent(UIEvent.PlayPause) },
+            .clickable(role = Role.Button, onClickLabel = label) { actions.onUIEvent(UIEvent.PlayPause) }
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) {
-        if (state.timelineState.loading) {
+        if (loading) {
             CircularProgressIndicator(color = Color.Black, strokeWidth = 3.dp, modifier = Modifier.size((side * 0.4f).dp))
         } else {
             Icon(
                 if (state.controllerState.isPlaying) SimpIcons.Pause else SimpIcons.PlayArrow,
-                contentDescription = if (state.controllerState.isPlaying) "Pause" else "Play",
+                contentDescription = null,
                 tint = Color.Black,
                 modifier = Modifier.size((side * 0.55f).dp),
             )
@@ -549,12 +643,12 @@ private fun TabRow(
             Column(
                 Modifier
                     .weight(1f)
-                    .clickable { onSelect(tab) }
+                    .selectable(selected = isSelected, role = Role.Tab) { onSelect(tab) }
                     .padding(top = 14.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = tab.label,
+                    text = stringResource(tab.label).uppercase(),
                     style = typo().bodyMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
                     color = if (selected == null || isSelected) Color.White else TextSecondary,
                     maxLines = 1,
@@ -622,7 +716,7 @@ private fun PlayerSheet(
             IconButton(onClick = { actions.onUIEvent(UIEvent.PlayPause) }) {
                 Icon(
                     if (state.controllerState.isPlaying) SimpIcons.Pause else SimpIcons.PlayArrow,
-                    contentDescription = if (state.controllerState.isPlaying) "Pause" else "Play",
+                    contentDescription = stringResource(if (state.controllerState.isPlaying) Res.string.ytm_pause else Res.string.ytm_play),
                     tint = Color.White,
                     modifier = Modifier.size(32.dp),
                 )
@@ -652,9 +746,10 @@ private fun UpNextTab(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (state.currentOrderIndex).coerceAtLeast(0))
     val dragDropState = rememberDragDropState(listState) { from, to -> actions.onMoveQueueItem(from, to) }
     var overscrollJob by remember { mutableStateOf<Job?>(null) }
-    var itemSheetIndex by remember { mutableStateOf(-1) }
-    if (itemSheetIndex >= 0) {
-        QueueItemBottomSheet(onDismiss = { itemSheetIndex = -1 }, index = itemSheetIndex)
+    // The song, not just its row: the queue can change (radio paging in) while the menu is open.
+    var itemSheet by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    itemSheet?.let { (videoId, index) ->
+        QueueItemBottomSheet(onDismiss = { itemSheet = null }, videoId = videoId, indexHint = index)
     }
 
     // Radio and endless queues page in as the end comes into view.
@@ -675,7 +770,7 @@ private fun UpNextTab(
     Column(Modifier.fillMaxSize()) {
         if (state.screenData.playlistName.isNotBlank()) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Text("Playing from", style = typo().bodySmall, color = TextSecondary)
+                Text(stringResource(Res.string.ytm_playing_from), style = typo().bodySmall, color = TextSecondary)
                 Text(
                     state.screenData.playlistName,
                     style = typo().titleMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
@@ -726,7 +821,7 @@ private fun UpNextTab(
                         isCurrent = index == state.currentOrderIndex,
                         isPlaying = state.controllerState.isPlaying,
                         onClick = { actions.onSeekToQueueIndex(index) },
-                        onMore = { itemSheetIndex = index },
+                        onMore = { itemSheet = track.videoId to index },
                     )
                 }
             }
@@ -791,9 +886,9 @@ private fun QueueRow(
             )
         }
         IconButton(onClick = onMore) {
-            Icon(SimpIcons.MoreVert, contentDescription = "More", tint = TextSecondary)
+            Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = TextSecondary)
         }
-        Icon(SimpIcons.DragHandle, contentDescription = "Reorder", tint = TextSecondary, modifier = Modifier.padding(end = 12.dp))
+        Icon(SimpIcons.DragHandle, contentDescription = stringResource(Res.string.ytm_reorder), tint = TextSecondary, modifier = Modifier.padding(end = 12.dp))
     }
 }
 
@@ -811,26 +906,49 @@ private fun LyricsTab(
     val lines = data?.lyrics?.lines.orEmpty()
     if (data == null || lines.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Lyrics not available", style = typo().bodyLarge, color = TextSecondary)
+            Text(stringResource(Res.string.ytm_lyrics_unavailable), style = typo().bodyLarge, color = TextSecondary)
         }
         return
     }
+    // Reading along: the screen stays on while lyrics are shown and the song plays.
+    if (state.controllerState.isPlaying) KeepScreenOn()
     val synced = data.lyrics.syncType != null && data.lyrics.syncType != "UNSYNCED"
-    val timeline by state.timelineFlow.collectAsState()
+    val timeline = state.timelineFlow.collectAsState()
     val starts = remember(lines) { lines.map { it.startTimeMs.toLongOrNull() ?: 0L } }
-    val active =
-        if (!synced) {
-            -1
-        } else {
-            val now = timeline.current
-            starts.indexOfLast { it <= now }.takeIf { now > 0 } ?: -1
+    // The sung line, recomputed per tick but only read (and recomposed) when it changes.
+    val active by remember(starts, synced) {
+        derivedStateOf {
+            if (!synced) {
+                -1
+            } else {
+                val now = timeline.value.current
+                starts.indexOfLast { it <= now }.takeIf { now > 0 } ?: -1
+            }
         }
+    }
     val listState = rememberLazyListState()
-    val currentActive by rememberUpdatedState(active)
+    val density = LocalDensity.current
+    // A hand scroll pauses following the song for a few seconds, as in YouTube Music, instead of
+    // being yanked back on the next tick.
+    var lastUserScroll by remember { mutableStateOf(0L) }
+    var autoScrolling by remember { mutableStateOf(false) }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (scrolling && !autoScrolling) lastUserScroll = Clock.System.now().toEpochMilliseconds()
+        }
+    }
     LaunchedEffect(synced) {
         if (!synced) return@LaunchedEffect
-        snapshotFlow { currentActive }.collect { index ->
-            if (index >= 0) listState.animateScrollToItem(index, scrollOffset = -200)
+        snapshotFlow { active }.collect { index ->
+            val sinceUser = Clock.System.now().toEpochMilliseconds() - lastUserScroll
+            if (index >= 0 && (autoScrolling || sinceUser > LYRICS_FOLLOW_PAUSE_MS)) {
+                autoScrolling = true
+                try {
+                    listState.animateScrollToItem(index, scrollOffset = -with(density) { 120.dp.roundToPx() })
+                } finally {
+                    autoScrolling = false
+                }
+            }
         }
     }
     LazyColumn(
@@ -854,15 +972,15 @@ private fun LyricsTab(
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .clickable(enabled = synced && timeline.total > 0) {
-                            val start = starts[index]
-                            actions.onUIEvent(UIEvent.UpdateProgress(start * 100f / timeline.total))
+                        .clickable(enabled = synced) {
+                            val total = timeline.value.total
+                            if (total > 0) actions.onSeek(starts[index] * 100f / total)
                         }.padding(vertical = 8.dp),
             )
         }
         item(key = "source") {
             Text(
-                "Source: ${data.lyricsProvider.displayName()}",
+                stringResource(Res.string.ytm_lyrics_source, data.lyricsProvider.displayName()),
                 style = typo().bodyMedium,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 24.dp),
@@ -909,7 +1027,7 @@ private fun RelatedTab(
     }
     if (shelves.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("Nothing related to show", style = typo().bodyMedium, color = TextSecondary)
+            Text(stringResource(Res.string.ytm_nothing_related), style = typo().bodyMedium, color = TextSecondary)
         }
         return
     }
@@ -945,3 +1063,15 @@ private fun RelatedTab(
         Spacer(Modifier.height(24.dp))
     }
 }
+
+/** Largest artwork decode, in pixels: enough for any phone or a desktop window's cover. */
+private const val ARTWORK_MAX_PX = 1080
+
+/** How long a hand scroll of the lyrics stops them following the song. */
+private const val LYRICS_FOLLOW_PAUSE_MS = 3_000L
+
+/** A pill that is on or off (Like) reads as a toggle; the others are plain buttons. */
+private fun Modifier.toggleableIf(
+    active: Boolean,
+    onClick: () -> Unit,
+): Modifier = clickable(role = Role.Button, onClick = onClick).semantics { selected = active }

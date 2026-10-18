@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
  * `data` depends on it with `implementation`, so the dependency stops there. That is the layering
  * rule working, not an obstacle to route around: the UI asks for "a reading of this line" and does
  * not learn that kuromoji, pinyin4j or a Hangul decomposition produced it. Same shape as
- * [ListenTogetherRepository], where the UI never sees the wire protocol.
+ * the app's other service repositories, where the UI never sees the wire protocol.
  */
 interface LyricsRomanizerRepository {
     /**

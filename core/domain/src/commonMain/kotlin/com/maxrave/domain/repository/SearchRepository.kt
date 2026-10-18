@@ -18,6 +18,8 @@ interface SearchRepository {
 
     suspend fun deleteSearchHistory()
 
+    suspend fun deleteSearchHistoryItem(query: String)
+
     fun getSearchDataSong(query: String): Flow<Resource<ArrayList<SongsResult>>>
 
     fun getSearchDataVideo(query: String): Flow<Resource<ArrayList<VideosResult>>>

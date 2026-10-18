@@ -28,6 +28,7 @@ import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import com.maxrave.media3.R
 
 /**
  * Generic browse screen recreating the classic Android Auto media tree on the
@@ -52,6 +53,11 @@ internal class MediaListCarScreen(
 
     // null = still loading (template shows spinner); empty = loaded, nothing to show
     private var children: List<MediaItem>? = null
+
+    /** The list could not be fetched; shown as such rather than as an empty list. */
+    private var loadFailed = false
+
+    private fun noItemsMessage(): String = carContext.getString(if (loadFailed) R.string.car_load_failed else R.string.car_nothing_to_show)
     private val artwork = mutableMapOf<String, CarIcon>()
 
     init {
@@ -78,6 +84,7 @@ internal class MediaListCarScreen(
                     throw e
                 } catch (e: Exception) {
                     Logger.e(TAG, "getChildren($parentId) failed: ${e.message}")
+                    loadFailed = true
                     emptyList()
                 }
             children = items
@@ -126,7 +133,7 @@ internal class MediaListCarScreen(
         val itemListBuilder =
             ItemList
                 .Builder()
-                .setNoItemsMessage("Nothing to show")
+                .setNoItemsMessage(noItemsMessage())
         loaded.take(carContext.listContentLimit()).forEach { item ->
             val browsable = item.mediaMetadata.isBrowsable == true
             // Browse media ids are paths ("song/{videoId}"); nowPlaying uses the bare videoId
@@ -146,7 +153,7 @@ internal class MediaListCarScreen(
             GridSection
                 .Builder()
                 .setItemSize(GridSection.ITEM_SIZE_EXTRA_LARGE)
-                .setNoItemsMessage("Nothing to show")
+                .setNoItemsMessage(noItemsMessage())
         loaded.take(carContext.gridContentLimit()).forEach { item ->
             val browsable = item.mediaMetadata.isBrowsable == true
             val isPlaying = !browsable && item.mediaId.substringAfterLast('/') == nowPlayingId

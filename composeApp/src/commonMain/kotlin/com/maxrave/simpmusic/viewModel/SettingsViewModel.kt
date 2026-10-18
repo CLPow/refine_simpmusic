@@ -44,7 +44,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.koin.core.component.inject
-import org.simpmusic.lastfm.isLastfmAvailable
 import org.jetbrains.compose.resources.getString as formatString
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.backup_create_failed
@@ -203,16 +202,9 @@ class SettingsViewModel(
      * Last.fm block in settings is hidden when it is false, rather than offering a login that
      * could never succeed.
      */
-    val lastfmAvailable: Boolean = isLastfmAvailable()
 
-    private val _lastfmUsername = MutableStateFlow("")
-    val lastfmUsername: StateFlow<String> = _lastfmUsername
 
-    private val _lastfmLoggedIn = MutableStateFlow(false)
-    val lastfmLoggedIn: StateFlow<Boolean> = _lastfmLoggedIn
 
-    private val _lastfmScrobbleEnabled = MutableStateFlow(false)
-    val lastfmScrobbleEnabled: StateFlow<Boolean> = _lastfmScrobbleEnabled
 
     private val _keepServiceAlive = MutableStateFlow<Boolean>(false)
     val keepServiceAlive: StateFlow<Boolean> = _keepServiceAlive
@@ -326,8 +318,6 @@ class SettingsViewModel(
         getExplicitContentEnabled()
         getDiscordLoggedIn()
         getDiscordRichPresenceEnabled()
-        getLastfmSession()
-        getLastfmScrobbleEnabled()
         getKeepServiceAlive()
         getKeepYouTubePlaylistOffline()
         getCombineLocalAndYouTubeLiked()
@@ -534,43 +524,6 @@ class SettingsViewModel(
             dataStoreManager.discordToken.collect { loggedIn ->
                 _discordLoggedIn.value = loggedIn.isNotEmpty()
             }
-        }
-    }
-
-    private fun getLastfmSession() {
-        viewModelScope.launch {
-            dataStoreManager.lastfmSessionKey.collect { key ->
-                _lastfmLoggedIn.value = key.isNotEmpty()
-            }
-        }
-        viewModelScope.launch {
-            dataStoreManager.lastfmUsername.collect { username ->
-                _lastfmUsername.value = username
-            }
-        }
-    }
-
-    fun logOutLastfm() {
-        viewModelScope.launch {
-            dataStoreManager.setLastfmSession(sessionKey = "", username = "")
-            // Scrobbling is gated on the session, so logging out must clear it here — the same
-            // teardown setSpotifyLogIn and logOutDiscord already do. Doing it from the Settings
-            // row instead only works if the user happens to open Settings and scroll to that row.
-            dataStoreManager.setLastfmScrobbleEnabled(false)
-        }
-    }
-
-    private fun getLastfmScrobbleEnabled() {
-        viewModelScope.launch {
-            dataStoreManager.lastfmScrobbleEnabled.collect { enabled ->
-                _lastfmScrobbleEnabled.value = enabled == DataStoreManager.TRUE
-            }
-        }
-    }
-
-    fun setLastfmScrobbleEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            dataStoreManager.setLastfmScrobbleEnabled(enabled)
         }
     }
 
@@ -1088,8 +1041,6 @@ class SettingsViewModel(
     private var _crossfadePrepBufferMs: MutableStateFlow<Int> = MutableStateFlow(3000)
     val crossfadePrepBufferMs: StateFlow<Int> = _crossfadePrepBufferMs
 
-    private var _listenTogetherConfirmJoin: MutableStateFlow<String?> = MutableStateFlow(null)
-    val listenTogetherConfirmJoin: StateFlow<String?> = _listenTogetherConfirmJoin
 
     private var _checkForUpdates: MutableStateFlow<String?> = MutableStateFlow(null)
     val checkForUpdates: StateFlow<String?> = _checkForUpdates
@@ -1115,9 +1066,6 @@ class SettingsViewModel(
         }
         viewModelScope.launch {
             dataStoreManager.crossfadePrepBufferMs.collect { _crossfadePrepBufferMs.emit(it) }
-        }
-        viewModelScope.launch {
-            dataStoreManager.listenTogetherConfirmJoin.collect { _listenTogetherConfirmJoin.emit(it) }
         }
         viewModelScope.launch {
             dataStoreManager.checkForUpdates.collect { _checkForUpdates.emit(it) }
@@ -1148,10 +1096,6 @@ class SettingsViewModel(
 
     fun setCrossfadePrepBufferMs(ms: Int) {
         viewModelScope.launch { dataStoreManager.setCrossfadePrepBufferMs(ms) }
-    }
-
-    fun setListenTogetherConfirmJoin(confirm: Boolean) {
-        viewModelScope.launch { dataStoreManager.setListenTogetherConfirmJoin(confirm) }
     }
 
     fun setCheckForUpdates(enabled: Boolean) {
@@ -1456,12 +1400,16 @@ class SettingsViewModel(
         }
     }
 
-    fun changeLanguage(code: String) {
+    fun changeLanguage(
+        code: String,
+        onSaved: () -> Unit = {},
+    ) {
         viewModelScope.launch {
             dataStoreManager.putString(SELECTED_LANGUAGE, code)
             Logger.w("SettingsViewModel", "changeLanguage: $code")
             getLanguage()
             changeLanguageNative(code)
+            onSaved()
         }
     }
 

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The app is dark only, like YouTube Music. A DayNight window on a phone in light mode
+      painted white for the moment before the first frame; this paints YouTube Music's black.
+    -->
+    <style name="Theme.Refine" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">@color/refine_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+
+    <color name="refine_background">#030303</color>
+</resources>

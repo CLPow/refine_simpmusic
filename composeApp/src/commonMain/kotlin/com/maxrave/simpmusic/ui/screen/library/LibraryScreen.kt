@@ -63,8 +63,6 @@ import com.maxrave.simpmusic.ui.icon.Add
 import com.maxrave.simpmusic.ui.icon.DownloadForOffline
 import com.maxrave.simpmusic.ui.icon.KeyboardArrowDown
 import com.maxrave.simpmusic.ui.icon.LibraryMusic
-import com.maxrave.simpmusic.ui.icon.QueueMusic
-import com.maxrave.simpmusic.ui.icon.SelectAll
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.icon.ThumbUp
 import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDestination
@@ -80,29 +78,62 @@ import com.maxrave.simpmusic.viewModel.LibraryViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import com.maxrave.simpmusic.ui.icon.GridView
+import com.maxrave.simpmusic.ui.icon.ViewList
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.semantics.Role
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.album
+import simpmusic.composeapp.generated.resources.cancel
+import simpmusic.composeapp.generated.resources.create
+import simpmusic.composeapp.generated.resources.n_song
+import simpmusic.composeapp.generated.resources.playlist
+import simpmusic.composeapp.generated.resources.title
+import simpmusic.composeapp.generated.resources.ytm_artist
+import simpmusic.composeapp.generated.resources.ytm_auto_playlist
+import simpmusic.composeapp.generated.resources.ytm_downloads
+import simpmusic.composeapp.generated.resources.ytm_grid_view
+import simpmusic.composeapp.generated.resources.ytm_library_empty_albums
+import simpmusic.composeapp.generated.resources.ytm_library_empty_artists
+import simpmusic.composeapp.generated.resources.ytm_library_empty_downloads
+import simpmusic.composeapp.generated.resources.ytm_library_empty_songs
+import simpmusic.composeapp.generated.resources.ytm_liked_music
+import simpmusic.composeapp.generated.resources.ytm_liked_songs
+import simpmusic.composeapp.generated.resources.ytm_list_view
+import simpmusic.composeapp.generated.resources.ytm_new
+import simpmusic.composeapp.generated.resources.ytm_new_playlist
 
 /** One row/tile of the Library, whatever kind of thing it stands for. */
 private data class LibraryEntry(
     val key: String,
     val title: String,
+    /** The fixed part of the second line; [songCount] is appended as a localised plural. */
     val subtitle: String,
     val thumbnail: String?,
     val round: Boolean = false,
+    val songCount: Int? = null,
     val sortKey: Long = 0,
     val onClick: () -> Unit,
 )
 
+@Composable
+private fun LibraryEntry.secondLine(): String {
+    val count = songCount?.let { pluralStringResource(Res.plurals.n_song, it, it) }
+    return listOfNotNull(subtitle.ifBlank { null }, count).joinToString(" • ")
+}
+
 /**
  * YouTube Music's Library: the logo bar, chips (Playlists · Songs · Albums · Artists ·
- * Downloads), a sort menu with the list/grid switch, then the items. Playlists starts with Liked
+ * Downloads), a sort menu with the list/grid switch, then the items. With no chip selected it is
+ * the unfiltered Library (playlists, albums and artists together); Playlists starts with Liked
  * music, and carries the white "New" button for a new playlist.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
-    innerPadding: PaddingValues = PaddingValues(),
     navController: NavController,
-    onScrolling: (onTop: Boolean) -> Unit = {},
     viewModel: LibraryViewModel = koinViewModel(),
     sharedViewModel: SharedViewModel = koinInject(),
 ) {
@@ -130,6 +161,14 @@ fun LibraryScreen(
         }
     }
 
+    val likedMusic = stringResource(Res.string.ytm_liked_music)
+    val autoPlaylist = stringResource(Res.string.ytm_auto_playlist)
+    val playlistLabel = stringResource(Res.string.playlist)
+    val albumLabel = stringResource(Res.string.album)
+    val artistLabel = stringResource(Res.string.ytm_artist)
+    val likedSongsName = stringResource(Res.string.ytm_liked_songs)
+    val downloadsName = stringResource(Res.string.ytm_downloads)
+
     fun playSongs(
         songs: List<SongEntity>,
         start: SongEntity,
@@ -148,15 +187,16 @@ fun LibraryScreen(
         sharedViewModel.loadMediaItem(start.toTrack(), Config.PLAYLIST_CLICK, songs.indexOf(start).coerceAtLeast(0))
     }
 
+    // Built once per change of the underlying lists, not on every recomposition.
     val entries: List<LibraryEntry> =
-        when (chip) {
-            LibraryChip.Playlists ->
+        remember(chip, sort, loggedIn, youTubePlaylists, localPlaylists, liked, albums, artists, downloads, likedMusic) {
+            fun playlistEntries() =
                 buildList {
                     add(
                         LibraryEntry(
                             key = "liked",
-                            title = "Liked music",
-                            subtitle = "Auto playlist",
+                            title = likedMusic,
+                            subtitle = autoPlaylist,
                             thumbnail = null,
                             sortKey = Long.MAX_VALUE,
                         ) {
@@ -172,7 +212,8 @@ fun LibraryScreen(
                             LibraryEntry(
                                 key = "local-${p.id}",
                                 title = p.title,
-                                subtitle = "Playlist • ${p.tracks?.size ?: 0} songs",
+                                subtitle = playlistLabel,
+                                songCount = p.tracks?.size ?: 0,
                                 thumbnail = p.thumbnail,
                                 sortKey = p.inLibrary.toEpochKey(),
                             ) { navController.navigate(LocalPlaylistDestination(id = p.id)) },
@@ -183,62 +224,72 @@ fun LibraryScreen(
                             LibraryEntry(
                                 key = "yt-${p.browseId}",
                                 title = p.title,
-                                subtitle = listOf("Playlist", p.author, p.itemCount).filter { it.isNotBlank() }.joinToString(" • "),
+                                subtitle = listOf(playlistLabel, p.author, p.itemCount).filter { it.isNotBlank() }.joinToString(" • "),
                                 thumbnail = p.thumbnails.lastOrNull()?.url,
                             ) { navController.navigate(PlaylistDestination(playlistId = p.browseId, isYourYouTubePlaylist = true)) },
                         )
                     }
                 }
-            LibraryChip.Songs ->
-                liked.map { s ->
-                    LibraryEntry(
-                        key = s.videoId,
-                        title = s.title,
-                        subtitle = s.artistName?.joinToString(", ").orEmpty(),
-                        thumbnail = s.thumbnails,
-                        sortKey = (s.favoriteAt ?: s.inLibrary).toEpochKey(),
-                    ) { playSongs(liked, s, "Liked songs") }
-                }
-            LibraryChip.Albums ->
+
+            fun albumEntries() =
                 albums.map { a ->
                     LibraryEntry(
-                        key = a.browseId,
+                        key = "album-${a.browseId}",
                         title = a.title,
-                        subtitle = listOfNotNull(a.type.ifBlank { "Album" }, a.artistName?.joinToString(", "), a.year).filter { it.isNotBlank() }.joinToString(" • "),
+                        subtitle = listOfNotNull(a.type.ifBlank { albumLabel }, a.artistName?.joinToString(", "), a.year).filter { it.isNotBlank() }.joinToString(" • "),
                         thumbnail = a.thumbnails,
                         sortKey = (a.favoriteAt ?: a.inLibrary).toEpochKey(),
                     ) { navController.navigate(AlbumDestination(browseId = a.browseId)) }
                 }
-            LibraryChip.Artists ->
+
+            fun artistEntries() =
                 artists.map { a ->
                     LibraryEntry(
-                        key = a.channelId,
+                        key = "artist-${a.channelId}",
                         title = a.name,
-                        subtitle = "Artist",
+                        subtitle = artistLabel,
                         thumbnail = a.thumbnails,
                         round = true,
                         sortKey = (a.followedAt ?: a.inLibrary).toEpochKey(),
                     ) { navController.navigate(ArtistDestination(channelId = a.channelId)) }
                 }
-            LibraryChip.Downloads ->
-                downloads.map { s ->
-                    LibraryEntry(
-                        key = s.videoId,
-                        title = s.title,
-                        subtitle = s.artistName?.joinToString(", ").orEmpty(),
-                        thumbnail = s.thumbnails,
-                        sortKey = (s.downloadedAt ?: s.inLibrary).toEpochKey(),
-                    ) { playSongs(downloads, s, "Downloads") }
+
+            fun songEntries(
+                songs: List<SongEntity>,
+                name: String,
+                added: (SongEntity) -> Long,
+            ) = songs.map { s ->
+                LibraryEntry(
+                    key = s.videoId,
+                    title = s.title,
+                    subtitle = s.artistName?.joinToString(", ").orEmpty(),
+                    thumbnail = s.thumbnails,
+                    sortKey = added(s),
+                ) { playSongs(songs, s, name) }
+            }
+
+            val list =
+                when (chip) {
+                    null -> playlistEntries() + albumEntries() + artistEntries()
+                    LibraryChip.Playlists -> playlistEntries()
+                    LibraryChip.Songs -> songEntries(liked, likedSongsName) { (it.favoriteAt ?: it.inLibrary).toEpochKey() }
+                    LibraryChip.Albums -> albumEntries()
+                    LibraryChip.Artists -> artistEntries()
+                    LibraryChip.Downloads -> songEntries(downloads, downloadsName) { (it.downloadedAt ?: it.inLibrary).toEpochKey() }
                 }
-        }.let { list ->
             when (sort) {
-                LibrarySort.RecentActivity -> list
-                LibrarySort.RecentlyAdded -> list.sortedByDescending { it.sortKey }
-                LibrarySort.Alphabetical -> list.sortedBy { it.title.lowercase() }
+                // Most recently touched first. The sort is stable, so the account's YouTube
+                // playlists (no local timestamp) keep the order YouTube sent them in.
+                LibrarySort.RecentActivity, LibrarySort.RecentlyAdded -> list.sortedByDescending { it.sortKey }
+                LibrarySort.Alphabetical -> list.sortedBy { if (it.key == "liked") "" else it.title.lowercase() }
             }
         }
     val songChip = chip == LibraryChip.Songs || chip == LibraryChip.Downloads
     val useGrid = grid && !songChip
+    val songsById =
+        remember(chip, liked, downloads) {
+            (if (chip == LibraryChip.Songs) liked else downloads).associateBy { it.videoId }
+        }
 
     Box(Modifier.fillMaxSize().background(Ytm.Background)) {
         Column(Modifier.fillMaxSize()) {
@@ -256,11 +307,11 @@ fun LibraryScreen(
                 ) {
                     item(key = "chips", span = { GridItemSpan(maxLineSpan) }) {
                         YtmChips(
-                            labels = LibraryChip.entries.map { it.label },
-                            selected = chip.ordinal,
+                            labels = LibraryChip.entries.map { stringResource(it.label) },
+                            selected = chip?.ordinal,
                             onSelect = { viewModel.setChip(LibraryChip.entries[it]) },
                             contentPadding = PaddingValues(horizontal = if (useGrid) 0.dp else 16.dp),
-                            modifier = Modifier.padding(vertical = 8.dp),
+                            modifier = Modifier,
                         )
                     }
                     item(key = "sort", span = { GridItemSpan(maxLineSpan) }) {
@@ -277,11 +328,11 @@ fun LibraryScreen(
                         item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 when (chip) {
-                                    LibraryChip.Songs -> "Songs you like will show up here"
-                                    LibraryChip.Albums -> "Albums you save will show up here"
-                                    LibraryChip.Artists -> "Artists you subscribe to will show up here"
-                                    LibraryChip.Downloads -> "Songs you download will show up here"
-                                    LibraryChip.Playlists -> ""
+                                    LibraryChip.Songs -> stringResource(Res.string.ytm_library_empty_songs)
+                                    LibraryChip.Albums -> stringResource(Res.string.ytm_library_empty_albums)
+                                    LibraryChip.Artists -> stringResource(Res.string.ytm_library_empty_artists)
+                                    LibraryChip.Downloads -> stringResource(Res.string.ytm_library_empty_downloads)
+                                    LibraryChip.Playlists, null -> ""
                                 },
                                 style = typo().bodyLarge,
                                 color = Ytm.TextSecondary,
@@ -293,13 +344,12 @@ fun LibraryScreen(
                         if (useGrid) {
                             GridTile(entry)
                         } else if (songChip) {
-                            val song = (if (chip == LibraryChip.Songs) liked else downloads).firstOrNull { it.videoId == entry.key }
                             YtmSongRow(
                                 title = entry.title,
                                 subtitle = entry.subtitle,
                                 thumbnail = entry.thumbnail,
                                 onClick = entry.onClick,
-                                onMore = { menuSong = song },
+                                onMore = { menuSong = songsById[entry.key] },
                             )
                         } else {
                             ListRow(entry)
@@ -308,7 +358,7 @@ fun LibraryScreen(
                 }
             }
         }
-        if (chip == LibraryChip.Playlists) {
+        if (chip == null || chip == LibraryChip.Playlists) {
             NewButton(Modifier.align(Alignment.BottomEnd).padding(16.dp)) { showNewPlaylist = true }
         }
     }
@@ -325,21 +375,26 @@ private fun SortRow(
 ) {
     var open by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().padding(start = horizontalPadding, end = horizontalPadding - 8.dp, bottom = 4.dp),
+        // The toggle's 48dp touch target carries its own inset, so the row's end padding is
+        // trimmed by it, never below zero: the grid passes 0dp, and negative padding crashes.
+        Modifier.fillMaxWidth().padding(start = horizontalPadding, end = (horizontalPadding - 8.dp).coerceAtLeast(0.dp), bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box {
             Row(
-                Modifier.clip(RoundedCornerShape(4.dp)).clickable { open = true }.padding(vertical = 8.dp),
+                Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable(role = Role.DropdownList) { open = true }
+                    .minimumInteractiveComponentSize(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(sort.label, style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = Color.White)
+                Text(stringResource(sort.label), style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = Color.White)
                 Icon(SimpIcons.KeyboardArrowDown, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }, containerColor = Ytm.Surface) {
                 LibrarySort.entries.forEach { option ->
                     DropdownMenuItem(
-                        text = { Text(option.label, color = Color.White) },
+                        text = { Text(stringResource(option.label), color = Color.White) },
                         onClick = {
                             onSort(option)
                             open = false
@@ -351,9 +406,10 @@ private fun SortRow(
         Spacer(Modifier.weight(1f))
         if (showGridToggle) {
             IconButton(onClick = onToggleGrid) {
+                // YouTube Music shows the layout a tap switches to.
                 Icon(
-                    if (grid) SimpIcons.QueueMusic else SimpIcons.SelectAll,
-                    contentDescription = if (grid) "List" else "Grid",
+                    if (grid) SimpIcons.ViewList else SimpIcons.GridView,
+                    contentDescription = stringResource(if (grid) Res.string.ytm_list_view else Res.string.ytm_grid_view),
                     tint = Color.White,
                 )
             }
@@ -393,8 +449,9 @@ private fun ListRow(entry: LibraryEntry) {
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(entry.title, style = typo().bodyLarge.copy(fontSize = 15.sp), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (entry.subtitle.isNotBlank()) {
-                Text(entry.subtitle, style = typo().bodyMedium, color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val second = entry.secondLine()
+            if (second.isNotBlank()) {
+                Text(second, style = typo().bodyMedium, color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -408,8 +465,9 @@ private fun GridTile(entry: LibraryEntry) {
         }
         Spacer(Modifier.height(8.dp))
         Text(entry.title, style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        if (entry.subtitle.isNotBlank()) {
-            Text(entry.subtitle, style = typo().bodyMedium.copy(fontSize = 13.sp), color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        val second = entry.secondLine()
+        if (second.isNotBlank()) {
+            Text(second, style = typo().bodyMedium.copy(fontSize = 13.sp), color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -431,12 +489,12 @@ private fun NewButton(
     ) {
         Icon(SimpIcons.Add, contentDescription = null, tint = Color.Black)
         Spacer(Modifier.width(8.dp))
-        Text("New", style = typo().bodyLarge.copy(fontWeight = FontWeight.Medium), color = Color.Black)
+        Text(stringResource(Res.string.ytm_new), style = typo().bodyLarge.copy(fontWeight = FontWeight.Medium), color = Color.Black)
     }
 }
 
 @Composable
-private fun NewPlaylistDialog(
+internal fun NewPlaylistDialog(
     onDismiss: () -> Unit,
     onCreate: (String) -> Unit,
 ) {
@@ -444,13 +502,13 @@ private fun NewPlaylistDialog(
     AlertDialog(
         containerColor = Ytm.Surface,
         onDismissRequest = onDismiss,
-        title = { Text("New playlist", color = Color.White) },
+        title = { Text(stringResource(Res.string.ytm_new_playlist), color = Color.White) },
         text = {
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it },
                 singleLine = true,
-                label = { Text("Title") },
+                label = { Text(stringResource(Res.string.title)) },
                 colors =
                     OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
@@ -463,10 +521,10 @@ private fun NewPlaylistDialog(
         },
         confirmButton = {
             TextButton(onClick = { if (title.isNotBlank()) onCreate(title.trim()) }, enabled = title.isNotBlank()) {
-                Text("Create", color = Color.White)
+                Text(stringResource(Res.string.create), color = Color.White)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Ytm.TextSecondary) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.cancel), color = Ytm.TextSecondary) } },
     )
 }
 

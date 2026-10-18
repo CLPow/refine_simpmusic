@@ -68,7 +68,6 @@ import org.koin.core.context.loadKoinModules
 import org.koin.core.context.startKoin
 import org.koin.java.KoinJavaComponent.inject
 import org.koin.mp.KoinPlatform.getKoin
-import org.simpmusic.lastfm.configLastfm
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.app_name
 import simpmusic.composeapp.generated.resources.circle_app_icon
@@ -78,6 +77,16 @@ import simpmusic.composeapp.generated.resources.open_app
 import simpmusic.composeapp.generated.resources.open_miniplayer
 import simpmusic.composeapp.generated.resources.quit_app
 import simpmusic.composeapp.generated.resources.time_out_check_internet_connection_or_change_piped_instance_in_settings
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.type
+import simpmusic.composeapp.generated.resources.ytm_next
+import simpmusic.composeapp.generated.resources.ytm_play_pause
+import simpmusic.composeapp.generated.resources.ytm_previous
 
 /**
  * Any `scheme://…` command-line argument. RFC 3986 §3.1 allows ALPHA followed by
@@ -182,6 +191,11 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
     }
 
     // Initialize Koin ONCE before application starts
+    // Whether this is a virtual machine decides the window type (see detectVirtualMachine). The
+    // probe starts a PowerShell, so it runs on its own thread while the app starts, and the
+    // answer from the last launch is used straight away when there is one.
+    val isVmProbe = java.util.concurrent.CompletableFuture.supplyAsync { detectVirtualMachine() }
+
     startKoin {
         loadAllModules()
         loadKoinModules(viewModelModule)
@@ -193,12 +207,12 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                 .get<DataStoreManager>()
                 .language
                 .first()
-                .substring(0..1)
+                .take(2)
+                .ifEmpty { "en" }
         }
     changeLanguageNative(language)
 
     VersionManager.initialize()
-    configLastfm(BuildKonfig.lastfmApiKey, BuildKonfig.lastfmSecret)
     if (BuildKonfig.sentryDsn.isNotEmpty()) {
         Sentry.init { options ->
             options.dsn = BuildKonfig.sentryDsn
@@ -208,18 +222,17 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
     }
 
     val mediaPlayerHandler by inject<MediaPlayerHandler>(MediaPlayerHandler::class.java)
+    // The player calls this from its own threads; the text is looked up off them, not blocked on.
     mediaPlayerHandler.showToast = { type ->
-        showToast(
-            when (type) {
-                ToastType.ExplicitContent -> {
-                    runBlocking { getString(Res.string.explicit_content_blocked) }
-                }
-
-                is ToastType.PlayerError -> {
-                    runBlocking { getString(Res.string.time_out_check_internet_connection_or_change_piped_instance_in_settings, type.error) }
-                }
-            },
-        )
+        toastScope.launch {
+            showToast(
+                when (type) {
+                    ToastType.ExplicitContent -> getString(Res.string.explicit_content_blocked)
+                    is ToastType.PlayerError ->
+                        getString(Res.string.time_out_check_internet_connection_or_change_piped_instance_in_settings, type.error)
+                },
+            )
+        }
     }
     mediaPlayerHandler.pushPlayerError = { error ->
         Sentry.withScope { scope ->
@@ -292,6 +305,9 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
         val openMiniPlayer = stringResource(Res.string.open_miniplayer)
         val closeMiniPlayer = stringResource(Res.string.close_miniplayer)
         val appName = stringResource(Res.string.app_name)
+        val trayPlayPause = stringResource(Res.string.ytm_play_pause)
+        val trayNext = stringResource(Res.string.ytm_next)
+        val trayPrevious = stringResource(Res.string.ytm_previous)
         val nowPlayingData by sharedViewModel.nowPlayingScreenData.collectAsState()
         val nowPlayingTitle = nowPlayingData.nowPlayingTitle
         val nowPlayingArtist = nowPlayingData.artistName
@@ -318,11 +334,11 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                     Item(trayLabel(nowPlayingArtist), isEnabled = false)
                 }
                 Divider()
-                Item("Pause/Play") {
+                Item(trayPlayPause) {
                     sharedViewModel.onUIEvent(UIEvent.PlayPause)
                 }
-                Item("Next") { sharedViewModel.onUIEvent(UIEvent.Next) }
-                Item("Previous") { sharedViewModel.onUIEvent(UIEvent.Previous) }
+                Item(trayNext) { sharedViewModel.onUIEvent(UIEvent.Next) }
+                Item(trayPrevious) { sharedViewModel.onUIEvent(UIEvent.Previous) }
                 Divider()
             }
             if (!isVisible) {
@@ -355,42 +371,11 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
         // invisible window. PowerShell `Get-CimInstance` is the modern
         // replacement; we try it first and fall back to wmic for older
         // hosts.
+        // The probe's answer, or last launch's while it is still running (it only changes when
+        // the machine does).
         val isVM =
             remember {
-                val osName = System.getProperty("os.name", "")
-                if (!osName.contains("Windows", ignoreCase = true)) {
-                    return@remember false
-                }
-                val probes =
-                    listOf(
-                        listOf(
-                            "powershell",
-                            "-NoProfile",
-                            "-Command",
-                            "(Get-CimInstance Win32_ComputerSystem | " +
-                                "Select-Object Manufacturer,Model | " +
-                                "Format-List | Out-String).Trim()",
-                        ),
-                        listOf("wmic", "computersystem", "get", "manufacturer,model"),
-                    )
-                val sysInfo =
-                    probes
-                        .asSequence()
-                        .mapNotNull { cmd ->
-                            runCatching {
-                                val p =
-                                    ProcessBuilder(cmd)
-                                        .redirectErrorStream(true)
-                                        .start()
-                                val out = p.inputStream.bufferedReader().readText()
-                                if (p.waitFor() == 0 && out.isNotBlank()) out else null
-                            }.getOrNull()
-                        }
-                        .firstOrNull()
-                        .orEmpty()
-                val vmTokens = listOf("Parallels", "VirtualBox", "VMware", "QEMU", "KVM", "Xen", "Hyper-V")
-                vmTokens.any { sysInfo.contains(it, ignoreCase = true) } ||
-                    System.getProperty("compose.window.no-transparent", "false").toBooleanStrictOrNull() == true
+                cachedVirtualMachine() ?: isVmProbe.get()
             }
         // Publish whether the custom title bar will be mounted so getScreenSizeInfo() can
         // subtract the 40dp strip it occupies above the content (see DesktopWindowChrome).
@@ -414,7 +399,12 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             transparent = !isVM,
             state = windowState,
             visible = isVisible,
+            // YouTube Music web's keyboard shortcuts. onKeyEvent, not the preview: a focused text
+            // field (search) gets the keys first, so typing a space never pauses the song.
+            onKeyEvent = { event -> handlePlayerShortcut(event, sharedViewModel) },
         ) {
+            // Below this the sidebar and the page squeeze each other into an unusable layout.
+            LaunchedEffect(Unit) { window.minimumSize = java.awt.Dimension(960, 600) }
             // Restore requests (Dock reopen, tray, second instance) also need a
             // z-order raise; visibility/minimized are reset by the
             // application-level collector, but toFront needs the AWT window.
@@ -535,4 +525,95 @@ private object DesktopRestoreSignal {
     fun request() {
         _requests.tryEmit(Unit)
     }
+}
+
+/** For the player's toasts, which arrive on the player's threads. */
+private val toastScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+
+private const val VM_PREF_KEY = "isVirtualMachine"
+
+private fun vmPrefs() = java.util.prefs.Preferences.userRoot().node("refine-music")
+
+/** Last launch's answer to [detectVirtualMachine], or null on the first launch. */
+private fun cachedVirtualMachine(): Boolean? =
+    runCatching { vmPrefs().get(VM_PREF_KEY, null)?.toBooleanStrictOrNull() }.getOrNull()
+
+/**
+ * Detects virtual machines (Parallels, VirtualBox, VMware, etc.). Transparent, undecorated
+ * Compose windows don't render on VM GPU drivers: the window stays invisible while the JVM keeps
+ * running, so a VM gets a normal decorated window instead.
+ *
+ * Manufacturer and Model are both probed because brand strings live in different fields per
+ * hypervisor (Parallels on ARM puts "Parallels Software International Inc." in Manufacturer and
+ * "Parallels ARM Virtual Machine" in Model; VirtualBox uses "innotek GmbH" + "VirtualBox").
+ * PowerShell's Get-CimInstance comes first because Windows 11 removed `wmic`, which is kept as a
+ * fallback for older hosts. The answer is saved for the next launch.
+ */
+private fun detectVirtualMachine(): Boolean {
+    if (System.getProperty("compose.window.no-transparent", "false").toBooleanStrictOrNull() == true) return true
+    val osName = System.getProperty("os.name", "")
+    if (!osName.contains("Windows", ignoreCase = true)) return false
+    val probes =
+        listOf(
+            listOf(
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "(Get-CimInstance Win32_ComputerSystem | " +
+                    "Select-Object Manufacturer,Model | " +
+                    "Format-List | Out-String).Trim()",
+            ),
+            listOf("wmic", "computersystem", "get", "manufacturer,model"),
+        )
+    val sysInfo =
+        probes
+            .asSequence()
+            .mapNotNull { cmd ->
+                runCatching {
+                    val p =
+                        ProcessBuilder(cmd)
+                            .redirectErrorStream(true)
+                            .start()
+                    val out = p.inputStream.bufferedReader().readText()
+                    if (p.waitFor() == 0 && out.isNotBlank()) out else null
+                }.getOrNull()
+            }.firstOrNull()
+            .orEmpty()
+    val vmTokens = listOf("Parallels", "VirtualBox", "VMware", "QEMU", "KVM", "Xen", "Hyper-V")
+    val isVm = vmTokens.any { sysInfo.contains(it, ignoreCase = true) }
+    runCatching { vmPrefs().put(VM_PREF_KEY, isVm.toString()) }
+    return isVm
+}
+
+/**
+ * YouTube Music web's player shortcuts: Space plays or pauses, Shift+N and Shift+P skip, L and H
+ * (or the arrow keys with Shift) seek ten seconds, + and - change the volume.
+ */
+private fun handlePlayerShortcut(
+    event: androidx.compose.ui.input.key.KeyEvent,
+    sharedViewModel: SharedViewModel,
+): Boolean {
+    if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return false
+    if (event.isCtrlPressed || event.isAltPressed || event.isMetaPressed) return false
+    val seekBy: (Long) -> Unit = { deltaMs ->
+        val t = sharedViewModel.timeline.value
+        if (t.total > 0) {
+            val target = (t.current + deltaMs).coerceIn(0L, t.total)
+            sharedViewModel.onUIEvent(UIEvent.UpdateProgress(target * 100f / t.total))
+        }
+    }
+    val volume = sharedViewModel.controllerState.value.volume
+    when (event.key) {
+        Key.Spacebar -> sharedViewModel.onUIEvent(UIEvent.PlayPause)
+        Key.N -> if (event.isShiftPressed) sharedViewModel.onUIEvent(UIEvent.Next) else return false
+        Key.P -> if (event.isShiftPressed) sharedViewModel.onUIEvent(UIEvent.Previous) else return false
+        Key.L -> seekBy(10_000)
+        Key.H -> seekBy(-10_000)
+        Key.DirectionRight -> if (event.isShiftPressed) seekBy(10_000) else return false
+        Key.DirectionLeft -> if (event.isShiftPressed) seekBy(-10_000) else return false
+        Key.Equals, Key.Plus, Key.NumPadAdd -> sharedViewModel.onUIEvent(UIEvent.UpdateVolume((volume + 0.05f).coerceAtMost(1f)))
+        Key.Minus, Key.NumPadSubtract -> sharedViewModel.onUIEvent(UIEvent.UpdateVolume((volume - 0.05f).coerceAtLeast(0f)))
+        else -> return false
+    }
+    return true
 }

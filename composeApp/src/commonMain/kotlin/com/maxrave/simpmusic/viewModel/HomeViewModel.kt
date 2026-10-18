@@ -31,7 +31,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.music_video
 import simpmusic.composeapp.generated.resources.new_release
@@ -41,11 +40,32 @@ import kotlinx.coroutines.flow.firstOrNull
 import org.jetbrains.compose.resources.getString
 import simpmusic.composeapp.generated.resources.shelf_on_repeat
 import simpmusic.composeapp.generated.resources.shelf_buried_favourites
+import com.maxrave.domain.repository.AccountRepository
 
 class HomeViewModel(
     private val dataStoreManager: DataStoreManager,
     private val homeRepository: HomeRepository,
+    private val accountRepository: AccountRepository,
 ) : BaseViewModel() {
+    /**
+     * True when the saved sign-in no longer works. Home is then YouTube's signed-out feed, which
+     * barely changes, so the screen says so and offers to sign in again instead of looking stuck.
+     */
+    val signInExpired: StateFlow<Boolean> = accountRepository.signInExpired
+
+    /** True when the last load failed because there is no connection at all. */
+    private val _offline = MutableStateFlow(false)
+    val offline: StateFlow<Boolean> = _offline
+
+    /** Asks the screen to scroll back to the top: a different chip is a different feed. */
+    val scrollToTop = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    /** The chip the shown feed belongs to; a load for another one clears the old feed first. */
+    private var shownParams: String? = null
+    private var shownAny = false
+
+    private var continuationJob: Job? = null
+
     private val _homeItemList: MutableStateFlow<List<HomeItem>> =
         MutableStateFlow(arrayListOf())
     val homeItemList: StateFlow<List<HomeItem>> = _homeItemList
@@ -133,12 +153,12 @@ class HomeViewModel(
     val mainHomeThumbnail: StateFlow<String?> = _mainHomeThumbnail
 
     init {
-        if (runBlocking { dataStoreManager.cookie.first() }.isEmpty() &&
-            runBlocking {
+        viewModelScope.launch {
+            if (dataStoreManager.cookie.first().isEmpty() &&
                 dataStoreManager.shouldShowLogInRequiredAlert.first() == TRUE
+            ) {
+                _showLogInAlert.update { true }
             }
-        ) {
-            _showLogInAlert.update { true }
         }
         homeJob = Job()
         viewModelScope.launch {
@@ -208,19 +228,27 @@ class HomeViewModel(
     fun getHomeItemList(params: String? = null) {
         loading.value = true
         _homeListState.value = ListState.LOADING
-        language =
-            runBlocking {
-                dataStoreManager.getString(SELECTED_LANGUAGE).first()
-                    ?: SUPPORTED_LANGUAGE.codes.first()
-            }
-        regionCode = runBlocking { dataStoreManager.location.first() }
         _recommendationsFailed.value = false
+        _offline.value = false
         homeJob?.cancel()
+        // A continuation still loading belongs to the old feed and must not land in the new one.
+        continuationJob?.cancel()
+        if (shownAny && params != shownParams) {
+            // Another chip is another feed: YouTube Music clears the page and starts at the top
+            // rather than leaving the previous chip's shelves up with no sign of loading.
+            _homeItemList.value = emptyList()
+            _continuation.value = null
+            scrollToTop.tryEmit(Unit)
+        }
+        shownParams = params
+        shownAny = true
         homeJob =
             viewModelScope.launch {
-                // The last feed stays on screen while YouTube answers, so the page is never blank.
-                // No local shelves: YouTube Music's Home is YouTube's feed only, and the old
-                // "On repeat" / "Buried favourites" shelves kept old songs pinned at the top.
+                language = dataStoreManager.getString(SELECTED_LANGUAGE).first()
+                    ?: SUPPORTED_LANGUAGE.codes.first()
+                regionCode = dataStoreManager.location.first()
+                // A reload of the same feed keeps it on screen while YouTube answers, so the page
+                // is never blank. No local shelves: YouTube Music's Home is YouTube's feed only.
                 val previous = _homeItemList.value
 
                 // YouTube Music never parks Home on an error at launch: it keeps the spinner and
@@ -246,6 +274,12 @@ class HomeViewModel(
                             Resource.Error<Pair<String?, List<HomeItem>>>(e.message ?: "Home unavailable")
                         }
                     if (home is Resource.Success && !home.data?.second.isNullOrEmpty()) break
+                    // No connection at all: YouTube Music says so at once instead of spinning for
+                    // a minute and a half. Two attempts, so a network that is just waking counts.
+                    if (home is Resource.Error && isOfflineError(home.message) && attempt >= 1) {
+                        _offline.value = true
+                        break
+                    }
                     Logger.w(
                         "HomeViewModel",
                         "Home attempt ${attempt + 1}/$HOME_MAX_ATTEMPTS failed: " +
@@ -258,9 +292,12 @@ class HomeViewModel(
                 }
                 if (home is Resource.Success && !home.data?.second.isNullOrEmpty()) {
                     _recommendationsFailed.value = false
+                    _offline.value = false
                     _continuation.value = home.data?.first
                     _homeItemList.value = home.data?.second ?: listOf()
                     lastLoadedAtMs = currentTimeMs()
+                    // A dead cookie still gets a feed, only a signed-out one. Ask once per load.
+                    launch { accountRepository.verifySignIn() }
                 } else {
                     _recommendationsFailed.value = true
                     _continuation.value = null
@@ -288,7 +325,8 @@ class HomeViewModel(
     }
 
     fun getContinueHomeItem(continuation: String?) {
-        viewModelScope.launch {
+        continuationJob?.cancel()
+        continuationJob = viewModelScope.launch {
             if (continuation.isNullOrEmpty()) {
                 _homeListState.value = ListState.PAGINATION_EXHAUST
                 return@launch
@@ -305,7 +343,11 @@ class HomeViewModel(
                             is Resource.Success -> {
                                 _continuation.value = home.data?.first
                                 val newItems = home.data?.second ?: listOf()
-                                _homeItemList.update { it + newItems }
+                                // YouTube sometimes repeats a shelf across pages.
+                                _homeItemList.update { shown ->
+                                    val seen = shown.map { it.title + "|" + it.subtitle.orEmpty() }.toSet()
+                                    shown + newItems.filter { (it.title + "|" + it.subtitle.orEmpty()) !in seen }
+                                }
                                 if (home.data?.first.isNullOrEmpty()) {
                                     _homeListState.value = ListState.PAGINATION_EXHAUST
                                 } else {
@@ -314,10 +356,9 @@ class HomeViewModel(
                             }
 
                             is Resource.Error -> {
-                                _continuation.value = null
+                                // Keep the continuation: the screen offers to try the next page again.
                                 Logger.w(tag, "getContinueHomeItem: ${home.message}")
-                                showSnackBarErrorState.emit(home.message ?: "Unknown error")
-                                _homeListState.value = ListState.PAGINATION_EXHAUST
+                                _homeListState.value = ListState.ERROR
                             }
                         }
                     }
@@ -350,6 +391,27 @@ class HomeViewModel(
 
     fun setParams(params: String?) {
         _params.value = params
+    }
+
+    private fun isOfflineError(message: String?): Boolean {
+        val m = message?.lowercase() ?: return false
+        return OfflineHints.ALL.any { it in m }
+    }
+
+    private object OfflineHints {
+        /** How the network stack words "there is no network" on Android and the JVM. */
+        val ALL =
+            listOf(
+                "unable to resolve host",
+                "unresolvedaddress",
+                "unknownhost",
+                "no address associated",
+                "network is unreachable",
+                "nodename nor servname",
+                "failed to connect",
+                "no route to host",
+                "software caused connection abort",
+            )
     }
 
     override fun onCleared() {

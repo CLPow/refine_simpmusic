@@ -228,7 +228,7 @@ internal class LibraryTabCarScreen(
                 .Builder()
                 .addAction(searchFab())
                 .addAction(nowPlayingFab())
-                .setSingleList(ItemList.Builder().setNoItemsMessage("Nothing to show").build())
+                .setSingleList(ItemList.Builder().setNoItemsMessage(carContext.getString(R.string.car_nothing_to_show)).build())
                 .build()
         }
         val builder =
@@ -301,7 +301,7 @@ internal class LibraryTabCarScreen(
             GridSection
                 .Builder()
                 .setItemSize(GridSection.ITEM_SIZE_EXTRA_LARGE)
-                .setNoItemsMessage("Nothing to show")
+                .setNoItemsMessage(carContext.getString(R.string.car_nothing_to_show))
         children.take(carContext.gridContentLimit()).forEach { item ->
             section.addItem(buildGridItem(item, nowPlayingId))
         }

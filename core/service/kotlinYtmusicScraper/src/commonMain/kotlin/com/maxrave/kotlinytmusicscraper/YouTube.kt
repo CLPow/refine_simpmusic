@@ -124,6 +124,7 @@ import kotlin.random.Random
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
+import kotlinx.coroutines.flow.MutableStateFlow
 
 private const val TAG = "YouTubeScraper"
 
@@ -182,8 +183,35 @@ class YouTube {
     var cookie: String?
         get() = ytMusic.cookie
         set(value) {
+            if (value != ytMusic.cookie) signInExpired.value = false
             ytMusic.cookie = value
         }
+
+    /**
+     * True when a cookie is saved but YouTube no longer accepts it as signed in. Requests then
+     * quietly come back signed out: Home turns into the generic feed and listens reach no history,
+     * with nothing on screen to say why. Set by [verifySignIn]; a new cookie clears it.
+     */
+    val signInExpired = MutableStateFlow(false)
+
+    /**
+     * Asks YouTube whether the saved cookie is still signed in (the account menu names the active
+     * account only when it is). Returns null when the question could not be answered (offline, a
+     * refusal), true when signed in or there is no cookie to check, false when it has expired.
+     */
+    suspend fun verifySignIn(): Boolean? {
+        if (cookie.isNullOrEmpty()) {
+            signInExpired.value = false
+            return true
+        }
+        val response = runCatching { ytMusic.accountMenu(null, WEB_REMIX) }.getOrNull() ?: return null
+        if (response.status.value !in 200..299) return null
+        val body = runCatching { response.bodyAsText() }.getOrNull() ?: return null
+        val signedIn = body.contains("activeAccountHeaderRenderer")
+        signInExpired.value = !signedIn
+        if (!signedIn) Logger.w(TAG, "Saved sign-in is no longer accepted by YouTube")
+        return signedIn
+    }
 
     var pageId: String?
         get() = ytMusic.pageId
@@ -1977,6 +2005,12 @@ class YouTube {
     suspend fun removeFromLiked(mediaId: String) =
         runCatching {
             ytMusic.removeFromLiked(mediaId).status.value
+        }
+
+    /** YouTube Music's thumbs down; cleared with [removeFromLiked], as on YouTube. */
+    suspend fun dislike(mediaId: String) =
+        runCatching {
+            ytMusic.dislike(mediaId).status.value
         }
 
     suspend fun getSimpMusicChart() =

@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.random.Random
 
 /**
  * Rough ordering of the audio itags by quality, so a fallback can look *downwards* from what was
@@ -72,7 +73,9 @@ internal class StreamRepositoryImpl(
         code: Int,
     ) {
         lastPingStatus = PlaybackPingStatus(name, code, Clock.System.now().toEpochMilliseconds())
-        if (code !in 200..299) {
+        if (code in PlaybackPingStatus.NO_ACCOUNT_CODES) {
+            Logger.w("PlaybackPing", "$name not sent: no signed-in account ($code)")
+        } else if (code !in 200..299) {
             Logger.w("PlaybackPing", "$name rejected with $code -- listening will not reach the account")
         } else {
             Logger.d("PlaybackPing", "$name accepted ($code)")
@@ -99,9 +102,10 @@ internal class StreamRepositoryImpl(
                 val playback = stored.playbackTrackingVideostatsPlaybackUrl
                 val atr = stored.playbackTrackingAtrUrl
                 val watchtime = stored.playbackTrackingVideostatsWatchtimeUrl
-                val cpn = stored.cpn
-                if (playback != null && atr != null && watchtime != null && cpn != null) {
-                    return@withContext PlaybackTracking(playback, atr, watchtime, cpn)
+                if (playback != null && atr != null && watchtime != null) {
+                    // A fresh nonce per listen: reusing the stored one made a replay look like
+                    // more of the previous play, not a play of its own.
+                    return@withContext PlaybackTracking(playback, atr, watchtime, newCpn())
                 }
             }
             // Downloaded and fully-cached tracks never ran a player request, so they carry no
@@ -127,6 +131,12 @@ internal class StreamRepositoryImpl(
             }
             PlaybackTracking(playback, atr, watchtime, cpn)
         }
+
+    /** A client playback nonce, as YouTube's web player makes one per playback. */
+    private fun newCpn(): String {
+        val alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+        return (1..16).map { alphabet[Random.nextInt(alphabet.length)] }.joinToString("")
+    }
 
     private fun String.toMusicHost() = replace("https://s.youtube.com", "https://music.youtube.com")
 
@@ -398,6 +408,18 @@ internal class StreamRepositoryImpl(
         playlistId: String?,
     ): Flow<Pair<Int, Float>> =
         flow {
+            // Signed out, the ping would go out without an account and land in no history at all,
+            // yet YouTube still answers 204, which made it look accepted.
+            if (youTube.cookie.isNullOrEmpty()) {
+                recordPing("initPlayback", PlaybackPingStatus.CODE_NOT_SIGNED_IN)
+                emit(Pair(PlaybackPingStatus.CODE_NOT_SIGNED_IN, 0f))
+                return@flow
+            }
+            if (youTube.signInExpired.value) {
+                recordPing("initPlayback", PlaybackPingStatus.CODE_SIGN_IN_EXPIRED)
+                emit(Pair(PlaybackPingStatus.CODE_SIGN_IN_EXPIRED, 0f))
+                return@flow
+            }
             youTube
                 .initPlayback(playback, atr, watchTime, cpn, playlistId)
                 .onSuccess { response ->

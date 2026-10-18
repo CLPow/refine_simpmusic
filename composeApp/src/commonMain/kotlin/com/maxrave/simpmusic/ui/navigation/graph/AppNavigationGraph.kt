@@ -73,9 +73,7 @@ fun AppNavigationGraph(
         }
         composable<LibraryDestination> {
             LibraryScreen(
-                innerPadding = innerPadding,
                 navController = navController,
-                onScrolling = onScrolling,
             )
         }
         // Home screen graph

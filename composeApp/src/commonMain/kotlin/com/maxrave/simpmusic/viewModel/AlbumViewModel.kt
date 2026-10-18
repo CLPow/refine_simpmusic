@@ -47,7 +47,7 @@ class AlbumViewModel(
 
     fun updateBrowseId(browseId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(browseId = browseId) }
+            _uiState.update { it.copy(browseId = browseId, loadState = LocalPlaylistState.PlaylistLoadState.Loading) }
             albumRepository.getAlbumData(browseId).collectLatest { res ->
                 when (res) {
                     is Resource.Success -> {
@@ -57,6 +57,7 @@ class AlbumViewModel(
                                 it.copy(
                                     browseId = browseId,
                                     title = data.title,
+                                    type = data.type,
                                     thumbnail = data.thumbnails?.lastOrNull()?.url,
                                     artist =
                                         data.artists.firstOrNull() ?: Artist(
@@ -282,6 +283,8 @@ class AlbumViewModel(
 data class AlbumUIState(
     val browseId: String = "",
     val title: String = "",
+    /** YouTube's kind for it: Album, Single, EP. */
+    val type: String = "",
     val thumbnail: String? = null,
     val colors: List<Color> = listOf(Color.Black, Color.Black),
     val artist: Artist =

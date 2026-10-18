@@ -28,4 +28,9 @@
     <string name="albums">Albums</string>
     <string name="liked_music">Liked music</string>
     <string name="your_artists">Your artists</string>
+    <string name="car_nothing_to_show">Nothing to show</string>
+    <string name="car_load_failed">Couldn\'t load this. Check your connection and try again.</string>
+    <string name="car_queue">Queue</string>
+    <string name="car_queue_empty">Queue is empty</string>
+    <string name="car_search_hint">Search songs</string>
 </resources>

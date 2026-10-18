@@ -72,6 +72,24 @@ import simpmusic.composeapp.generated.resources.romance
 import simpmusic.composeapp.generated.resources.sad
 import simpmusic.composeapp.generated.resources.sleep
 import simpmusic.composeapp.generated.resources.workout
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.clip
+import com.maxrave.simpmusic.ui.icon.CloudOff
+import com.maxrave.simpmusic.ui.icon.SimpIcons
+import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDynamicPlaylistDestination
+import simpmusic.composeapp.generated.resources.retry
+import simpmusic.composeapp.generated.resources.ytm_go_to_downloads
+import simpmusic.composeapp.generated.resources.ytm_home_failed
+import simpmusic.composeapp.generated.resources.ytm_load_more_failed
+import simpmusic.composeapp.generated.resources.ytm_not_now
+import simpmusic.composeapp.generated.resources.ytm_offline_body
+import simpmusic.composeapp.generated.resources.ytm_offline_title
+import simpmusic.composeapp.generated.resources.ytm_sign_in
+import simpmusic.composeapp.generated.resources.ytm_sign_in_body
+import simpmusic.composeapp.generated.resources.ytm_sign_in_title
+import simpmusic.composeapp.generated.resources.ytm_signed_out_body
+import simpmusic.composeapp.generated.resources.ytm_signed_out_title
 
 /**
  * Chips shown until YouTube's own arrive with the first page. The feed's chips are what YouTube
@@ -116,7 +134,11 @@ fun HomeScreen(
     val continuation by viewModel.continuation.collectAsStateWithLifecycle()
     val reloadDestination by sharedViewModel.reloadDestination.collectAsStateWithLifecycle()
     val shouldShowLogInAlert by viewModel.showLogInAlert.collectAsStateWithLifecycle()
+    val offline by viewModel.offline.collectAsStateWithLifecycle()
+    val signInExpired by viewModel.signInExpired.collectAsStateWithLifecycle()
     var refreshing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) { viewModel.scrollToTop.collect { listState.scrollToItem(0) } }
 
     // Coming back to the app (or to this tab) after a while reloads the feed.
     LifecycleStartEffect(Unit) {
@@ -153,10 +175,10 @@ fun HomeScreen(
     if (shouldShowLogInAlert) {
         AlertDialog(
             containerColor = Ytm.Surface,
-            title = { Text("Sign in to YouTube Music", color = Color.White) },
+            title = { Text(stringResource(Res.string.ytm_sign_in_title), color = Color.White) },
             text = {
                 Text(
-                    "Sign in to get your own recommendations, your library and your history.",
+                    stringResource(Res.string.ytm_sign_in_body),
                     color = Ytm.TextSecondary,
                 )
             },
@@ -164,10 +186,10 @@ fun HomeScreen(
                 TextButton(onClick = {
                     viewModel.doneShowLogInAlert(true)
                     navController.navigate(LoginDestination)
-                }) { Text("Sign in", color = Color.White) }
+                }) { Text(stringResource(Res.string.ytm_sign_in), color = Color.White) }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.doneShowLogInAlert(true) }) { Text("Not now", color = Ytm.TextSecondary) }
+                TextButton(onClick = { viewModel.doneShowLogInAlert(true) }) { Text(stringResource(Res.string.ytm_not_now), color = Ytm.TextSecondary) }
             },
             onDismissRequest = { viewModel.doneShowLogInAlert() },
         )
@@ -214,21 +236,54 @@ fun HomeScreen(
                         onSelect = { index ->
                             viewModel.setParams(if (index == selected) null else chips[index].second)
                         },
-                        modifier = Modifier.padding(vertical = 8.dp),
+                        modifier = Modifier,
                     )
+                }
+                if (signInExpired) {
+                    item(key = "signed-out") {
+                        HomeNotice(
+                            title = stringResource(Res.string.ytm_signed_out_title),
+                            body = stringResource(Res.string.ytm_signed_out_body),
+                            action = stringResource(Res.string.ytm_sign_in),
+                        ) { navController.navigate(LoginDestination) }
+                    }
                 }
                 if (homeData.isEmpty()) {
                     item(key = "state") {
                         Box(Modifier.fillMaxWidth().padding(top = 96.dp), contentAlignment = Alignment.Center) {
-                            if (failed && !loading) {
+                            if (offline && !loading) {
+                                Column(
+                                    Modifier.padding(horizontal = 32.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                                ) {
+                                    Icon(SimpIcons.CloudOff, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
+                                    Text(
+                                        stringResource(Res.string.ytm_offline_title),
+                                        style = typo().titleMedium,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                    Text(
+                                        stringResource(Res.string.ytm_offline_body),
+                                        style = typo().bodyMedium,
+                                        color = Ytm.TextSecondary,
+                                        textAlign = TextAlign.Center,
+                                    )
+                                    YtmOutlinedPill(stringResource(Res.string.ytm_go_to_downloads)) {
+                                        navController.navigate(LibraryDynamicPlaylistDestination(type = "downloaded"))
+                                    }
+                                    YtmOutlinedPill(stringResource(Res.string.retry)) { viewModel.getHomeItemList(params) }
+                                }
+                            } else if (failed && !loading) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     Text(
-                                        "Couldn't load your recommendations",
+                                        stringResource(Res.string.ytm_home_failed),
                                         style = typo().bodyLarge,
                                         color = Color.White,
                                         textAlign = TextAlign.Center,
                                     )
-                                    YtmOutlinedPill("Retry") { viewModel.getHomeItemList(params) }
+                                    YtmOutlinedPill(stringResource(Res.string.retry)) { viewModel.getHomeItemList(params) }
                                 }
                             } else {
                                 CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp))
@@ -236,7 +291,7 @@ fun HomeScreen(
                         }
                     }
                 }
-                items(homeData, key = { it.title + it.subtitle.orEmpty() + it.contents.size + it.isSpeedDial }) { shelf ->
+                itemsIndexed(homeData, key = { i, it -> "$i|" + it.title + it.subtitle.orEmpty() + it.isSpeedDial }) { _, shelf ->
                     YtmShelf(item = shelf, navController = navController)
                 }
                 if (homeListState == ListState.PAGINATING) {
@@ -246,8 +301,43 @@ fun HomeScreen(
                         }
                     }
                 }
+                if (homeListState == ListState.ERROR && homeData.isNotEmpty()) {
+                    item(key = "more-failed") {
+                        Column(
+                            Modifier.fillMaxWidth().padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Text(stringResource(Res.string.ytm_load_more_failed), style = typo().bodyMedium, color = Ytm.TextSecondary)
+                            YtmOutlinedPill(stringResource(Res.string.retry)) { viewModel.getContinueHomeItem(continuation) }
+                        }
+                    }
+                }
                 item(key = "end") { Spacer(Modifier.height(16.dp)) }
             }
         }
+    }
+}
+
+/** A notice card at the top of Home, such as an expired sign-in. */
+@Composable
+private fun HomeNotice(
+    title: String,
+    body: String,
+    action: String,
+    onAction: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+            .background(Ytm.Surface)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(title, style = typo().titleMedium, color = Color.White)
+        Text(body, style = typo().bodyMedium, color = Ytm.TextSecondary)
+        YtmOutlinedPill(action, onClick = onAction)
     }
 }

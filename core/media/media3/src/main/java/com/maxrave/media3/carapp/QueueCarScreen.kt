@@ -21,6 +21,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import com.maxrave.media3.R
 
 /**
  * Queue screen backed directly by [MediaPlayerHandler.queueData] instead of
@@ -78,7 +79,15 @@ internal class QueueCarScreen(
         val nowPlayingId = handler.nowPlaying.value?.mediaId
         val maxRows = carContext.listContentLimit()
 
-        val currentIndex = tracks.indexOfFirst { it.videoId == nowPlayingId }.coerceAtLeast(0)
+        // The player's own position in the queue, not the first track with the same id: a song
+        // queued twice, or a shuffled queue, highlighted the wrong row.
+        val orderIndex = handler.currentOrderIndex()
+        val currentIndex =
+            if (orderIndex in tracks.indices) {
+                orderIndex
+            } else {
+                tracks.indexOfFirst { it.videoId == nowPlayingId?.removePrefix("Video") }.coerceAtLeast(0)
+            }
         // Window the list around the playing track when the queue exceeds the host row limit
         val start = if (tracks.size <= maxRows) 0 else minOf(currentIndex, tracks.size - maxRows)
         val visibleTracks = tracks.subList(start, minOf(tracks.size, start + maxRows))
@@ -86,10 +95,10 @@ internal class QueueCarScreen(
         val itemListBuilder =
             ItemList
                 .Builder()
-                .setNoItemsMessage("Queue is empty")
+                .setNoItemsMessage(carContext.getString(R.string.car_queue_empty))
         visibleTracks.forEachIndexed { offset, track ->
             val index = start + offset
-            val isPlaying = index == currentIndex && track.videoId == nowPlayingId
+            val isPlaying = index == currentIndex
             itemListBuilder.addItem(
                 Row
                     .Builder()
@@ -124,7 +133,7 @@ internal class QueueCarScreen(
                 Header
                     .Builder()
                     .setStartHeaderAction(Action.BACK)
-                    .setTitle(queue?.playlistName?.takeIf { it.isNotBlank() } ?: "Queue")
+                    .setTitle(queue?.playlistName?.takeIf { it.isNotBlank() } ?: carContext.getString(R.string.car_queue))
                     .build(),
             ).setSingleList(itemListBuilder.build())
             .build()

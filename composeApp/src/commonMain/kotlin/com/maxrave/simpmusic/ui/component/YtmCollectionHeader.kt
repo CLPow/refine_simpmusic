@@ -44,8 +44,26 @@ import com.maxrave.simpmusic.ui.icon.PlayArrow
 import com.maxrave.simpmusic.ui.icon.Shuffle
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.theme.typo
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.more
+import simpmusic.composeapp.generated.resources.ytm_back
+import simpmusic.composeapp.generated.resources.ytm_pause
+import simpmusic.composeapp.generated.resources.ytm_play
+import simpmusic.composeapp.generated.resources.ytm_shuffle
 
-private val Secondary = Color(0xFFAAAAAA)
+private val Secondary = Ytm.TextSecondary
 
 /**
  * The header of an album or playlist page as YouTube Music draws it on a phone: back and more on
@@ -74,11 +92,11 @@ fun YtmCollectionHeader(
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) {
-                Icon(SimpIcons.ArrowBackIosNew, contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                Icon(SimpIcons.ArrowBackIosNew, contentDescription = stringResource(Res.string.ytm_back), tint = Color.White, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.weight(1f))
             IconButton(onClick = onMore) {
-                Icon(SimpIcons.MoreVert, contentDescription = null, tint = Color.White)
+                Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Color.White)
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -89,6 +107,8 @@ fun YtmCollectionHeader(
                     .data(thumbnail)
                     .diskCachePolicy(CachePolicy.ENABLED)
                     .diskCacheKey(thumbnail)
+                    // Shown at 240dp; the palette is built from this decode too.
+                    .size(720)
                     .build(),
             placeholder = rememberHolderPainter(),
             error = rememberHolderPainter(),
@@ -134,8 +154,14 @@ fun YtmCollectionHeader(
         ) {
             ActionSlot { leadingAction?.invoke() }
             ActionSlot { secondAction?.invoke() }
+            val playLabel = stringResource(if (isPlaying) Res.string.ytm_pause else Res.string.ytm_play)
             Box(
-                Modifier.size(64.dp).clip(CircleShape).background(Color.White).clickable(onClick = onPlay),
+                Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(Color.White)
+                    .clickable(role = Role.Button, onClickLabel = playLabel, onClick = onPlay)
+                    .semantics { contentDescription = playLabel },
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -145,8 +171,8 @@ fun YtmCollectionHeader(
                     modifier = Modifier.size(36.dp),
                 )
             }
-            ActionSlot { YtmRoundAction(SimpIcons.Shuffle, onShuffle) }
-            ActionSlot { YtmRoundAction(SimpIcons.MoreVert, onMore) }
+            ActionSlot { YtmRoundAction(SimpIcons.Shuffle, onShuffle, label = stringResource(Res.string.ytm_shuffle)) }
+            ActionSlot { YtmRoundAction(SimpIcons.MoreVert, onMore, label = stringResource(Res.string.more)) }
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -163,11 +189,61 @@ fun YtmRoundAction(
     icon: ImageVector,
     onClick: () -> Unit,
     tint: Color = Color.White,
+    label: String? = null,
 ) {
     Box(
-        Modifier.size(44.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.1f)).clickable(onClick = onClick),
+        Modifier
+            .minimumInteractiveComponentSize()
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.1f))
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+    }
+}
+
+/**
+ * YouTube Music's bar over a scrolled album or playlist: back, the title fading in once the
+ * header has scrolled away, and more. Drawn over the list; invisible (and not hit-testable) at
+ * the top, where the header carries its own back and more.
+ */
+@Composable
+fun YtmCollectionTopBar(
+    listState: LazyListState,
+    title: String,
+    onBack: () -> Unit,
+    onMore: () -> Unit,
+) {
+    val shown by remember {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 600 }
+    }
+    val alpha by animateFloatAsState(if (shown) 1f else 0f, label = "collectionTopBar")
+    if (alpha == 0f) return
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .graphicsLayer { this.alpha = alpha }
+            .background(Ytm.Background)
+            .windowInsetsPadding(WindowInsets.statusBars)
+            .height(56.dp)
+            .padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(onClick = onBack) {
+            Icon(SimpIcons.ArrowBackIosNew, contentDescription = stringResource(Res.string.ytm_back), tint = Color.White, modifier = Modifier.size(22.dp))
+        }
+        Text(
+            title,
+            style = typo().titleMedium.copy(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+            color = Color.White,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(onClick = onMore) {
+            Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Color.White)
+        }
     }
 }

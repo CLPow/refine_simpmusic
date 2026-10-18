@@ -592,19 +592,6 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    override val listenTogetherConfirmJoin: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[LISTEN_TOGETHER_CONFIRM_JOIN] ?: FALSE
-        }
-
-    override suspend fun setListenTogetherConfirmJoin(confirm: Boolean) {
-        withContext(Dispatchers.IO) {
-            settingsDataStore.edit { settings ->
-                settings[LISTEN_TOGETHER_CONFIRM_JOIN] = if (confirm) TRUE else FALSE
-            }
-        }
-    }
-
     override val lyricsSourceOrder: Flow<String> =
         settingsDataStore.data.map { preferences ->
             preferences[LYRICS_SOURCE_ORDER] ?: ""
@@ -1840,7 +1827,6 @@ internal class DataStoreManagerImpl(
         val LYRICS_FONT_SCALE_PERCENT = intPreferencesKey("lyrics_font_scale_percent")
         val SKIP_SHORT_TRACK_SECONDS = intPreferencesKey("skip_short_track_seconds")
         val CROSSFADE_PREP_BUFFER_MS = intPreferencesKey("crossfade_prep_buffer_ms")
-        val LISTEN_TOGETHER_CONFIRM_JOIN = stringPreferencesKey("listentogether_confirm_join")
         val LYRICS_SOURCE_ORDER = stringPreferencesKey("lyrics_source_order")
         val HTTPS_ONLY = stringPreferencesKey("https_only")
         val CHECK_FOR_UPDATES = stringPreferencesKey("check_for_updates")

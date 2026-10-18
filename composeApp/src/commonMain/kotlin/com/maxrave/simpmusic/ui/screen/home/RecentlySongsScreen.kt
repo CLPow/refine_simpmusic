@@ -44,6 +44,9 @@ import com.maxrave.simpmusic.viewModel.RecentlySongsViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.ytm_history
 
 /**
  * YouTube Music's History: the account's YouTube history grouped Today, Yesterday, This week…
@@ -80,7 +83,7 @@ fun RecentlySongsScreen(
     }
 
     Column(Modifier.fillMaxSize().background(Ytm.Background)) {
-        YtmTopBar(navController = navController, title = "History", onBack = { navController.navigateUp() })
+        YtmTopBar(navController = navController, title = stringResource(Res.string.ytm_history), onBack = { navController.navigateUp() })
         PullToRefreshBox(
             isRefreshing = refreshing && history == null,
             onRefresh = {

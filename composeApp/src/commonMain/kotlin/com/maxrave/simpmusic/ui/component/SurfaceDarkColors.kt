@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
 import com.maxrave.simpmusic.ui.theme.LocalForceDarkText
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
 
 /**
  * Color set for overlay surfaces (bottom sheets & dialogs) that must **inherit force-dark** from the
@@ -32,9 +33,9 @@ fun rememberSurfaceDarkColors(): SurfaceDarkColors =
     // YouTube Music's sheets and dialogs: #212121, white text, #AAAAAA secondary. The app is always
     // on the YouTube Music dark theme, so this holds whichever screen opened the sheet.
     SurfaceDarkColors(
-        container = Color(0xFF212121),
+        container = Ytm.Surface,
         handle = Color(0xFF5A5A5A),
         content = Color.White,
-        subtitle = Color(0xFFAAAAAA),
+        subtitle = Ytm.TextSecondary,
         disabled = Color(0xFF717171),
     )

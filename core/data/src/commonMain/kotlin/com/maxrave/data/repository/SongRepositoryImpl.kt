@@ -439,6 +439,24 @@ internal class SongRepositoryImpl(
             emit(youTube.getLikedInfo(videoId).getOrNull() == LikeStatus.LIKE)
         }.flowOn(Dispatchers.IO)
 
+    override suspend fun getYouTubeRating(videoId: String): Flow<Int> =
+        flow {
+            emit(
+                when (youTube.getLikedInfo(videoId).getOrNull()) {
+                    LikeStatus.LIKE -> 1
+                    LikeStatus.DISLIKE -> -1
+                    else -> 0
+                },
+            )
+        }.flowOn(Dispatchers.IO)
+
+    override suspend fun dislikeOnYouTube(mediaId: String?): Flow<Int> =
+        flow {
+            if (mediaId != null) {
+                emit(youTube.dislike(mediaId).getOrElse { Logger.e(TAG, "dislike: ${it.message}"); 0 })
+            }
+        }.flowOn(Dispatchers.IO)
+
     override suspend fun addToYouTubeLiked(mediaId: String?): Flow<Int> =
         flow {
             if (mediaId != null) {

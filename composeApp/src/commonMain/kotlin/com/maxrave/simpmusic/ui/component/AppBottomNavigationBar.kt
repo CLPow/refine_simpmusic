@@ -69,9 +69,26 @@ import simpmusic.composeapp.generated.resources.home
 import simpmusic.composeapp.generated.resources.library
 import simpmusic.composeapp.generated.resources.search
 import kotlin.reflect.KClass
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.Role
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
+import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDynamicPlaylistDestination
+import com.maxrave.simpmusic.ui.screen.library.NewPlaylistDialog
+import simpmusic.composeapp.generated.resources.playlist
+import simpmusic.composeapp.generated.resources.ytm_auto_playlist
+import simpmusic.composeapp.generated.resources.ytm_guide
+import simpmusic.composeapp.generated.resources.ytm_liked_music
+import simpmusic.composeapp.generated.resources.ytm_new_playlist
 
-private val BarColor = Color(0xFF030303)
-private val Unselected = Color(0xFFAAAAAA)
+private val BarColor = Ytm.Background
+private val Unselected = Ytm.TextSecondary
 
 /** The three tabs: Home · Search · Library. Search takes the place Explore had. */
 enum class YtmTab(
@@ -103,17 +120,22 @@ private fun NavController.selectTab(
         return
     }
     if (tab == YtmTab.Home) {
-        // Home always lands on Home itself, whatever page is open on top of it. Restoring the
-        // tab's saved stack used to bring back the album or artist that had been open, so Home
-        // could not be reached from there at all.
-        if (!popBackStack(HomeDestination, inclusive = false)) {
+        // Home always lands on Home itself, whatever page is open on top of it. Restoring Home's
+        // saved stack used to bring back the album or artist that had been open, so Home could
+        // not be reached from there at all; Home's own stack is therefore never saved. Search and
+        // Library are: leaving them keeps their query, chip, sort and scroll, as in YouTube Music.
+        if (!popBackStack(HomeDestination, inclusive = false, saveState = current != null)) {
             navigate(HomeDestination) { launchSingleTop = true }
         }
         return
     }
     navigate(tab.destination) {
-        popUpTo(HomeDestination) { inclusive = false }
+        popUpTo(HomeDestination) {
+            inclusive = false
+            saveState = current != null && current != YtmTab.Home
+        }
         launchSingleTop = true
+        restoreState = true
     }
 }
 
@@ -141,7 +163,7 @@ fun AppBottomNavigationBar(
                 Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
+                    .selectable(selected = tab == current, role = Role.Tab) {
                         navController.selectTab(tab, current, reloadDestinationIfNeeded)
                     },
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -167,11 +189,14 @@ fun AppNavigationRail(
     reloadDestinationIfNeeded: (KClass<*>) -> Unit = { _ -> },
 ) {
     val current = currentTab(navController)
-    var expanded by remember { mutableStateOf(true) }
+    // A landscape phone is short: the rail starts folded there so the page keeps its width.
+    val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
+    var expanded by rememberSaveable { mutableStateOf(windowHeight >= 480.dp) }
     val playlists by libraryViewModel.youTubePlaylists.collectAsStateWithLifecycle()
     val localPlaylists by libraryViewModel.localPlaylists.collectAsStateWithLifecycle()
+    val loggedIn by libraryViewModel.loggedIn.collectAsStateWithLifecycle()
     var showNewPlaylist by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { libraryViewModel.refreshYouTubePlaylists() }
+    // The view model fetches the account's playlists when it is created; no second fetch here.
     if (showNewPlaylist) {
         NewPlaylistDialog(onDismiss = { showNewPlaylist = false }) { title ->
             libraryViewModel.createPlaylist(title)
@@ -181,12 +206,13 @@ fun AppNavigationRail(
     Column(
         Modifier
             .fillMaxHeight()
-            .width(if (expanded) 240.dp else 72.dp)
-            .background(BarColor),
+            .background(BarColor)
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical))
+            .width(if (expanded) 240.dp else 72.dp),
     ) {
         Row(Modifier.fillMaxWidth().height(64.dp).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { expanded = !expanded }) {
-                Icon(SimpIcons.Menu, contentDescription = "Guide", tint = Color.White)
+                Icon(SimpIcons.Menu, contentDescription = stringResource(Res.string.ytm_guide), tint = Color.White)
             }
             if (expanded) {
                 Spacer(Modifier.width(4.dp))
@@ -203,7 +229,7 @@ fun AppNavigationRail(
                         .height(48.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (selected) Color.White.copy(alpha = 0.1f) else Color.Transparent)
-                        .clickable { navController.selectTab(tab, current, reloadDestinationIfNeeded) }
+                        .selectable(selected = selected, role = Role.Tab) { navController.selectTab(tab, current, reloadDestinationIfNeeded) }
                         .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -218,7 +244,7 @@ fun AppNavigationRail(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(8.dp))
                         .background(if (selected) Color.White.copy(alpha = 0.1f) else Color.Transparent)
-                        .clickable { navController.selectTab(tab, current, reloadDestinationIfNeeded) }
+                        .selectable(selected = selected, role = Role.Tab) { navController.selectTab(tab, current, reloadDestinationIfNeeded) }
                         .padding(vertical = 14.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -234,27 +260,36 @@ fun AppNavigationRail(
                 Modifier
                     .padding(horizontal = 20.dp)
                     .fillMaxWidth()
-                    .height(36.dp)
+                    .height(40.dp)
                     .clip(CircleShape)
                     .background(Color.White.copy(alpha = 0.1f))
-                    .clickable { showNewPlaylist = true },
+                    .clickable(role = Role.Button) { showNewPlaylist = true },
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(SimpIcons.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("New playlist", style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = Color.White)
+                Text(stringResource(Res.string.ytm_new_playlist), style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = Color.White)
             }
             Spacer(Modifier.height(16.dp))
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 item(key = "liked") {
-                    GuidePlaylist("Liked Music", "Auto playlist") { navController.navigate(PlaylistDestination(playlistId = "VLLM")) }
+                    // Signed out, Liked music is the songs liked on this device, as in Library.
+                    GuidePlaylist(stringResource(Res.string.ytm_liked_music), stringResource(Res.string.ytm_auto_playlist)) {
+                        if (loggedIn) {
+                            navController.navigate(PlaylistDestination(playlistId = "VLLM")) { launchSingleTop = true }
+                        } else {
+                            navController.navigate(LibraryDynamicPlaylistDestination(type = "favorite")) { launchSingleTop = true }
+                        }
+                    }
                 }
                 items(localPlaylists, key = { "l-" + it.id }) { p ->
-                    GuidePlaylist(p.title, "Playlist") { navController.navigate(LocalPlaylistDestination(id = p.id)) }
+                    GuidePlaylist(p.title, stringResource(Res.string.playlist)) { navController.navigate(LocalPlaylistDestination(id = p.id)) { launchSingleTop = true } }
                 }
                 items(playlists.orEmpty().filter { it.browseId != "VLLM" && it.browseId != "LM" }, key = { "y-" + it.browseId }) { p ->
-                    GuidePlaylist(p.title, p.author.ifBlank { p.itemCount }) { navController.navigate(PlaylistDestination(playlistId = p.browseId)) }
+                    GuidePlaylist(p.title, p.author.ifBlank { p.itemCount }) {
+                        navController.navigate(PlaylistDestination(playlistId = p.browseId, isYourYouTubePlaylist = true)) { launchSingleTop = true }
+                    }
                 }
             }
         }
@@ -275,37 +310,3 @@ private fun GuidePlaylist(
     }
 }
 
-@Composable
-private fun NewPlaylistDialog(
-    onDismiss: () -> Unit,
-    onCreate: (String) -> Unit,
-) {
-    var title by remember { mutableStateOf("") }
-    AlertDialog(
-        containerColor = Color(0xFF212121),
-        onDismissRequest = onDismiss,
-        title = { Text("New playlist", color = Color.White) },
-        text = {
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                singleLine = true,
-                label = { Text("Title") },
-                colors =
-                    OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color.White,
-                        focusedLabelColor = Color.White,
-                        cursorColor = Color.White,
-                    ),
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { if (title.isNotBlank()) onCreate(title.trim()) }, enabled = title.isNotBlank()) {
-                Text("Create", color = Color.White)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = Unselected) } },
-    )
-}

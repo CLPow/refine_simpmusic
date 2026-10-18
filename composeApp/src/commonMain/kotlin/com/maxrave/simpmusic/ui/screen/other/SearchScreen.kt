@@ -103,6 +103,26 @@ import com.maxrave.simpmusic.viewModel.SearchViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import kotlinx.coroutines.delay
 import org.koin.compose.koinInject
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import com.maxrave.simpmusic.expect.ui.PlatformBackHandler
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.cancel
+import simpmusic.composeapp.generated.resources.more
+import simpmusic.composeapp.generated.resources.playlist
+import simpmusic.composeapp.generated.resources.retry
+import simpmusic.composeapp.generated.resources.ytm_artist
+import simpmusic.composeapp.generated.resources.ytm_back
+import simpmusic.composeapp.generated.resources.ytm_clear
+import simpmusic.composeapp.generated.resources.ytm_fill_in
+import simpmusic.composeapp.generated.resources.ytm_no_results
+import simpmusic.composeapp.generated.resources.ytm_remove
+import simpmusic.composeapp.generated.resources.ytm_remove_from_history
+import simpmusic.composeapp.generated.resources.ytm_search_failed
+import simpmusic.composeapp.generated.resources.ytm_search_hint
+import simpmusic.composeapp.generated.resources.ytm_video
 
 /** YouTube's chip ids, mapped to the filtered lists Refine has. */
 private val chipTypes =
@@ -136,8 +156,39 @@ fun SearchScreen(
     var submitted by rememberSaveable { mutableStateOf<String?>(null) }
     var editing by rememberSaveable { mutableStateOf(true) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
+    var removeHistory by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+
+    removeHistory?.let { text ->
+        AlertDialog(
+            containerColor = Ytm.Surface,
+            onDismissRequest = { removeHistory = null },
+            title = { Text(text, color = Color.White, maxLines = 2) },
+            text = { Text(stringResource(Res.string.ytm_remove_from_history), color = Ytm.TextSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteSearchHistoryItem(text)
+                    removeHistory = null
+                }) { Text(stringResource(Res.string.ytm_remove), color = Color.White) }
+            },
+            dismissButton = { TextButton(onClick = { removeHistory = null }) { Text(stringResource(Res.string.cancel), color = Ytm.TextSecondary) } },
+        )
+    }
+
+    // System back steps back the way the arrow does: typing over results returns to them, and
+    // results return to the field, before back leaves Search.
+    PlatformBackHandler(enabled = submitted != null) {
+        if (editing) {
+            query = submitted.orEmpty()
+            editing = false
+            focusManager.clearFocus()
+        } else {
+            submitted = null
+            editing = true
+            focus.requestFocus()
+        }
+    }
 
     menuTrack?.let { NowPlayingBottomSheet(onDismiss = { menuTrack = null }, navController = navController, song = it.toSongEntity()) }
 
@@ -217,7 +268,7 @@ fun SearchScreen(
                         navController.navigateUp()
                     }
                 }) {
-                    Icon(SimpIcons.ArrowBackIosNew, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(22.dp))
+                    Icon(SimpIcons.ArrowBackIosNew, contentDescription = stringResource(Res.string.ytm_back), tint = Color.White, modifier = Modifier.size(22.dp))
                 }
             } else {
                 Spacer(Modifier.width(16.dp))
@@ -232,7 +283,7 @@ fun SearchScreen(
                 contentAlignment = Alignment.CenterStart,
             ) {
                 if (query.isEmpty()) {
-                    Text("Search songs, albums, artists", style = typo().bodyLarge, color = Ytm.TextSecondary, maxLines = 1)
+                    Text(stringResource(Res.string.ytm_search_hint), style = typo().bodyLarge, color = Ytm.TextSecondary, maxLines = 1)
                 }
                 BasicTextField(
                     value = query,
@@ -258,7 +309,7 @@ fun SearchScreen(
                     editing = true
                     focus.requestFocus()
                 }) {
-                    Icon(SimpIcons.Close, contentDescription = "Clear", tint = Color.White)
+                    Icon(SimpIcons.Close, contentDescription = stringResource(Res.string.ytm_clear), tint = Color.White)
                 }
             }
         }
@@ -274,7 +325,7 @@ fun SearchScreen(
                     query = it
                     editing = true
                 },
-                onClearHistory = viewModel::deleteSearchHistory,
+                onRemoveHistory = { removeHistory = it },
                 onSong = ::playSong,
                 onVideo = ::playVideo,
                 onAlbum = { navController.navigate(AlbumDestination(browseId = it.browseId)) },
@@ -292,7 +343,7 @@ fun SearchScreen(
                 labels = chips.map { it.second },
                 selected = selected,
                 onSelect = { index -> viewModel.selectFilter(if (index == selected) SearchType.ALL else chips[index].first) },
-                modifier = Modifier.padding(vertical = 8.dp),
+                modifier = Modifier,
             )
         }
         when (uiState) {
@@ -300,20 +351,25 @@ fun SearchScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
 
             SearchScreenUIState.Error ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    YtmOutlinedPill("Retry") { submitted?.let(::search) }
+                Column(
+                    Modifier.fillMaxSize().padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                ) {
+                    Text(stringResource(Res.string.ytm_search_failed), style = typo().bodyLarge, color = Color.White)
+                    YtmOutlinedPill(stringResource(Res.string.retry)) { submitted?.let(::search) }
                 }
 
             else ->
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                     when (state.searchType) {
                         SearchType.SONGS ->
-                            items(state.searchSongsResult, key = { "s-" + it.videoId }) { song ->
+                            itemsIndexed(state.searchSongsResult, key = { i, it -> "s-$i-" + it.videoId }) { _, song ->
                                 SongResultRow(song, { playSong(song) }) { menuTrack = song.toTrack() }
                             }
 
                         SearchType.VIDEOS ->
-                            items(state.searchVideosResult, key = { "v-" + it.videoId }) { video ->
+                            itemsIndexed(state.searchVideosResult, key = { i, it -> "v-$i-" + it.videoId }) { _, video ->
                                 ResultRow(
                                     title = video.title,
                                     subtitle = listOfNotNull(video.artists?.joinToString(", ") { it.name }, video.views, video.duration).filter { it.isNotBlank() }.joinToString(" • "),
@@ -325,22 +381,22 @@ fun SearchScreen(
                             }
 
                         SearchType.ALBUMS ->
-                            items(state.searchAlbumsResult, key = { "a-" + it.browseId }) { album ->
+                            itemsIndexed(state.searchAlbumsResult, key = { i, it -> "a-$i-" + it.browseId }) { _, album ->
                                 AlbumResultRow(album) { navController.navigate(AlbumDestination(browseId = album.browseId)) }
                             }
 
                         SearchType.ARTISTS ->
-                            items(state.searchArtistsResult, key = { "r-" + it.browseId }) { artist ->
+                            itemsIndexed(state.searchArtistsResult, key = { i, it -> "r-$i-" + it.browseId }) { _, artist ->
                                 ArtistResultRow(artist) { navController.navigate(ArtistDestination(channelId = artist.browseId)) }
                             }
 
                         SearchType.PLAYLISTS ->
-                            items(state.searchPlaylistsResult, key = { "p-" + it.browseId }) { p ->
+                            itemsIndexed(state.searchPlaylistsResult, key = { i, it -> "p-$i-" + it.browseId }) { _, p ->
                                 PlaylistResultRow(p) { navController.navigate(PlaylistDestination(playlistId = p.browseId)) }
                             }
 
                         SearchType.FEATURED_PLAYLISTS ->
-                            items(state.searchFeaturedPlaylistsResult, key = { "f-" + it.browseId }) { p ->
+                            itemsIndexed(state.searchFeaturedPlaylistsResult, key = { i, it -> "f-$i-" + it.browseId }) { _, p ->
                                 PlaylistResultRow(p) { navController.navigate(PlaylistDestination(playlistId = p.browseId)) }
                             }
 
@@ -358,9 +414,32 @@ fun SearchScreen(
                                 },
                             )
                     }
+                    val filteredEmpty =
+                        when (state.searchType) {
+                            SearchType.SONGS -> state.searchSongsResult.isEmpty()
+                            SearchType.VIDEOS -> state.searchVideosResult.isEmpty()
+                            SearchType.ALBUMS -> state.searchAlbumsResult.isEmpty()
+                            SearchType.ARTISTS -> state.searchArtistsResult.isEmpty()
+                            SearchType.PLAYLISTS -> state.searchPlaylistsResult.isEmpty()
+                            SearchType.FEATURED_PLAYLISTS -> state.searchFeaturedPlaylistsResult.isEmpty()
+                            else -> false
+                        }
+                    if (filteredEmpty && uiState == SearchScreenUIState.Success) {
+                        item(key = "filtered-empty") { NoResults() }
+                    }
                 }
         }
     }
+}
+
+@Composable
+private fun NoResults() {
+    Text(
+        stringResource(Res.string.ytm_no_results),
+        style = typo().bodyLarge,
+        color = Ytm.TextSecondary,
+        modifier = Modifier.fillMaxWidth().padding(32.dp),
+    )
 }
 
 /** The unfiltered page: the top result card, then each of YouTube's shelves with its rows. */
@@ -372,14 +451,7 @@ private fun LazyListScope.summaryPage(
 ) {
     if (summary == null) return
     if (summary.top == null && summary.sections.isEmpty()) {
-        item(key = "none") {
-            Text(
-                "No results",
-                style = typo().bodyLarge,
-                color = Ytm.TextSecondary,
-                modifier = Modifier.fillMaxWidth().padding(32.dp),
-            )
-        }
+        item(key = "none") { NoResults() }
         return
     }
     summary.top?.let { top ->
@@ -509,7 +581,7 @@ private fun Suggestions(
     items: List<SearchResultType>,
     onSearch: (String) -> Unit,
     onFill: (String) -> Unit,
-    onClearHistory: () -> Unit,
+    onRemoveHistory: (String) -> Unit,
     onSong: (SongsResult) -> Unit,
     onVideo: (VideosResult) -> Unit,
     onAlbum: (AlbumsResult) -> Unit,
@@ -518,8 +590,11 @@ private fun Suggestions(
 ) {
     val recent = if (query.isBlank()) history else history.filter { it.contains(query, ignoreCase = true) }.take(3)
     LazyColumn(Modifier.fillMaxSize()) {
-        items(recent, key = { "h-$it" }) { text -> SuggestionRow(SimpIcons.History, text, { onSearch(text) }) { onFill(text) } }
-        items(suggestions.filter { it !in recent }, key = { "s-$it" }) { text ->
+        // A long press offers to remove a recent search, as in YouTube Music.
+        itemsIndexed(recent, key = { i, it -> "h-$i-$it" }) { _, text ->
+            SuggestionRow(SimpIcons.History, text, { onSearch(text) }, onLongClick = { onRemoveHistory(text) }) { onFill(text) }
+        }
+        itemsIndexed(suggestions.filter { it !in recent }, key = { i, it -> "s-$i-$it" }) { _, text ->
             SuggestionRow(SimpIcons.Search, text, { onSearch(text) }) { onFill(text) }
         }
         // The songs, artists and albums YouTube suggests for what is typed so far.
@@ -529,7 +604,7 @@ private fun Suggestions(
                 is VideosResult ->
                     ResultRow(
                         title = item.title,
-                        subtitle = listOfNotNull("Video", item.artists?.joinToString(", ") { it.name }).filter { it.isNotBlank() }.joinToString(" • "),
+                        subtitle = listOfNotNull(stringResource(Res.string.ytm_video), item.artists?.joinToString(", ") { it.name }).filter { it.isNotBlank() }.joinToString(" • "),
                         thumbnail = item.thumbnails?.lastOrNull()?.url,
                         shape = ThumbShape.Wide,
                         onClick = { onVideo(item) },
@@ -540,11 +615,6 @@ private fun Suggestions(
                 else -> Unit
             }
         }
-        if (query.isBlank() && history.isNotEmpty()) {
-            item(key = "clear") {
-                Box(Modifier.padding(16.dp)) { YtmOutlinedPill("Clear search history", onClearHistory) }
-            }
-        }
     }
 }
 
@@ -553,10 +623,11 @@ private fun SuggestionRow(
     icon: ImageVector,
     text: String,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     onFill: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+        Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(start = 16.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = Ytm.TextSecondary)
@@ -564,7 +635,7 @@ private fun SuggestionRow(
         Text(text, style = typo().bodyLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         IconButton(onClick = onFill) {
             // The arrow points up-left: it puts the suggestion in the field without searching.
-            Icon(SimpIcons.ArrowOutward, contentDescription = "Fill in", tint = Ytm.TextSecondary, modifier = Modifier.size(20.dp).rotate(-90f))
+            Icon(SimpIcons.ArrowOutward, contentDescription = stringResource(Res.string.ytm_fill_in), tint = Ytm.TextSecondary, modifier = Modifier.size(20.dp).rotate(-90f))
         }
     }
 }
@@ -605,7 +676,7 @@ private fun AlbumResultRow(
 private fun ArtistResultRow(
     artist: ArtistsResult,
     onClick: () -> Unit,
-) = ResultRow(artist.artist, "Artist", artist.thumbnails.lastOrNull()?.url, ThumbShape.Round, onClick = onClick)
+) = ResultRow(artist.artist, stringResource(Res.string.ytm_artist), artist.thumbnails.lastOrNull()?.url, ThumbShape.Round, onClick = onClick)
 
 @Composable
 private fun PlaylistResultRow(
@@ -613,7 +684,7 @@ private fun PlaylistResultRow(
     onClick: () -> Unit,
 ) = ResultRow(
     title = playlist.title,
-    subtitle = listOf("Playlist", playlist.author, playlist.itemCount).filter { it.isNotBlank() }.joinToString(" • "),
+    subtitle = listOf(stringResource(Res.string.playlist), playlist.author, playlist.itemCount).filter { it.isNotBlank() }.joinToString(" • "),
     thumbnail = playlist.thumbnails.lastOrNull()?.url,
     shape = ThumbShape.Square,
     onClick = onClick,
@@ -649,7 +720,7 @@ private fun ResultRow(
         }
         if (onMore != null) {
             IconButton(onClick = onMore) {
-                Icon(SimpIcons.MoreVert, contentDescription = "More", tint = Ytm.TextSecondary)
+                Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Ytm.TextSecondary)
             }
         } else {
             Spacer(Modifier.width(12.dp))

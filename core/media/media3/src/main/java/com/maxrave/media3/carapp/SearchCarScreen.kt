@@ -26,6 +26,7 @@ import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import com.maxrave.media3.R
 
 /**
  * Search screen for the Android Auto templated surface, backed by the same
@@ -77,7 +78,7 @@ internal class SearchCarScreen(
                         }
                     },
                 ).setHeaderAction(Action.BACK)
-                .setSearchHint("Search songs")
+                .setSearchHint(carContext.getString(R.string.car_search_hint))
                 .setShowKeyboardByDefault(results == null && !searching)
         if (searching) {
             return builder.setLoading(true).build()

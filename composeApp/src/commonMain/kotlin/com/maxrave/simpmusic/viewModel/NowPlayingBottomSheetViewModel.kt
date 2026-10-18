@@ -51,6 +51,8 @@ import simpmusic.composeapp.generated.resources.removed_download
 import simpmusic.composeapp.generated.resources.removed_from_YouTube_playlist
 import simpmusic.composeapp.generated.resources.share_url
 import simpmusic.composeapp.generated.resources.sleep_timer_off_done
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.first
 
 class NowPlayingBottomSheetViewModel(
     private val dataStoreManager: DataStoreManager,
@@ -257,10 +259,35 @@ class NowPlayingBottomSheetViewModel(
                 }
 
                 is NowPlayingBottomSheetUIEvent.ToggleLike -> {
-                    songRepository.updateLikeStatus(
-                        songUIState.videoId,
-                        if (songUIState.liked) 0 else 1,
-                    )
+                    val videoId = songUIState.videoId
+                    val isNowPlaying = mediaPlayerHandler.nowPlayingState.value.songEntity?.videoId == videoId
+                    if (isNowPlaying) {
+                        // The player's thumb: the same path as the player's own Like, so the
+                        // account and the player stay in step.
+                        mediaPlayerHandler.toggleLike()
+                    } else {
+                        val liking = !songUIState.liked
+                        songRepository.updateLikeStatus(videoId, if (liking) 1 else 0)
+                        if (dataStoreManager.cookie.first().isNotEmpty()) {
+                            if (liking) {
+                                songRepository.addToYouTubeLiked(videoId).firstOrNull()
+                            } else {
+                                songRepository.removeFromYouTubeLiked(videoId).firstOrNull()
+                            }
+                        }
+                    }
+                }
+
+                is NowPlayingBottomSheetUIEvent.Dislike -> {
+                    val videoId = songUIState.videoId
+                    if (mediaPlayerHandler.nowPlayingState.value.songEntity?.videoId == videoId) {
+                        mediaPlayerHandler.dislike()
+                    } else {
+                        if (songUIState.liked) songRepository.updateLikeStatus(videoId, 0)
+                        if (dataStoreManager.cookie.first().isNotEmpty()) {
+                            songRepository.dislikeOnYouTube(videoId).firstOrNull()
+                        }
+                    }
                 }
 
                 is NowPlayingBottomSheetUIEvent.Download -> {
@@ -430,6 +457,8 @@ sealed class NowPlayingBottomSheetUIEvent {
     ) : NowPlayingBottomSheetUIEvent()
 
     data object ToggleLike : NowPlayingBottomSheetUIEvent()
+
+    data object Dislike : NowPlayingBottomSheetUIEvent()
 
     data object Download : NowPlayingBottomSheetUIEvent()
 

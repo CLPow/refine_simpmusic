@@ -54,6 +54,13 @@ import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.log_in
 import simpmusic.composeapp.generated.resources.login_failed
 import simpmusic.composeapp.generated.resources.login_success
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.remember
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -72,6 +79,10 @@ fun LoginScreen(
     }
 
     val state = rememberWebViewState()
+
+    // The page reports reaching the main page more than once (redirects, page-finished), and each
+    // report used to add the account again and navigate up again, popping the page beneath too.
+    var handled by remember { mutableStateOf(false) }
 
     LaunchedEffect(state) {
         snapshotFlow { state.value }.collect {
@@ -101,12 +112,18 @@ fun LoginScreen(
 
     Box(modifier = Modifier.fillMaxSize().hazeSource(state = hazeState)) {
         Column {
-            Spacer(
-                Modifier
-                    .size(
-                        innerPadding.calculateTopPadding() + 64.dp,
-                    ),
-            )
+            // Room for the top bar: the status bar plus the bar itself (the Scaffold's own top
+            // padding is 0 here, so the status bar used to cover the top of the page).
+            Spacer(Modifier.windowInsetsPadding(WindowInsets.statusBars).height(64.dp))
+            val loading = state.value as? com.maxrave.simpmusic.expect.ui.WebViewState.Loading
+            if (loading != null) {
+                LinearProgressIndicator(
+                    progress = { loading.progress / 100f },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color.White,
+                    trackColor = Color.Transparent,
+                )
+            }
             // WebView for YouTube Music login
             PlatformWebView(
                 state,
@@ -135,7 +152,8 @@ fun LoginScreen(
                 clearCookies = true,
             ) { url ->
                 Logger.d("LogInScreen", "Current URL: $url")
-                if (url == Config.YOUTUBE_MUSIC_MAIN_URL) {
+                if (url == Config.YOUTUBE_MUSIC_MAIN_URL && !handled) {
+                    handled = true
                     coroutineScope.launch {
                         val success =
                             createWebViewCookieManager()
@@ -152,6 +170,7 @@ fun LoginScreen(
                             viewModel.makeToast(getString(Res.string.login_success))
                             navController.navigateUp()
                         } else {
+                            handled = false
                             viewModel.makeToast(getString(Res.string.login_failed))
                         }
                     }
@@ -177,7 +196,7 @@ fun LoginScreen(
                 Box(Modifier.padding(horizontal = 5.dp)) {
                     RippleIconButton(
                         SimpIcons.ArrowBackIosNew,
-                        Modifier.size(32.dp),
+                        Modifier.size(48.dp),
                         true,
                     ) {
                         navController.navigateUp()

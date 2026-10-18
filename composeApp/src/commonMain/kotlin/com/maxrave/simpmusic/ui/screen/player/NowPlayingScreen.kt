@@ -2,21 +2,11 @@
 
 package com.maxrave.simpmusic.ui.screen.player
 
-import com.maxrave.simpmusic.ui.component.ytm.openContent
 import androidx.compose.animation.Animatable
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SheetValue
@@ -25,8 +15,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -41,36 +29,24 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.kmpalette.rememberPaletteState
-import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.logger.Logger
-import com.maxrave.simpmusic.extension.GradientAngle
-import com.maxrave.simpmusic.extension.GradientOffset
-import com.maxrave.simpmusic.extension.KeepScreenOn
 import com.maxrave.simpmusic.extension.getColorFromPalette
-import com.maxrave.simpmusic.extension.hsvToColor
-import com.maxrave.simpmusic.extension.rememberIsInPipMode
 import com.maxrave.simpmusic.ui.component.AddToPlaylistModalBottomSheet
-import com.maxrave.simpmusic.ui.component.InfoPlayerBottomSheet
 import com.maxrave.simpmusic.ui.component.NowPlayingBottomSheet
-import com.maxrave.simpmusic.ui.component.QueueBottomSheet
+import com.maxrave.simpmusic.ui.component.ytm.openContent
 import com.maxrave.simpmusic.ui.icon.KeyboardArrowDown
 import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentActions
-import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentYtm
 import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentState
-import com.maxrave.simpmusic.ui.screen.player.content.PlayerBackdropColor
-import com.maxrave.simpmusic.ui.screen.player.content.toAudioCodecLabel
-import com.maxrave.simpmusic.viewModel.LyricsProvider
+import com.maxrave.simpmusic.ui.screen.player.content.NowPlayingContentYtm
 import com.maxrave.simpmusic.viewModel.NowPlayingBottomSheetUIEvent
 import com.maxrave.simpmusic.viewModel.NowPlayingBottomSheetViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -140,19 +116,9 @@ fun NowPlayingScreenContent(
 ) {
     val coroutineScope = rememberCoroutineScope()
 
-    // ViewModel State
+    // ViewModel state. The playback position is not collected here (see NowPlayingContentState).
     val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
     val screenDataState by sharedViewModel.nowPlayingScreenData.collectAsStateWithLifecycle()
-    val timelineState by sharedViewModel.timeline.collectAsStateWithLifecycle()
-    val likeStatus by sharedViewModel.likeStatus.collectAsStateWithLifecycle()
-    val castState by sharedViewModel.castState.collectAsStateWithLifecycle()
-    // Apple Music style's progress-bar codec badge — see NowPlayingContentState.toAudioCodecLabel.
-    val formatState by sharedViewModel.format.collectAsStateWithLifecycle(initialValue = null)
-
-    // Songs only: the player never shows a music video, whatever an old setting says.
-    val shouldShowVideo = false
-    val translatedVoteState by sharedViewModel.translatedVoteState.collectAsStateWithLifecycle()
-    val lyricsVoteState by sharedViewModel.lyricsVoteState.collectAsStateWithLifecycle()
     val isUserLoggedIn by sharedViewModel
         .isUserLoggedInFlow()
         .collectAsStateWithLifecycle(initialValue = false)
@@ -306,272 +272,39 @@ fun NowPlayingScreenContent(
         }
     }
 
-    // State
-    val isInPipMode = rememberIsInPipMode()
+    var showSheet by rememberSaveable { mutableStateOf(false) }
+    var showAddToPlaylistDirectly by rememberSaveable { mutableStateOf(false) }
 
-    val mainScrollState = rememberScrollState()
-
-    var showHideMiddleLayout by rememberSaveable {
-        mutableStateOf(true)
-    }
-
-    var showSheet by rememberSaveable {
-        mutableStateOf(false)
-    }
-
-    var showFullscreenLyrics by rememberSaveable {
-        mutableStateOf(false)
-    }
-
-    var showQueueBottomSheet by rememberSaveable {
-        mutableStateOf(false)
-    }
-
-    var showInfoBottomSheet by rememberSaveable {
-        mutableStateOf(false)
-    }
-
-    var showVoteDialog by rememberSaveable {
-        mutableStateOf(false)
-    }
-
-    // NEW: Add to Playlist state
-    var showAddToPlaylistDirectly by rememberSaveable {
-        mutableStateOf(false)
-    }
-
-    var shouldShowToolbar by remember {
-        mutableStateOf(false)
-    }
-
-    // Palette state
+    // The page takes its colour from the cover. Generation lives in its own never-restarting
+    // effect: keyed on the screen data it was cancelled whenever another field arrived, and
+    // kmpalette parks on Loading when generate() is cancelled.
     val paletteState = rememberPaletteState()
-
-    val startColor =
-        remember {
-            Animatable(Color.Black)
-        }
-    val endColor =
-        remember {
-            Animatable(Color.Black)
-        }
-    val gradientOffset by remember {
-        mutableStateOf(GradientOffset(GradientAngle.CW135))
-    }
-
-    var spotShadowColor by remember {
-        mutableStateOf(Color.White)
-    }
-
-    LaunchedEffect(screenDataState) {
-        Logger.d(TAG, "ScreenDataState: $screenDataState")
-        showHideMiddleLayout = screenDataState.canvasData == null
-    }
-
-    // Palette generation lives in its own NEVER-restarting effect. Keyed on screenDataState it
-    // was cancelled mid-generate every time ANOTHER field of the data class arrived (canvasData,
-    // lyrics, songInfo), and kmpalette parks on Loading when generate() is cancelled — palette
-    // stays null, startColor stays black, and the M3E style falls back to the app seed (the
-    // "canvas songs are always cyan" bug). Canvas songs hit this deterministically because the
-    // canvas fetch always lands after the artwork bitmap.
+    val startColor = remember { Animatable(Color.Black) }
     LaunchedEffect(Unit) {
         snapshotFlow { screenDataState.bitmap }
             .filterNotNull()
             .distinctUntilChanged()
-            .collectLatest {
-                paletteState.generate(it)
-            }
+            .collectLatest { paletteState.generate(it) }
     }
-
     LaunchedEffect(Unit) {
         snapshotFlow { paletteState.palette }
             .distinctUntilChanged()
-            .collectLatest {
-                spotShadowColor = it.getColorFromPalette()
-                startColor.animateTo(it.getColorFromPalette())
-                // Lands on the same backdrop colour the fade and the area below the gradient
-                // use, so the palette ramp resolves into the surface instead of a black patch.
-                endColor.animateTo(PlayerBackdropColor)
-            }
-    }
-
-    LaunchedEffect(spotShadowColor) {
-        Logger.d(TAG, "spotShadowColor: $spotShadowColor")
-    }
-
-    var isSliding by rememberSaveable {
-        mutableStateOf(false)
-    }
-    var sliderValue by rememberSaveable {
-        mutableFloatStateOf(0f)
-    }
-    LaunchedEffect(key1 = timelineState, key2 = isSliding) {
-        if (!isSliding) {
-            sliderValue =
-                if (timelineState.total > 0L) {
-                    timelineState.current.toFloat() * 100 / timelineState.total.toFloat()
-                } else {
-                    0f
-                }
-        }
-    }
-
-    // Crossfade: RGB rainbow color cycling when transitioning between tracks. Only composed while a
-    // crossfade runs — an always-on infinite transition read here recomposed this whole screen on
-    // every frame, crossfading or not.
-    val sliderTrackColor =
-        if (timelineState.isCrossfading) {
-            val infiniteTransition = rememberInfiniteTransition(label = "crossfadeRainbow")
-            val rainbowHue by infiniteTransition.animateFloat(
-                initialValue = 0f,
-                targetValue = 360f,
-                animationSpec =
-                    infiniteRepeatable(
-                        animation = tween(1000, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart,
-                    ),
-                label = "rainbowHue",
-            )
-            hsvToColor(rainbowHue, 1f, 1f)
-        } else {
-            Color.White
-        }
-
-    // Show ControlLayout Or Show Artist Badge
-    var showHideControlLayout by rememberSaveable {
-        mutableStateOf(true)
-    }
-    val controlLayoutAlpha: Float by animateFloatAsState(
-        targetValue = if (showHideControlLayout) 1f else 0f,
-        animationSpec =
-            tween(
-                durationMillis = 500,
-                easing = LinearEasing,
-            ),
-        label = "ControlLayoutAlpha",
-    )
-
-    var showHideJob by remember {
-        mutableStateOf(true)
-    }
-
-    LaunchedEffect(key1 = showHideJob) {
-        if (!showHideJob) {
-            delay(5000)
-            if (mainScrollState.value == 0) showHideControlLayout = false
-            showHideJob = true
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        snapshotFlow {
-            screenDataState
-        }.distinctUntilChangedBy {
-            it.canvasData?.url
-        }.collectLatest {
-            if (it.canvasData != null && mainScrollState.value == 0) {
-                showHideJob = false
-            } else {
-                showHideJob = true
-                showHideControlLayout = true
-            }
-        }
-    }
-
-    LaunchedEffect(key1 = showHideControlLayout) {
-        if (showHideControlLayout && screenDataState.canvasData != null && mainScrollState.value == 0) {
-            showHideJob = false
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        snapshotFlow { mainScrollState.value }
-            .distinctUntilChanged()
-            .collect {
-                if (it > 0 && !showHideControlLayout && screenDataState.canvasData != null) {
-                    showHideJob = true
-                    showHideControlLayout = true
-                } else if (showHideControlLayout && it == 0 && screenDataState.canvasData != null) {
-                    showHideJob = false
-                }
-            }
-    }
-
-    var currentLyricLineIndex by rememberSaveable {
-        mutableIntStateOf(-1)
-    }
-
-    // Canvas subtitle sync
-    LaunchedEffect(timelineState, screenDataState.lyricsData?.lyrics) {
-        val lyrics = screenDataState.lyricsData?.lyrics
-        if (lyrics == null || lyrics.syncType == "UNSYNCED" || lyrics.syncType == null) {
-            currentLyricLineIndex = -1
-            return@LaunchedEffect
-        }
-        val lines = lyrics.lines ?: return@LaunchedEffect
-        val translatedLines =
-            screenDataState.lyricsData
-                ?.translatedLyrics
-                ?.first
-                ?.lines
-        if (timelineState.current > 0L) {
-            lines.indices.forEach { i ->
-                val startTimeMs = lines[i].startTimeMs.toLongOrNull() ?: 0L
-                val endTimeMs =
-                    if (i < lines.size - 1) {
-                        lines[i + 1].startTimeMs.toLongOrNull() ?: 0L
-                    } else {
-                        startTimeMs + 60000
-                    }
-                if (timelineState.current in startTimeMs..endTimeMs) {
-                    currentLyricLineIndex = i
-                }
-            }
-            if (lines.isNotEmpty() &&
-                timelineState.current in 0..(lines.getOrNull(0)?.startTimeMs?.toLongOrNull() ?: 0L)
-            ) {
-                currentLyricLineIndex = -1
-            }
-        } else {
-            currentLyricLineIndex = -1
-        }
+            .collectLatest { startColor.animateTo(it.getColorFromPalette()) }
     }
 
     if (showSheet) {
         NowPlayingBottomSheet(
-            onDismiss = {
-                showSheet = false
-            },
+            onDismiss = { showSheet = false },
             navController = navController,
-            onNavigateToOtherScreen = {
-                onDismiss()
-            },
+            onNavigateToOtherScreen = { onDismiss() },
             song = null, // Auto set now playing
             setSleepTimerEnable = true,
             changeMainLyricsProviderEnable = true,
         )
     }
 
-
-    if (showQueueBottomSheet) {
-        QueueBottomSheet(
-            onDismiss = {
-                showQueueBottomSheet = false
-            },
-        )
-    }
-
-    if (showInfoBottomSheet) {
-        InfoPlayerBottomSheet(
-            onDismiss = {
-                showInfoBottomSheet = false
-            },
-        )
-    }
-
-    // NEW: Add to Playlist Bottom Sheet
     if (showAddToPlaylistDirectly) {
-        val viewModel: NowPlayingBottomSheetViewModel = koinViewModel()
+        val viewModel: NowPlayingBottomSheetViewModel = koinViewModel(key = "player-save")
         val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
         LaunchedEffect(Unit) {
@@ -596,103 +329,51 @@ fun NowPlayingScreenContent(
         )
     }
 
-
-    if (screenDataState.lyricsData != null && controllerState.isPlaying) {
-        KeepScreenOn()
-    }
     val state =
         NowPlayingContentState(
             screenData = screenDataState,
             controllerState = controllerState,
-            timelineState = timelineState,
             timelineFlow = sharedViewModel.timeline,
-            likeStatus = likeStatus,
-            castState = castState,
-            shouldShowVideo = shouldShowVideo,
             isUserLoggedIn = isUserLoggedIn,
             artworkQueue = artworkQueue,
             currentOrderIndex = currentOrderIndex,
             artworkPagerState = artworkPagerState,
             startColor = startColor,
-            endColor = endColor,
-            spotShadowColor = spotShadowColor,
-            gradientOffset = gradientOffset,
-            sliderTrackColor = sliderTrackColor,
-            sliderValue = sliderValue,
-            currentLyricLineIndex = currentLyricLineIndex,
-            showControlLayout = showHideControlLayout,
-            controlLayoutAlpha = controlLayoutAlpha,
-            showHideMiddleLayout = showHideMiddleLayout,
-            shouldShowToolbar = shouldShowToolbar,
-            isInPipMode = isInPipMode,
-            mainScrollState = mainScrollState,
-            isExpanded = isExpanded,
             dismissIcon = dismissIcon,
-            // codecs, NOT mimeType. StreamRepositoryImpl splits YouTube's
-            // `audio/webm; codecs="opus"` with a regex and stores the two halves in SEPARATE
-            // columns: mimeType keeps "audio/webm", codecs keeps "opus". Asking mimeType for the
-            // codec therefore never matched anything and the badge never rendered, on any track.
-            audioCodecLabel = formatState?.codecs.toAudioCodecLabel(),
         )
+    // Built once: the callbacks read what they need when they run, so a new set per
+    // recomposition only made every child see "new" parameters.
+    val latestScreenData by rememberUpdatedState(screenDataState)
+    val latestOnDismiss by rememberUpdatedState(onDismiss)
     val actions =
-        NowPlayingContentActions(
-            onUIEvent = { sharedViewModel.onUIEvent(it) },
-            onSeekToQueueIndex = { index ->
-                mediaPlayerHandler.playMediaItemInMediaSource(index)
-            },
-            onArtworkBitmap = { sharedViewModel.setBitmap(it) },
-            onSliderChange = { newValue ->
-                isSliding = true
-                sliderValue = newValue
-            },
-            onSliderChangeFinished = {
-                isSliding = false
-                sharedViewModel.onUIEvent(
-                    UIEvent.UpdateProgress(sliderValue),
-                )
-            },
-            onToggleControls = {
-                showHideJob = true
-                showHideControlLayout = !showHideControlLayout
-            },
-            onNavigateToArtist = {
-                val song = sharedViewModel.nowPlayingState.value?.songEntity
-                (
-                    song?.artistId?.firstOrNull()?.takeIf { it.isNotEmpty() }
-                        ?: screenDataState.songInfoData?.authorId
-                )?.let { channelId ->
-                    onDismiss()
-                    navController.navigate(
-                        ArtistDestination(
-                            channelId = channelId,
-                        ),
-                    )
-                }
-            },
-            onAddToYouTubeLiked = { sharedViewModel.addToYouTubeLiked() },
-            onShowMoreSheet = { showSheet = true },
-            onShowQueue = { showQueueBottomSheet = true },
-            onShowInfo = { showInfoBottomSheet = true },
-            onShowAddToPlaylist = { showAddToPlaylistDirectly = true },
-            onShowFullscreenLyrics = { showFullscreenLyrics = true },
-            onShowVoteDialog = { showVoteDialog = true },
-            onEnterFullscreenVideo = {},
-            onDismiss = onDismiss,
-            onToolbarVisibilityChange = { shouldShowToolbar = it },
-            onMoveQueueItem = { from, to ->
-                coroutineScope.launch {
-                    mediaPlayerHandler.swap(from, to)
-                }
-            },
-            onRemoveQueueItem = { index ->
-                mediaPlayerHandler.removeMediaItem(index)
-            },
-            onOpenContent = { content ->
-                if (content.videoId.isNullOrEmpty()) onDismiss()
-                openContent(content, navController, sharedViewModel)
-            },
-        )
-    // One player, in YouTube Music's layout (2.1.16).
+        remember(sharedViewModel, mediaPlayerHandler, navController) {
+            NowPlayingContentActions(
+                onUIEvent = { sharedViewModel.onUIEvent(it) },
+                onSeekToQueueIndex = { index -> mediaPlayerHandler.playMediaItemInMediaSource(index) },
+                onArtworkBitmap = { sharedViewModel.setBitmap(it) },
+                onSeek = { percent -> sharedViewModel.onUIEvent(UIEvent.UpdateProgress(percent)) },
+                onNavigateToArtist = {
+                    val song = sharedViewModel.nowPlayingState.value?.songEntity
+                    (
+                        song?.artistId?.firstOrNull()?.takeIf { it.isNotEmpty() }
+                            ?: latestScreenData.songInfoData?.authorId
+                    )?.let { channelId ->
+                        latestOnDismiss()
+                        navController.navigate(ArtistDestination(channelId = channelId))
+                    }
+                },
+                onShowMoreSheet = { showSheet = true },
+                onShowAddToPlaylist = { showAddToPlaylistDirectly = true },
+                onDismiss = { latestOnDismiss() },
+                onMoveQueueItem = { from, to ->
+                    coroutineScope.launch { mediaPlayerHandler.swap(from, to) }
+                },
+                onOpenContent = { content ->
+                    if (content.videoId.isNullOrEmpty()) latestOnDismiss()
+                    openContent(content, navController, sharedViewModel)
+                },
+            )
+        }
     NowPlayingContentYtm(
         state = state,
         actions = actions,

@@ -95,6 +95,8 @@ import simpmusic.composeapp.generated.resources.new_release
 import simpmusic.composeapp.generated.resources.no_notification
 import simpmusic.composeapp.generated.resources.notification
 import simpmusic.composeapp.generated.resources.singles
+import simpmusic.composeapp.generated.resources.ytm_notifications
+import simpmusic.composeapp.generated.resources.ytm_no_notifications
 
 /**
  * YouTube Music's notifications: one row per new release from an artist you subscribe to — the
@@ -109,13 +111,13 @@ fun NotificationScreen(
 ) {
     val listNotification by viewModel.listNotification.collectAsStateWithLifecycle()
     Column(Modifier.fillMaxSize().background(Ytm.Background)) {
-        YtmTopBar(navController = navController, title = "Notifications", onBack = { navController.navigateUp() })
+        YtmTopBar(navController = navController, title = stringResource(Res.string.ytm_notifications), onBack = { navController.navigateUp() })
         val list = listNotification?.filter { it.type != NotificationEntity.TYPE_BLOG }
         when {
             list == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
             list.isEmpty() ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No notifications", style = typo().bodyLarge, color = Ytm.TextSecondary)
+                    Text(stringResource(Res.string.ytm_no_notifications), style = typo().bodyLarge, color = Ytm.TextSecondary)
                 }
             else ->
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {

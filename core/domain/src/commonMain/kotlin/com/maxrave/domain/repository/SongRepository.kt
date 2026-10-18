@@ -129,6 +129,11 @@ interface SongRepository {
 
     suspend fun getLikeStatus(videoId: String): Flow<Boolean>
 
+    /** The account's rating of [videoId] on YouTube: 1 liked, -1 disliked, 0 neither. */
+    suspend fun getYouTubeRating(videoId: String): Flow<Int>
+
+    suspend fun dislikeOnYouTube(mediaId: String?): Flow<Int>
+
     suspend fun addToYouTubeLiked(mediaId: String?): Flow<Int>
 
     suspend fun removeFromYouTubeLiked(mediaId: String?): Flow<Int>

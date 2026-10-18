@@ -10,7 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.sp
 import androidx.glance.appwidget.updateAll
-import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
@@ -133,7 +133,8 @@ private suspend fun Context.decodeWidgetArtwork(
             .allowHardware(false)
             .size(px, px)
             .build()
-    return (ImageLoader(this).execute(request) as? SuccessResult)?.image?.toBitmap()
+    // The app's own loader: a new one per image (six per update) each opened its own caches.
+    return (SingletonImageLoader.get(this).execute(request) as? SuccessResult)?.image?.toBitmap()
 }
 
 /**

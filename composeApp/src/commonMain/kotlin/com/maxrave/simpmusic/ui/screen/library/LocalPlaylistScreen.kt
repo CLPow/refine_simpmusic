@@ -219,6 +219,18 @@ import simpmusic.composeapp.generated.resources.warning
 import simpmusic.composeapp.generated.resources.yes
 import simpmusic.composeapp.generated.resources.your_playlist
 import simpmusic.composeapp.generated.resources.search
+import com.maxrave.simpmusic.expect.ui.PlatformBackHandler
+import org.jetbrains.compose.resources.pluralStringResource
+import simpmusic.composeapp.generated.resources.n_song
+import simpmusic.composeapp.generated.resources.playlist
+import simpmusic.composeapp.generated.resources.ytm_clear
+import simpmusic.composeapp.generated.resources.ytm_done
+import simpmusic.composeapp.generated.resources.ytm_playlist_empty
+import simpmusic.composeapp.generated.resources.ytm_reorder
+import simpmusic.composeapp.generated.resources.ytm_download
+import simpmusic.composeapp.generated.resources.ytm_downloaded
+import simpmusic.composeapp.generated.resources.ytm_downloading
+import simpmusic.composeapp.generated.resources.ytm_search
 
 private const val TAG = "LocalPlaylistScreen"
 
@@ -359,7 +371,9 @@ fun LocalPlaylistScreen(
         playlistBottomSheetShow = true
     }
 
-    LaunchedEffect(key1 = shouldShowSuggestions) {
+    // Suggestions come from the synced YouTube playlist, so they load once the playlist (and its
+    // sync state) is known, and again for another playlist.
+    LaunchedEffect(uiState.id, uiState.syncState) {
         if (suggestedTracks.isEmpty() && uiState.syncState != LocalPlaylistEntity.YouTubeSyncState.NotSynced) {
             viewModel.getSuggestions(uiState.id)
         }
@@ -462,12 +476,28 @@ fun LocalPlaylistScreen(
     var showSearchBar by rememberSaveable { mutableStateOf(false) }
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
+
+    // Back closes what is open on top of the playlist (search, a selection, reordering) before
+    // it leaves the page, as YouTube Music does.
+    PlatformBackHandler(enabled = showSearchBar || selectionState.isActive || changingOrder) {
+        when {
+            selectionState.isActive -> selectionState.exit()
+            showSearchBar -> {
+                showSearchBar = false
+                viewModel.setSearchQuery("")
+            }
+            else -> changingOrder = false
+        }
+    }
 //    Box {
     LazyColumn(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .background(Ytm.Background)
+                // What the blurred bars over the list blur; without it they had nothing to blur
+                // and the sticky title sat unreadable over the rows.
+                .hazeSource(hazeState)
                 .pointerInput(changingOrder) {
                     if (!changingOrder) return@pointerInput
                     val onDrag: (change: androidx.compose.ui.input.pointer.PointerInputChange, offset: Offset) -> Unit =
@@ -533,8 +563,8 @@ fun LocalPlaylistScreen(
                 YtmCollectionHeader(
                     thumbnail = uiState.thumbnail,
                     title = uiState.title,
-                    subtitle = "Your playlist",
-                    meta = "Playlist • ${uiState.trackCount} songs",
+                    subtitle = stringResource(Res.string.your_playlist),
+                    meta = stringResource(Res.string.playlist) + " • " + pluralStringResource(Res.plurals.n_song, uiState.trackCount, uiState.trackCount),
                     isPlaying = isPlaying && playingPlaylistId == LOCAL_PLAYLIST_ID + uiState.id,
                     onBack = { navController.navigateUp() },
                     onMore = onPlaylistMoreClick,
@@ -552,9 +582,17 @@ fun LocalPlaylistScreen(
                                     viewModel.downloadFullPlaylist()
                                 }
                             },
+                            label =
+                                stringResource(
+                                    when (downloadState) {
+                                        DownloadState.STATE_DOWNLOADED -> Res.string.ytm_downloaded
+                                        DownloadState.STATE_DOWNLOADING -> Res.string.ytm_downloading
+                                        else -> Res.string.ytm_download
+                                    },
+                                ),
                         )
                     },
-                    secondAction = { YtmRoundAction(SimpIcons.Search, onClick = { showSearchBar = true }) },
+                    secondAction = { YtmRoundAction(SimpIcons.Search, onClick = { showSearchBar = true }, label = stringResource(Res.string.ytm_search)) },
                 )
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -573,15 +611,17 @@ fun LocalPlaylistScreen(
                     Spacer(Modifier.weight(1f))
                     if (uiState.filterState == FilterState.CustomOrder) {
                         TextButton(onClick = { changingOrder = !changingOrder }) {
-                            Text(if (changingOrder) "Done" else "Reorder", style = typo().bodyMedium, color = Color.White)
+                            Text(stringResource(if (changingOrder) Res.string.ytm_done else Res.string.ytm_reorder), style = typo().bodyMedium, color = Color.White)
                         }
                     }
                 }
             }
         }
+        // peek(), not get(): a key lookup must not make Paging load pages. Keyed by the song and its
+        // place in the playlist, not the row index, so a move animates instead of rebinding rows.
         items(count = trackPagingItems.itemCount, key = { index ->
-            val item = trackPagingItems[index]
-            (item?.first?.videoId ?: "") + "item_$index" + item?.second?.inPlaylist + item?.second?.position
+            val item = trackPagingItems.peek(index)
+            if (item == null) "placeholder_$index" else item.first.videoId + "_" + item.second.position
         }) { index ->
             val item = trackPagingItems[index]?.first
             if (item != null) {
@@ -656,6 +696,16 @@ fun LocalPlaylistScreen(
                 }
             }
         }
+        if (uiState.trackCount == 0 && trackPagingItems.itemCount == 0 && trackPagingItems.loadState.refresh !is LoadState.Loading) {
+            item(contentType = "empty") {
+                Text(
+                    stringResource(Res.string.ytm_playlist_empty),
+                    style = typo().bodyLarge,
+                    color = Ytm.TextSecondary,
+                    modifier = Modifier.fillMaxWidth().padding(32.dp),
+                )
+            }
+        }
         trackPagingItems.apply {
             item {
                 AnimatedVisibility(loadState.refresh is LoadState.Loading || loadState.append is LoadState.Loading) {
@@ -667,17 +717,18 @@ fun LocalPlaylistScreen(
                 }
             }
         }
-        // YouTube Music lists suggestions under your own playlists, each with an add button.
-        item(contentType = "suggestions") {
+        // YouTube Music lists suggestions under your own playlists, each with an add button. They
+        // come from the synced YouTube playlist, so an unsynced one shows no empty heading.
+        if (uiState.syncState != LocalPlaylistEntity.YouTubeSyncState.NotSynced && (suggestionsLoading || suggestedTracks.isNotEmpty())) item(contentType = "suggestions") {
             Column(Modifier.fillMaxWidth().padding(top = 16.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "Suggestions",
+                        stringResource(Res.string.suggest),
                         style = typo().headlineSmall.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
                         color = Color.White,
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = { viewModel.reloadSuggestion() }) { Text("Refresh", color = Color.White) }
+                    TextButton(onClick = { viewModel.reloadSuggestion() }) { Text(stringResource(Res.string.reload), color = Color.White) }
                 }
                 if (suggestionsLoading) {
                     CenterLoadingBox(modifier = Modifier.fillMaxWidth().height(120.dp))
@@ -909,15 +960,17 @@ fun LocalPlaylistScreen(
                             .windowInsetsPadding(WindowInsets.statusBars),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    // Back here closes the search, not the playlist.
                     RippleIconButton(
                         imageVector = SimpIcons.ArrowBackIosNew,
                     ) {
-                        navController.navigateUp()
+                        showSearchBar = false
+                        viewModel.setSearchQuery("")
                     }
                     SearchBar(
                         modifier =
                             Modifier
-                                .height(50.dp)
+                                .height(56.dp)
                                 .padding(horizontal = 12.dp)
                                 .weight(1f),
                         colors =
@@ -952,7 +1005,7 @@ fun LocalPlaylistScreen(
                             viewModel.setSearchQuery("")
                         },
                     ) {
-                        Icon(SimpIcons.Close, null, tint = Color.White)
+                        Icon(SimpIcons.Close, stringResource(Res.string.ytm_clear), tint = Color.White)
                     }
                 }
             }
@@ -1011,7 +1064,7 @@ fun LocalPlaylistScreen(
                     RippleIconButton(
                         SimpIcons.ArrowBackIosNew,
                         Modifier
-                            .size(32.dp),
+                            .size(48.dp),
                         true,
                     ) {
                         navController.navigateUp()

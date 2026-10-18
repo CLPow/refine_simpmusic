@@ -10,6 +10,8 @@ import com.maxrave.logger.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
@@ -21,6 +23,10 @@ internal class AccountRepositoryImpl(
     private val youTube: YouTube,
 ) : AccountRepository {
     override fun getYouTubeCookie() = youTube.cookie
+
+    override val signInExpired: StateFlow<Boolean> = youTube.signInExpired.asStateFlow()
+
+    override suspend fun verifySignIn(): Boolean? = withContext(Dispatchers.IO) { youTube.verifySignIn() }
 
     override fun getAccountInfo(cookie: String): Flow<List<AccountInfo>> =
         flow {

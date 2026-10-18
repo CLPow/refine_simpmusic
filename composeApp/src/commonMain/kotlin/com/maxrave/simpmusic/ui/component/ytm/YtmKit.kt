@@ -113,6 +113,36 @@ import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.logo_mark
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.ui.semantics.Role
+import com.maxrave.domain.repository.AccountRepository
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.cancel
+import simpmusic.composeapp.generated.resources.more
+import simpmusic.composeapp.generated.resources.ytm_account
+import simpmusic.composeapp.generated.resources.ytm_add_account
+import simpmusic.composeapp.generated.resources.ytm_back
+import simpmusic.composeapp.generated.resources.ytm_history
+import simpmusic.composeapp.generated.resources.ytm_next
+import simpmusic.composeapp.generated.resources.ytm_not_signed_in
+import simpmusic.composeapp.generated.resources.ytm_notifications
+import simpmusic.composeapp.generated.resources.ytm_play_all
+import simpmusic.composeapp.generated.resources.ytm_previous
+import simpmusic.composeapp.generated.resources.ytm_search
+import simpmusic.composeapp.generated.resources.ytm_search_hint
+import simpmusic.composeapp.generated.resources.ytm_settings
+import simpmusic.composeapp.generated.resources.ytm_sign_in
+import simpmusic.composeapp.generated.resources.ytm_sign_out
+import simpmusic.composeapp.generated.resources.ytm_sign_out_confirm
+import simpmusic.composeapp.generated.resources.ytm_sign_out_confirm_body
+import simpmusic.composeapp.generated.resources.ytm_signed_out_title
+import simpmusic.composeapp.generated.resources.ytm_speed_dial
+import androidx.compose.foundation.layout.fillMaxSize
+import simpmusic.composeapp.generated.resources.retry
+import simpmusic.composeapp.generated.resources.ytm_page_failed
 
 /**
  * True on Desktop and tablets, where the app takes YouTube Music's web layout: sidebar, search
@@ -144,6 +174,8 @@ fun YtmTopBar(
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     background: Color = Color.Transparent,
+    /** False on pages that, like YouTube Music's Settings, show only back and a title. */
+    showActions: Boolean = true,
 ) {
     var showAccount by remember { mutableStateOf(false) }
     Row(
@@ -157,7 +189,7 @@ fun YtmTopBar(
     ) {
         if (onBack != null) {
             IconButton(onClick = onBack) {
-                Icon(SimpIcons.ArrowBackIosNew, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(22.dp))
+                Icon(SimpIcons.ArrowBackIosNew, contentDescription = stringResource(Res.string.ytm_back), tint = Color.White, modifier = Modifier.size(22.dp))
             }
             Text(
                 title.orEmpty(),
@@ -183,22 +215,24 @@ fun YtmTopBar(
             ) {
                 Icon(SimpIcons.Search, contentDescription = null, tint = Ytm.TextSecondary, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.width(12.dp))
-                Text("Search songs, albums, artists", style = typo().bodyLarge, color = Ytm.TextSecondary, maxLines = 1)
+                Text(stringResource(Res.string.ytm_search_hint), style = typo().bodyLarge, color = Ytm.TextSecondary, maxLines = 1)
             }
             Spacer(Modifier.weight(0.4f))
         } else {
             YtmLogo()
             Spacer(Modifier.weight(1f))
         }
-        IconButton(onClick = { navController.navigate(NotificationDestination) }) {
-            Icon(SimpIcons.Notifications, contentDescription = "Notifications", tint = Color.White)
-        }
-        if (onBack != null) {
-            IconButton(onClick = { navController.navigate(SearchDestination) }) {
-                Icon(SimpIcons.Search, contentDescription = "Search", tint = Color.White)
+        if (showActions) {
+            IconButton(onClick = { navController.navigate(NotificationDestination) { launchSingleTop = true } }) {
+                Icon(SimpIcons.Notifications, contentDescription = stringResource(Res.string.ytm_notifications), tint = Color.White)
             }
+            if (onBack != null) {
+                IconButton(onClick = { navController.navigate(SearchDestination) { launchSingleTop = true } }) {
+                    Icon(SimpIcons.Search, contentDescription = stringResource(Res.string.ytm_search), tint = Color.White)
+                }
+            }
+            AccountAvatar(size = 28.dp, modifier = Modifier.padding(end = 4.dp)) { showAccount = true }
         }
-        AccountAvatar(size = 28.dp, modifier = Modifier.padding(horizontal = 10.dp)) { showAccount = true }
     }
     if (showAccount) {
         AccountMenuSheet(navController = navController, onDismiss = { showAccount = false })
@@ -223,23 +257,43 @@ fun YtmLogo() {
     }
 }
 
-/** The signed-in account's picture, or a grey disc when signed out. */
+/**
+ * The signed-in account's picture, or a grey disc when signed out. An expired sign-in shows the
+ * picture faded, so the account no longer looks signed in when it isn't. [onClick] null makes it
+ * a plain picture; otherwise its touch target is the full 48dp.
+ */
 @Composable
 fun AccountAvatar(
     size: Dp,
     modifier: Modifier = Modifier,
     dataStoreManager: DataStoreManager = koinInject(),
-    onClick: () -> Unit,
+    accountRepository: AccountRepository = koinInject(),
+    onClick: (() -> Unit)?,
 ) {
     val thumb by dataStoreManager.getString("AccountThumbUrl").collectAsStateWithLifecycle(null)
-    Box(modifier.size(size).clip(CircleShape).background(Ytm.Raised).clickable(onClick = onClick)) {
-        if (!thumb.isNullOrBlank()) {
-            AsyncImage(
-                model = thumb,
-                contentDescription = "Account",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(size),
-            )
+    val expired by accountRepository.signInExpired.collectAsStateWithLifecycle()
+    val label = stringResource(Res.string.ytm_account)
+    Box(
+        modifier
+            .then(
+                if (onClick != null) {
+                    Modifier.minimumInteractiveComponentSize().clip(CircleShape).clickable(role = Role.Button, onClickLabel = label, onClick = onClick)
+                } else {
+                    Modifier
+                },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.size(size).clip(CircleShape).background(Ytm.Raised)) {
+            if (!thumb.isNullOrBlank()) {
+                AsyncImage(
+                    model = thumb,
+                    contentDescription = label,
+                    contentScale = ContentScale.Crop,
+                    alpha = if (expired) 0.35f else 1f,
+                    modifier = Modifier.size(size),
+                )
+            }
         }
     }
 }
@@ -251,10 +305,31 @@ fun AccountMenuSheet(
     navController: NavController,
     onDismiss: () -> Unit,
     dataStoreManager: DataStoreManager = koinInject(),
+    accountRepository: AccountRepository = koinInject(),
     settingsViewModel: SettingsViewModel = koinViewModel(),
 ) {
     val name by dataStoreManager.getString("AccountName").collectAsStateWithLifecycle(null)
     val signedIn = !name.isNullOrBlank()
+    val expired by accountRepository.signInExpired.collectAsStateWithLifecycle()
+    var confirmSignOut by remember { mutableStateOf(false) }
+    val accounts by settingsViewModel.googleAccounts.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { settingsViewModel.getAllGoogleAccount() }
+    if (confirmSignOut) {
+        AlertDialog(
+            containerColor = Ytm.Surface,
+            onDismissRequest = { confirmSignOut = false },
+            title = { Text(stringResource(Res.string.ytm_sign_out_confirm), color = Color.White) },
+            text = { Text(stringResource(Res.string.ytm_sign_out_confirm_body), color = Ytm.TextSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSignOut = false
+                    settingsViewModel.logOutAllYouTube()
+                    onDismiss()
+                }) { Text(stringResource(Res.string.ytm_sign_out), color = Color.White) }
+            },
+            dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text(stringResource(Res.string.cancel), color = Ytm.TextSecondary) } },
+        )
+    }
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -262,27 +337,30 @@ fun AccountMenuSheet(
         dragHandle = null,
     ) {
         Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            AccountAvatar(size = 40.dp) {}
+            AccountAvatar(size = 40.dp, onClick = null)
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    if (signedIn) name.orEmpty() else "Not signed in",
+                    if (signedIn) name.orEmpty() else stringResource(Res.string.ytm_not_signed_in),
                     style = typo().titleMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium),
                     color = Color.White,
                 )
-                if (signedIn) {
-                    Text("Google account", style = typo().bodyMedium, color = Ytm.TextSecondary)
+                if (signedIn && expired) {
+                    Text(stringResource(Res.string.ytm_signed_out_title), style = typo().bodyMedium, color = YtmRed)
+                } else if (signedIn) {
+                    val email = accounts.data.orEmpty().firstOrNull { it.isUsed }?.email
+                    if (!email.isNullOrBlank()) {
+                        Text(email, style = typo().bodyMedium, color = Ytm.TextSecondary)
+                    }
                 }
             }
         }
         HorizontalDivider(color = Ytm.Divider)
-        AccountMenuRow(SimpIcons.History, "History") {
+        AccountMenuRow(SimpIcons.History, stringResource(Res.string.ytm_history)) {
             onDismiss()
-            navController.navigate(RecentlySongsDestination)
+            navController.navigate(RecentlySongsDestination) { launchSingleTop = true }
         }
         // Other saved accounts: a tap switches to it, as YouTube Music's account switcher does.
-        val accounts by settingsViewModel.googleAccounts.collectAsStateWithLifecycle()
-        LaunchedEffect(Unit) { settingsViewModel.getAllGoogleAccount() }
         accounts.data.orEmpty().filter { !it.isUsed }.forEach { account ->
             Row(
                 Modifier
@@ -301,19 +379,19 @@ fun AccountMenuSheet(
                 }
             }
         }
-        AccountMenuRow(SimpIcons.PersonAdd, if (signedIn) "Add account" else "Sign in") {
+        AccountMenuRow(
+            SimpIcons.PersonAdd,
+            stringResource(if (signedIn && !expired) Res.string.ytm_add_account else Res.string.ytm_sign_in),
+        ) {
             onDismiss()
-            navController.navigate(LoginDestination)
+            navController.navigate(LoginDestination) { launchSingleTop = true }
         }
-        AccountMenuRow(SimpIcons.Settings, "Settings") {
+        AccountMenuRow(SimpIcons.Settings, stringResource(Res.string.ytm_settings)) {
             onDismiss()
-            navController.navigate(SettingsDestination)
+            navController.navigate(SettingsDestination) { launchSingleTop = true }
         }
         if (signedIn) {
-            AccountMenuRow(SimpIcons.Logout, "Sign out") {
-                settingsViewModel.logOutAllYouTube()
-                onDismiss()
-            }
+            AccountMenuRow(SimpIcons.Logout, stringResource(Res.string.ytm_sign_out)) { confirmSignOut = true }
         }
         Spacer(Modifier.height(24.dp))
     }
@@ -326,7 +404,7 @@ private fun AccountMenuRow(
     onClick: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(icon, contentDescription = null, tint = Color.White)
@@ -367,10 +445,11 @@ fun YtmChip(
 ) {
     Box(
         Modifier
+            .minimumInteractiveComponentSize()
             .height(32.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(if (selected) Color.White else Ytm.ChipBackground)
-            .clickable(onClick = onClick)
+            .selectable(selected = selected, role = Role.Tab, onClick = onClick)
             .padding(horizontal = 12.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -391,10 +470,11 @@ fun YtmOutlinedPill(
 ) {
     Box(
         Modifier
+            .minimumInteractiveComponentSize()
             .height(32.dp)
             .clip(CircleShape)
             .border(1.dp, Color.White.copy(alpha = 0.3f), CircleShape)
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 14.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -455,9 +535,9 @@ fun YtmShelfHeader(
         }
         if (onPrevious != null && onNext != null) {
             Spacer(Modifier.width(12.dp))
-            ShelfArrow(SimpIcons.ArrowBackIosNew, "Previous", onPrevious)
+            ShelfArrow(SimpIcons.ArrowBackIosNew, stringResource(Res.string.ytm_previous), onPrevious)
             Spacer(Modifier.width(8.dp))
-            ShelfArrow(SimpIcons.ArrowForwardIos, "Next", onNext)
+            ShelfArrow(SimpIcons.ArrowForwardIos, stringResource(Res.string.ytm_next), onNext)
         }
     }
 }
@@ -471,10 +551,11 @@ private fun ShelfArrow(
 ) {
     Box(
         Modifier
+            .minimumInteractiveComponentSize()
             .size(36.dp)
             .clip(CircleShape)
             .border(1.dp, Color.White.copy(alpha = 0.2f), CircleShape)
-            .clickable(onClick = onClick),
+            .clickable(role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(16.dp))
@@ -504,12 +585,12 @@ fun YtmShelf(
     val cardRow = !speedDial && !item.isListShelf
     YtmShelfHeader(
         // The phone app's name for the account's own shelf; the web feed sends "Listen again".
-        title = if (speedDial) "Speed dial" else item.title,
+        title = if (speedDial) stringResource(Res.string.ytm_speed_dial) else item.title,
         strapline = item.subtitle,
         thumbnail = item.thumbnail?.lastOrNull()?.url,
         roundThumbnail = channelId != null,
         onTitleClick = channelId?.let { { navController.navigate(ArtistDestination(channelId = it)) } },
-        actionLabel = if (item.isListShelf && songs.size > 1) "Play all" else null,
+        actionLabel = if (item.isListShelf && songs.size > 1) stringResource(Res.string.ytm_play_all) else null,
         onAction =
             if (item.isListShelf && songs.size > 1) {
                 { playAll(songs.map { it.toTrack() }, item.title, sharedViewModel) }
@@ -764,7 +845,7 @@ fun YtmQuickPicks(
     onMore: (Content) -> Unit,
 ) {
     BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val columnWidth = (maxWidth - 48.dp).coerceAtMost(420.dp)
+        val columnWidth = (maxWidth - 48.dp).coerceIn(160.dp, 420.dp)
         val rows = minOf(4, contents.size).coerceAtLeast(1)
         val state = rememberLazyGridState()
         LazyHorizontalGrid(
@@ -829,7 +910,7 @@ fun YtmSongRow(
         }
         if (onMore != null) {
             IconButton(onClick = onMore) {
-                Icon(SimpIcons.MoreVert, contentDescription = "More", tint = Ytm.TextSecondary)
+                Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Ytm.TextSecondary)
             }
         } else {
             Spacer(Modifier.width(16.dp))
@@ -924,26 +1005,64 @@ fun openContent(
     }
 }
 
-/** Plays [tracks] in order as a queue named [title] (a shelf's "Play all"). */
+/** Plays [tracks] in order as a queue named [title] (a shelf's "Play all"), from [startIndex]. */
 fun playAll(
     tracks: List<Track>,
     title: String,
     sharedViewModel: SharedViewModel,
     shuffle: Boolean = false,
+    startIndex: Int = 0,
 ) {
     if (tracks.isEmpty()) return
     val list = if (shuffle) tracks.shuffled() else tracks
+    val start = if (shuffle) 0 else startIndex.coerceIn(0, list.lastIndex)
     sharedViewModel.setQueueData(
         QueueData.Data(
             listTracks = ArrayList(list),
-            firstPlayedTrack = list.first(),
+            firstPlayedTrack = list[start],
             playlistId = null,
             playlistName = title,
             playlistType = PlaylistType.PLAYLIST,
             continuation = null,
         ),
     )
-    sharedViewModel.loadMediaItem(list.first(), Config.PLAYLIST_CLICK, 0)
+    sharedViewModel.loadMediaItem(list[start], Config.PLAYLIST_CLICK, start)
+}
+
+// endregion
+
+// region States
+
+/**
+ * A page that could not load, in YouTube Music's words: a message and Retry, with a back arrow
+ * when the page has no top bar of its own. Replaces bouncing back to the previous page silently.
+ */
+@Composable
+fun YtmErrorPage(
+    onBack: (() -> Unit)?,
+    message: String? = null,
+    onRetry: () -> Unit,
+) {
+    Box(Modifier.fillMaxSize().background(Ytm.Background)) {
+        if (onBack != null) {
+            IconButton(onClick = onBack, modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(4.dp)) {
+                Icon(SimpIcons.ArrowBackIosNew, contentDescription = stringResource(Res.string.ytm_back), tint = Color.White, modifier = Modifier.size(22.dp))
+            }
+        }
+        Column(
+            Modifier.align(Alignment.Center).padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                message ?: stringResource(Res.string.ytm_page_failed),
+                style = typo().bodyLarge,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+            )
+            YtmOutlinedPill(stringResource(Res.string.retry), onClick = onRetry)
+        }
+    }
 }
 
 // endregion

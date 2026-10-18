@@ -37,6 +37,12 @@ import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.MoreAlbumsUIState
 import com.maxrave.simpmusic.viewModel.MoreAlbumsViewModel
 import org.koin.compose.viewmodel.koinViewModel
+import androidx.compose.foundation.lazy.grid.itemsIndexed
+import com.maxrave.simpmusic.ui.component.ytm.YtmErrorPage
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.albums
+import simpmusic.composeapp.generated.resources.ytm_singles_eps
 
 /** An artist's albums, or singles & EPs, as YouTube Music's grid page. */
 @Composable
@@ -57,7 +63,7 @@ fun MoreAlbumsScreen(
     }
     val title =
         (uiState as? MoreAlbumsUIState.Success)?.title
-            ?: if (type == MoreAlbumsDestination.SINGLE_TYPE) "Singles & EPs" else "Albums"
+            ?: stringResource(if (type == MoreAlbumsDestination.SINGLE_TYPE) Res.string.ytm_singles_eps else Res.string.albums)
 
     Column(Modifier.fillMaxSize().background(Ytm.Background)) {
         YtmTopBar(navController = navController, title = title, onBack = { navController.navigateUp() })
@@ -70,7 +76,7 @@ fun MoreAlbumsScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    items(state.albumItems, key = { it.browseId }) { album ->
+                    itemsIndexed(state.albumItems, key = { i, it -> "$i-" + it.browseId }) { _, album ->
                         Column(Modifier.clickable { navController.navigate(AlbumDestination(browseId = album.browseId)) }) {
                             BoxWithConstraints(Modifier.fillMaxWidth()) {
                                 Thumb(album.thumbnails.lastOrNull()?.url, maxWidth, RoundedCornerShape(4.dp))
@@ -92,7 +98,12 @@ fun MoreAlbumsScreen(
                         }
                     }
                 }
-            is MoreAlbumsUIState.Error -> LaunchedEffect(state) { viewModel.makeToast(state.message) }
+            is MoreAlbumsUIState.Error ->
+                YtmErrorPage(onBack = null) {
+                    if (id != null) {
+                        if (type == MoreAlbumsDestination.SINGLE_TYPE) viewModel.getSingleMore(id) else viewModel.getAlbumMore(id)
+                    }
+                }
             MoreAlbumsUIState.Loading ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
         }

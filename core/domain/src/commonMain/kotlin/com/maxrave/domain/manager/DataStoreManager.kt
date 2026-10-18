@@ -189,11 +189,6 @@ interface DataStoreManager {
 
     suspend fun setCrossfadePrepBufferMs(ms: Int)
 
-    /** When TRUE, Join in Listen Together asks for confirmation (track/position leave the device). */
-    val listenTogetherConfirmJoin: Flow<String>
-
-    suspend fun setListenTogetherConfirmJoin(confirm: Boolean)
-
     /**
      * Comma-separated lyrics source order. Empty = [com.maxrave.domain.lyrics.LyricsSourceOrder.DEFAULT].
      */

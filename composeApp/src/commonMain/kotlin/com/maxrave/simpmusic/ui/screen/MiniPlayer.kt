@@ -80,9 +80,31 @@ import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
 import org.koin.compose.koinInject
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
+import com.maxrave.simpmusic.ui.icon.ThumbDown
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.more
+import simpmusic.composeapp.generated.resources.ytm_dislike
+import simpmusic.composeapp.generated.resources.ytm_like
+import simpmusic.composeapp.generated.resources.ytm_liked
+import simpmusic.composeapp.generated.resources.ytm_mute
+import simpmusic.composeapp.generated.resources.ytm_next
+import simpmusic.composeapp.generated.resources.ytm_open_player
+import simpmusic.composeapp.generated.resources.ytm_pause
+import simpmusic.composeapp.generated.resources.ytm_play
+import simpmusic.composeapp.generated.resources.ytm_previous
+import simpmusic.composeapp.generated.resources.ytm_repeat
+import simpmusic.composeapp.generated.resources.ytm_shuffle
+import simpmusic.composeapp.generated.resources.ytm_unmute
 
-private val BarColor = Color(0xFF212121)
-private val TextSecondary = Color(0xFFAAAAAA)
+private val BarColor = Ytm.Surface
+private val TextSecondary = Ytm.TextSecondary
 
 /** YouTube Music's red, used on the web player's progress bar. */
 private val YtmRedProgress = Color(0xFFFF0000)
@@ -107,34 +129,49 @@ fun MiniPlayer(
     val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
     var dragX by remember { mutableFloatStateOf(0f) }
     var dragY by remember { mutableFloatStateOf(0f) }
+    val openLabel = stringResource(Res.string.ytm_open_player)
 
     Column(
         modifier
             .background(BarColor)
-            .clickable(onClick = onClick)
+            .clickable(onClickLabel = openLabel, onClick = onClick)
             .pointerInput(Unit) {
-                detectHorizontalDragGestures(
+                // One gesture, locked to the direction it starts in: sideways changes the track,
+                // up opens the player (as YouTube Music's bar does), down puts it away.
+                var horizontal: Boolean? = null
+                detectDragGestures(
+                    onDragStart = { horizontal = null },
                     onDragEnd = {
                         when {
-                            dragX < -120f -> sharedViewModel.onUIEvent(UIEvent.Next)
-                            dragX > 120f -> sharedViewModel.onUIEvent(UIEvent.Previous)
+                            horizontal == true && dragX < -SWIPE_PX -> sharedViewModel.onUIEvent(UIEvent.Next)
+                            // Always the previous song, never a restart of this one.
+                            horizontal == true && dragX > SWIPE_PX -> sharedViewModel.onUIEvent(UIEvent.SkipToPrevious)
+                            horizontal == false && dragY < -SWIPE_PX / 2 -> onClick()
+                            horizontal == false && dragY > SWIPE_PX -> onClose()
                         }
                         dragX = 0f
-                    },
-                    onDragCancel = { dragX = 0f },
-                ) { _, amount -> dragX += amount }
-            }.pointerInput(Unit) {
-                detectVerticalDragGestures(
-                    onDragEnd = {
-                        if (dragY > 120f) onClose()
                         dragY = 0f
                     },
-                    onDragCancel = { dragY = 0f },
-                ) { _, amount -> dragY += amount }
+                    onDragCancel = {
+                        dragX = 0f
+                        dragY = 0f
+                    },
+                ) { change, amount ->
+                    if (horizontal == null) horizontal = kotlin.math.abs(amount.x) > kotlin.math.abs(amount.y)
+                    change.consume()
+                    if (horizontal == true) dragX += amount.x else dragY += amount.y
+                }
             },
     ) {
         Row(
-            Modifier.weight(1f).fillMaxWidth().padding(start = 8.dp, end = 4.dp),
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                // The song follows the finger, so the swipe reads before it lets go.
+                .graphicsLayer {
+                    translationX = dragX * 0.6f
+                    alpha = 1f - (kotlin.math.abs(dragX) / (SWIPE_PX * 4)).coerceIn(0f, 0.6f)
+                }.padding(start = 8.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Cover(screenData.thumbnailURL, 40)
@@ -162,7 +199,7 @@ fun MiniPlayer(
             ) {
                 Icon(
                     SimpIcons.SkipNext,
-                    contentDescription = "Next",
+                    contentDescription = stringResource(Res.string.ytm_next),
                     tint = if (controllerState.isNextAvailable) Color.White else Color.White.copy(alpha = 0.38f),
                     modifier = Modifier.size(28.dp),
                 )
@@ -172,11 +209,17 @@ fun MiniPlayer(
     }
 }
 
+/** How far a swipe on the mini player has to travel, in pixels. */
+private const val SWIPE_PX = 120f
+
 /**
  * YouTube Music's web player bar, used on Desktop: full width along the bottom of the window,
  * the progress bar in red across its top edge. Left: previous, play/pause, next and the time.
- * Centre: cover, title, artist, like. Right: volume, repeat, shuffle, and the chevron that opens
- * the player.
+ * Centre: cover, title, artist, thumbs down and up. Right: volume, repeat, shuffle, and the
+ * chevron that opens the player.
+ *
+ * The position is read only by the seek bar and the time ([DesktopSeek]), so the rest of the bar
+ * does not recompose ten times a second.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -192,34 +235,11 @@ fun DesktopPlayerBar(
     }
     val screenData by sharedViewModel.nowPlayingScreenData.collectAsStateWithLifecycle()
     val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
-    val timeline by sharedViewModel.timeline.collectAsStateWithLifecycle()
-    var seeking by remember { mutableStateOf<Float?>(null) }
+    // Shared by the seek bar and the time text while dragging.
+    val seeking = remember { mutableStateOf<Float?>(null) }
 
     Column(modifier.fillMaxWidth().background(BarColor)) {
-        val progress = if (timeline.total > 0) (timeline.current.toFloat() / timeline.total).coerceIn(0f, 1f) else 0f
-        Slider(
-            value = seeking ?: progress,
-            onValueChange = { seeking = it },
-            onValueChangeFinished = {
-                seeking?.let { sharedViewModel.onUIEvent(UIEvent.UpdateProgress(it * 100f)) }
-                seeking = null
-            },
-            thumb = { Box(Modifier.size(12.dp).clip(CircleShape).background(YtmRedProgress)) },
-            track = { state ->
-                SliderDefaults.Track(
-                    sliderState = state,
-                    modifier = Modifier.height(2.dp),
-                    thumbTrackGapSize = 0.dp,
-                    drawStopIndicator = null,
-                    colors =
-                        SliderDefaults.colors(
-                            activeTrackColor = YtmRedProgress,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.2f),
-                        ),
-                )
-            },
-            modifier = Modifier.fillMaxWidth().height(12.dp),
-        )
+        DesktopSeekBar(sharedViewModel, seeking)
         Row(
             Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -227,34 +247,14 @@ fun DesktopPlayerBar(
             // Left: transport and time.
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.Previous) }) {
-                    Icon(SimpIcons.SkipPrevious, contentDescription = "Previous", tint = Color.White)
+                    Icon(SimpIcons.SkipPrevious, contentDescription = stringResource(Res.string.ytm_previous), tint = Color.White)
                 }
-                IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.PlayPause) }, modifier = Modifier.size(48.dp)) {
-                    if (timeline.loading) {
-                        CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
-                    } else {
-                        Icon(
-                            if (controllerState.isPlaying) SimpIcons.Pause else SimpIcons.PlayArrow,
-                            contentDescription = if (controllerState.isPlaying) "Pause" else "Play",
-                            tint = Color.White,
-                            modifier = Modifier.size(36.dp),
-                        )
-                    }
-                }
+                PlayPauseButton(controllerState.isPlaying, sharedViewModel, iconSize = 36)
                 IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.Next) }) {
-                    Icon(SimpIcons.SkipNext, contentDescription = "Next", tint = Color.White)
+                    Icon(SimpIcons.SkipNext, contentDescription = stringResource(Res.string.ytm_next), tint = Color.White)
                 }
                 Spacer(Modifier.width(8.dp))
-                Text(
-                    if (timeline.total > 0) {
-                        "${formatDuration(((seeking ?: progress) * timeline.total).toLong())} / ${formatDuration(timeline.total)}"
-                    } else {
-                        "0:00 / 0:00"
-                    },
-                    style = typo().bodySmall,
-                    color = TextSecondary,
-                    maxLines = 1,
-                )
+                DesktopTime(sharedViewModel, seeking.value)
             }
             // Centre: the track.
             Row(
@@ -280,16 +280,22 @@ fun DesktopPlayerBar(
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.ToggleLike) }) {
+                IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.Dislike) }) {
+                    Icon(SimpIcons.ThumbDown, contentDescription = stringResource(Res.string.ytm_dislike), tint = TextSecondary)
+                }
+                IconButton(
+                    onClick = { sharedViewModel.onUIEvent(UIEvent.ToggleLike) },
+                    modifier = Modifier.semantics { selected = controllerState.isLiked },
+                ) {
                     Icon(
                         SimpIcons.ThumbUp,
-                        contentDescription = "Like",
+                        contentDescription = stringResource(if (controllerState.isLiked) Res.string.ytm_liked else Res.string.ytm_like),
                         tint = if (controllerState.isLiked) Color.White else TextSecondary,
                     )
                 }
                 // The web bar's action menu: the song menu for what is playing.
                 IconButton(onClick = { showMenu = true }) {
-                    Icon(SimpIcons.MoreVert, contentDescription = "Action menu", tint = Color.White)
+                    Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Color.White)
                 }
             }
             // Right: volume, repeat, shuffle, open.
@@ -302,21 +308,21 @@ fun DesktopPlayerBar(
                 IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.Repeat) }) {
                     Icon(
                         if (controllerState.repeatState is RepeatState.One) SimpIcons.RepeatOne else SimpIcons.Repeat,
-                        contentDescription = "Repeat",
+                        contentDescription = stringResource(Res.string.ytm_repeat),
                         tint = if (controllerState.repeatState is RepeatState.None) TextSecondary else Color.White,
                     )
                 }
                 IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.Shuffle) }) {
                     Icon(
                         SimpIcons.Shuffle,
-                        contentDescription = "Shuffle",
+                        contentDescription = stringResource(Res.string.ytm_shuffle),
                         tint = if (controllerState.isShuffle) Color.White else TextSecondary,
                     )
                 }
                 IconButton(onClick = onOpenPlayer) {
                     Icon(
                         SimpIcons.KeyboardArrowDown,
-                        contentDescription = "Open player",
+                        contentDescription = stringResource(Res.string.ytm_open_player),
                         tint = Color.White,
                         // Points up while the player is closed, as the web's does.
                         modifier = Modifier.size(28.dp).rotate(180f),
@@ -325,6 +331,61 @@ fun DesktopPlayerBar(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DesktopSeekBar(
+    sharedViewModel: SharedViewModel,
+    seeking: androidx.compose.runtime.MutableState<Float?>,
+) {
+    val timeline by sharedViewModel.timeline.collectAsStateWithLifecycle()
+    val progress = if (timeline.total > 0) (timeline.current.toFloat() / timeline.total).coerceIn(0f, 1f) else 0f
+    Slider(
+        value = seeking.value ?: progress,
+        enabled = timeline.total > 0,
+        onValueChange = { seeking.value = it },
+        onValueChangeFinished = {
+            seeking.value?.let { sharedViewModel.onUIEvent(UIEvent.UpdateProgress(it * 100f)) }
+            seeking.value = null
+        },
+        thumb = { Box(Modifier.size(12.dp).clip(CircleShape).background(YtmRedProgress)) },
+        track = { state ->
+            SliderDefaults.Track(
+                sliderState = state,
+                modifier = Modifier.height(2.dp),
+                thumbTrackGapSize = 0.dp,
+                drawStopIndicator = null,
+                colors =
+                    SliderDefaults.colors(
+                        activeTrackColor = YtmRedProgress,
+                        inactiveTrackColor = Color.White.copy(alpha = 0.2f),
+                        disabledActiveTrackColor = YtmRedProgress,
+                        disabledInactiveTrackColor = Color.White.copy(alpha = 0.2f),
+                    ),
+            )
+        },
+        modifier = Modifier.fillMaxWidth().height(12.dp),
+    )
+}
+
+@Composable
+private fun DesktopTime(
+    sharedViewModel: SharedViewModel,
+    seeking: Float?,
+) {
+    val timeline by sharedViewModel.timeline.collectAsStateWithLifecycle()
+    val progress = if (timeline.total > 0) (timeline.current.toFloat() / timeline.total).coerceIn(0f, 1f) else 0f
+    Text(
+        if (timeline.total > 0) {
+            "${formatDuration(((seeking ?: progress) * timeline.total).toLong())} / ${formatDuration(timeline.total)}"
+        } else {
+            "0:00 / 0:00"
+        },
+        style = typo().bodySmall,
+        color = TextSecondary,
+        maxLines = 1,
+    )
 }
 
 @Composable
@@ -353,17 +414,20 @@ private fun Cover(
 private fun PlayPauseButton(
     isPlaying: Boolean,
     sharedViewModel: SharedViewModel,
+    iconSize: Int = 30,
 ) {
-    val timeline by sharedViewModel.timeline.collectAsStateWithLifecycle()
-    IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.PlayPause) }) {
-        if (timeline.loading) {
-            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(22.dp))
+    // Only the loading flag is read, so the button recomposes when it flips, not on every tick.
+    val timeline = sharedViewModel.timeline.collectAsStateWithLifecycle()
+    val loading by remember { derivedStateOf { timeline.value.loading } }
+    IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.PlayPause) }, modifier = Modifier.size(48.dp)) {
+        if (loading) {
+            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size((iconSize * 0.7f).dp))
         } else {
             Icon(
                 if (isPlaying) SimpIcons.Pause else SimpIcons.PlayArrow,
-                contentDescription = if (isPlaying) "Pause" else "Play",
+                contentDescription = stringResource(if (isPlaying) Res.string.ytm_pause else Res.string.ytm_play),
                 tint = Color.White,
-                modifier = Modifier.size(30.dp),
+                modifier = Modifier.size(iconSize.dp),
             )
         }
     }
@@ -434,7 +498,7 @@ private fun VolumeControl(
         }) {
             Icon(
                 if (volume > 0f) SimpIcons.VolumeUp else SimpIcons.VolumeOff,
-                contentDescription = if (volume > 0f) "Mute" else "Unmute",
+                contentDescription = stringResource(if (volume > 0f) Res.string.ytm_mute else Res.string.ytm_unmute),
                 tint = if (shown) Color.White else TextSecondary,
             )
         }

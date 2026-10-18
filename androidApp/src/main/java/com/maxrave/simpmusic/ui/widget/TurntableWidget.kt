@@ -53,6 +53,7 @@ import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import androidx.glance.LocalContext
 
 /**
  * The Now Playing widget, laid out as YouTube Music's own widgets are. The class name is kept from
@@ -362,13 +363,13 @@ private fun TitleBlock(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = if (state.isEmpty) "Refine Music" else state.title,
+            text = if (state.isEmpty) LocalContext.current.getString(R.string.app_name) else state.title,
             maxLines = titleLines,
             style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = titleSize.sp, fontWeight = FontWeight.Bold),
         )
         Spacer(GlanceModifier.height(2.dp))
         Text(
-            text = if (state.isEmpty) "Tap to play" else state.artist,
+            text = if (state.isEmpty) LocalContext.current.getString(R.string.widget_tap_to_play) else state.artist,
             maxLines = 1,
             style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 13.sp),
         )
@@ -396,7 +397,7 @@ private fun LikeButton(
     ) {
         Image(
             provider = ImageProvider(if (state.isLiked) R.drawable.widget_thumb_up_filled_24 else R.drawable.widget_thumb_up_24),
-            contentDescription = "Like",
+            contentDescription = LocalContext.current.getString(if (state.isLiked) R.string.widget_liked else R.string.widget_like),
             colorFilter = ColorFilter.tint(GlanceTheme.colors.onTertiaryContainer),
             modifier = GlanceModifier.size(minOf(width, height) * 0.45f),
         )
@@ -424,7 +425,7 @@ private fun PlayButton(
     ) {
         Image(
             provider = ImageProvider(if (state.isPlaying) R.drawable.rounded_pause_24 else R.drawable.rounded_play_arrow_24),
-            contentDescription = if (state.isPlaying) "Pause" else "Play",
+            contentDescription = LocalContext.current.getString(if (state.isPlaying) R.string.widget_pause else R.string.widget_play),
             colorFilter = ColorFilter.tint(GlanceTheme.colors.onPrimary),
             modifier = GlanceModifier.size(minOf(width, height) * 0.5f),
         )

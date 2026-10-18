@@ -18,6 +18,18 @@ data class PlaybackPingStatus(
 ) {
     /** YouTube answers these with 204, and any 2xx means it took the ping. */
     val accepted: Boolean get() = code in 200..299
+
+    /** Not sent: no account is signed in, so there is no history to add the listen to. */
+    val notSignedIn: Boolean get() = code == CODE_NOT_SIGNED_IN
+
+    /** Not sent: the saved sign-in has expired, and YouTube would treat the listen as signed out. */
+    val signInExpired: Boolean get() = code == CODE_SIGN_IN_EXPIRED
+
+    companion object {
+        const val CODE_NOT_SIGNED_IN = -1
+        const val CODE_SIGN_IN_EXPIRED = -2
+        val NO_ACCOUNT_CODES = setOf(CODE_NOT_SIGNED_IN, CODE_SIGN_IN_EXPIRED)
+    }
 }
 
 /** The three tracking endpoints of one playback, and the client playback nonce they belong to. */

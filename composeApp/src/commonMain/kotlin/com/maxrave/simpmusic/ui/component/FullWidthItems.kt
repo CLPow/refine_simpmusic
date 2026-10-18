@@ -108,6 +108,7 @@ import simpmusic.composeapp.generated.resources.podcasts
 import simpmusic.composeapp.generated.resources.radio
 import simpmusic.composeapp.generated.resources.you
 import kotlin.math.roundToInt
+import com.maxrave.simpmusic.ui.component.ytm.Ytm
 
 /**
  * This is the song item in the playlist or other places.
@@ -136,7 +137,7 @@ fun SongFullWidthItems(
     forceDark: Boolean = LocalForceDarkText.current,
 ) {
     val contentColor = if (forceDark) Color.White else MaterialTheme.colorScheme.onSurface
-    val subtitleColor = if (forceDark) Color(0xFFAAAAAA) else MaterialTheme.colorScheme.onSurfaceVariant
+    val subtitleColor = if (forceDark) Ytm.TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
     val maxOffset = 360f
     val coroutineScope = rememberCoroutineScope()
     val density = LocalDensity.current
@@ -413,7 +414,7 @@ fun SuggestItems(
     forceDark: Boolean = LocalForceDarkText.current,
 ) {
     val contentColor = if (forceDark) Color.White else MaterialTheme.colorScheme.onSurface
-    val subtitleColor = if (forceDark) Color(0xFFAAAAAA) else MaterialTheme.colorScheme.onSurfaceVariant
+    val subtitleColor = if (forceDark) Ytm.TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
     val composition by rememberLottieComposition {
         LottieCompositionSpec.JsonString(
             Res.readBytes("files/audio_playing_animation.json").decodeToString(),
@@ -527,7 +528,7 @@ fun PlaylistFullWidthItems(
     forceDark: Boolean = LocalForceDarkText.current,
 ) {
     val contentColor = if (forceDark) Color.White else MaterialTheme.colorScheme.onSurface
-    val subtitleColor = if (forceDark) Color(0xFFAAAAAA) else MaterialTheme.colorScheme.onSurfaceVariant
+    val subtitleColor = if (forceDark) Ytm.TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         modifier =
             modifier
@@ -703,7 +704,7 @@ fun ArtistFullWidthItems(
     forceDark: Boolean = LocalForceDarkText.current,
 ) {
     val contentColor = if (forceDark) Color.White else MaterialTheme.colorScheme.onSurface
-    val subtitleColor = if (forceDark) Color(0xFFAAAAAA) else MaterialTheme.colorScheme.onSurfaceVariant
+    val subtitleColor = if (forceDark) Ytm.TextSecondary else MaterialTheme.colorScheme.onSurfaceVariant
     val (name: String, thumbnails: String?) =
         when (data) {
             is ArtistEntity -> Pair(data.name, data.thumbnails)

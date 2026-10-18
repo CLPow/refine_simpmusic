@@ -73,6 +73,21 @@ import com.maxrave.simpmusic.viewModel.LocalPlaylistState
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import com.maxrave.simpmusic.ui.component.ytm.YtmErrorPage
+import com.maxrave.simpmusic.viewModel.UIEvent
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.album
+import simpmusic.composeapp.generated.resources.n_song
+import simpmusic.composeapp.generated.resources.ytm_download
+import simpmusic.composeapp.generated.resources.ytm_downloaded
+import simpmusic.composeapp.generated.resources.ytm_downloading
+import com.maxrave.simpmusic.ui.component.YtmCollectionTopBar
+import simpmusic.composeapp.generated.resources.ytm_save_to_library
+import simpmusic.composeapp.generated.resources.ytm_saved_to_library
+import simpmusic.composeapp.generated.resources.ytm_explicit
+import simpmusic.composeapp.generated.resources.more
 
 /**
  * YouTube Music's album page: the cover centred on a wash of its colour, title, artist and
@@ -128,7 +143,8 @@ fun AlbumScreen(
         when (uiState.loadState) {
             LocalPlaylistState.PlaylistLoadState.Loading ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
-            LocalPlaylistState.PlaylistLoadState.Error -> LaunchedEffect(Unit) { navController.navigateUp() }
+            LocalPlaylistState.PlaylistLoadState.Error ->
+                YtmErrorPage(onBack = { navController.navigateUp() }) { viewModel.updateBrowseId(browseId) }
             else ->
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
                     item(key = "header") {
@@ -137,11 +153,18 @@ fun AlbumScreen(
                                 thumbnail = uiState.thumbnail,
                                 title = uiState.title,
                                 subtitle = uiState.artist.name,
-                                meta = listOf("Album", uiState.year).filter { it.isNotBlank() }.joinToString(" • "),
+                                meta = listOf(uiState.type.ifBlank { stringResource(Res.string.album) }, uiState.year).filter { it.isNotBlank() }.joinToString(" • "),
                                 isPlaying = isPlayingThis && controllerState.isPlaying,
                                 onBack = { navController.navigateUp() },
                                 onMore = { albumMenu = true },
-                                onPlay = { uiState.listTrack.firstOrNull()?.let { viewModel.playTrack(it) } },
+                                // Already playing this album: the button pauses and resumes it, as in YouTube Music.
+                                onPlay = {
+                                    if (isPlayingThis) {
+                                        sharedViewModel.onUIEvent(UIEvent.PlayPause)
+                                    } else {
+                                        uiState.listTrack.firstOrNull()?.let { viewModel.playTrack(it) }
+                                    }
+                                },
                                 onShuffle = { viewModel.shuffle() },
                                 onSubtitleClick = uiState.artist.id?.let { id -> { navController.navigate(ArtistDestination(channelId = id)) } },
                                 onArtworkLoaded = { artwork = it },
@@ -159,10 +182,21 @@ fun AlbumScreen(
                                                 viewModel.downloadFullAlbum()
                                             }
                                         },
+                                        label = stringResource(
+                                            when (uiState.downloadState) {
+                                                DownloadState.STATE_DOWNLOADED -> Res.string.ytm_downloaded
+                                                DownloadState.STATE_DOWNLOADING -> Res.string.ytm_downloading
+                                                else -> Res.string.ytm_download
+                                            },
+                                        ),
                                     )
                                 },
                                 secondAction = {
-                                    YtmRoundAction(if (uiState.liked) SimpIcons.Check else SimpIcons.LibraryMusic, onClick = { viewModel.setAlbumLike() })
+                                    YtmRoundAction(
+                                        if (uiState.liked) SimpIcons.Check else SimpIcons.LibraryMusic,
+                                        onClick = { viewModel.setAlbumLike() },
+                                        label = stringResource(if (uiState.liked) Res.string.ytm_saved_to_library else Res.string.ytm_save_to_library),
+                                    )
                                 },
                             )
                         }
@@ -191,7 +225,7 @@ fun AlbumScreen(
                     }
                     item(key = "footer") {
                         Text(
-                            listOf("${uiState.trackCount} songs", uiState.length).filter { it.isNotBlank() }.joinToString(" • "),
+                            listOf(pluralStringResource(Res.plurals.n_song, uiState.trackCount, uiState.trackCount), uiState.length).filter { it.isNotBlank() }.joinToString(" • "),
                             style = typo().bodyMedium,
                             color = Ytm.TextSecondary,
                             modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
@@ -211,13 +245,16 @@ fun AlbumScreen(
                                         Thumb(album.thumbnails.lastOrNull()?.url, 152.dp, RoundedCornerShape(4.dp))
                                         Spacer(Modifier.height(8.dp))
                                         Text(album.title, style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                                        Text(listOf("Album", album.year).filter { it.isNotBlank() }.joinToString(" • "), style = typo().bodyMedium, color = Ytm.TextSecondary, maxLines = 1)
+                                        Text(listOf(stringResource(Res.string.album), album.year).filter { it.isNotBlank() }.joinToString(" • "), style = typo().bodyMedium, color = Ytm.TextSecondary, maxLines = 1)
                                     }
                                 }
                             }
                         }
                     }
                 }
+        }
+        if (uiState.loadState == LocalPlaylistState.PlaylistLoadState.Success) {
+            YtmCollectionTopBar(listState, uiState.title, onBack = { navController.navigateUp() }, onMore = { albumMenu = true })
         }
     }
 }
@@ -258,14 +295,14 @@ fun NumberedTrackRow(
             if (sub.isNotBlank() || track.isExplicit) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (track.isExplicit) {
-                        Icon(SimpIcons.Explicit, contentDescription = "Explicit", tint = Ytm.TextSecondary, modifier = Modifier.padding(end = 4.dp).height(14.dp))
+                        Icon(SimpIcons.Explicit, contentDescription = stringResource(Res.string.ytm_explicit), tint = Ytm.TextSecondary, modifier = Modifier.padding(end = 4.dp).height(14.dp))
                     }
                     Text(sub, style = typo().bodyMedium, color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
         androidx.compose.material3.IconButton(onClick = onMore) {
-            Icon(SimpIcons.MoreVert, contentDescription = "More", tint = Ytm.TextSecondary)
+            Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Ytm.TextSecondary)
         }
     }
 }

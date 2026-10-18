@@ -1,11 +1,5 @@
 package com.maxrave.simpmusic.ui.screen.home
 
-import com.maxrave.simpmusic.desktop.setStartOnBoot
-import com.maxrave.simpmusic.desktop.isStartOnBootSupported
-import com.maxrave.simpmusic.desktop.isStartOnBootEnabled
-import com.maxrave.simpmusic.desktop.DesktopSettings
-import com.maxrave.simpmusic.getPlatform
-import com.maxrave.simpmusic.Platform
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -20,6 +14,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,12 +31,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,9 +48,19 @@ import com.maxrave.common.QUALITY
 import com.maxrave.common.SUPPORTED_LANGUAGE
 import com.maxrave.common.SUPPORTED_LOCATION
 import com.maxrave.domain.manager.DataStoreManager
+import com.maxrave.domain.repository.AccountRepository
+import com.maxrave.domain.repository.PlaybackPingStatus
+import com.maxrave.simpmusic.Platform
+import com.maxrave.simpmusic.desktop.DesktopSettings
+import com.maxrave.simpmusic.desktop.isStartOnBootEnabled
+import com.maxrave.simpmusic.desktop.isStartOnBootSupported
+import com.maxrave.simpmusic.desktop.setStartOnBoot
 import com.maxrave.simpmusic.expect.hasSystemEqualizer
 import com.maxrave.simpmusic.expect.openSystemEqualizer
 import com.maxrave.simpmusic.expect.openUrl
+import com.maxrave.simpmusic.expect.readCrashLog
+import com.maxrave.simpmusic.expect.shareUrl
+import com.maxrave.simpmusic.getPlatform
 import com.maxrave.simpmusic.ui.component.ytm.Ytm
 import com.maxrave.simpmusic.ui.component.ytm.YtmTopBar
 import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsCategoryDestination
@@ -62,23 +70,88 @@ import com.maxrave.simpmusic.viewModel.SettingsViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.mikepenz.aboutlibraries.ui.compose.m3.LibrariesContainer
 import com.mikepenz.aboutlibraries.ui.compose.produceLibraries
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.audio_quality
+import simpmusic.composeapp.generated.resources.cancel
+import simpmusic.composeapp.generated.resources.ytm_about
+import simpmusic.composeapp.generated.resources.ytm_app_language
+import simpmusic.composeapp.generated.resources.ytm_app_version
+import simpmusic.composeapp.generated.resources.ytm_autoplay
+import simpmusic.composeapp.generated.resources.ytm_autoplay_summary
+import simpmusic.composeapp.generated.resources.ytm_cache
+import simpmusic.composeapp.generated.resources.ytm_clear
+import simpmusic.composeapp.generated.resources.ytm_clear_cache
+import simpmusic.composeapp.generated.resources.ytm_clear_cache_confirm
+import simpmusic.composeapp.generated.resources.ytm_clear_cache_confirm_body
+import simpmusic.composeapp.generated.resources.ytm_clear_cache_summary
+import simpmusic.composeapp.generated.resources.ytm_clear_downloads
+import simpmusic.composeapp.generated.resources.ytm_clear_downloads_confirm
+import simpmusic.composeapp.generated.resources.ytm_clear_downloads_confirm_body
+import simpmusic.composeapp.generated.resources.ytm_clear_downloads_summary
+import simpmusic.composeapp.generated.resources.ytm_clear_history
+import simpmusic.composeapp.generated.resources.ytm_clear_history_confirm
+import simpmusic.composeapp.generated.resources.ytm_clear_history_confirm_body
+import simpmusic.composeapp.generated.resources.ytm_clear_history_summary
+import simpmusic.composeapp.generated.resources.ytm_close_to_tray
+import simpmusic.composeapp.generated.resources.ytm_close_to_tray_summary
+import simpmusic.composeapp.generated.resources.ytm_data_saving
+import simpmusic.composeapp.generated.resources.ytm_download_audio_quality
+import simpmusic.composeapp.generated.resources.ytm_downloads
+import simpmusic.composeapp.generated.resources.ytm_downloads_storage
+import simpmusic.composeapp.generated.resources.ytm_equalizer
+import simpmusic.composeapp.generated.resources.ytm_equalizer_summary
+import simpmusic.composeapp.generated.resources.ytm_general
+import simpmusic.composeapp.generated.resources.ytm_licenses
+import simpmusic.composeapp.generated.resources.ytm_licenses_summary
+import simpmusic.composeapp.generated.resources.ytm_location
+import simpmusic.composeapp.generated.resources.ytm_manage_history
+import simpmusic.composeapp.generated.resources.ytm_manage_history_summary
+import simpmusic.composeapp.generated.resources.ytm_minutes_ago
+import simpmusic.composeapp.generated.resources.ytm_hours_ago
+import simpmusic.composeapp.generated.resources.ytm_no_equalizer
+import simpmusic.composeapp.generated.resources.ytm_pause_history
+import simpmusic.composeapp.generated.resources.ytm_pause_history_summary
+import simpmusic.composeapp.generated.resources.ytm_ping_accepted
+import simpmusic.composeapp.generated.resources.ytm_ping_expired
+import simpmusic.composeapp.generated.resources.ytm_ping_just_now
+import simpmusic.composeapp.generated.resources.ytm_ping_none
+import simpmusic.composeapp.generated.resources.ytm_ping_not_signed_in
+import simpmusic.composeapp.generated.resources.ytm_ping_rejected
+import simpmusic.composeapp.generated.resources.ytm_ping_unreachable
+import simpmusic.composeapp.generated.resources.ytm_playback
+import simpmusic.composeapp.generated.resources.ytm_privacy
+import simpmusic.composeapp.generated.resources.ytm_restricted_mode
+import simpmusic.composeapp.generated.resources.ytm_restricted_mode_summary
+import simpmusic.composeapp.generated.resources.ytm_settings
+import simpmusic.composeapp.generated.resources.ytm_share_crash_log
+import simpmusic.composeapp.generated.resources.ytm_share_crash_log_summary
+import simpmusic.composeapp.generated.resources.ytm_source_code
+import simpmusic.composeapp.generated.resources.ytm_start_minimized
+import simpmusic.composeapp.generated.resources.ytm_start_minimized_summary
+import simpmusic.composeapp.generated.resources.ytm_start_on_boot
+import simpmusic.composeapp.generated.resources.ytm_start_on_boot_summary
+import simpmusic.composeapp.generated.resources.ytm_using_space
+import kotlin.time.Clock
 
 /** YouTube Music's settings sections, in its order (memberships and developer pages left out). */
 enum class SettingsCategory(
     val key: String,
-    val title: String,
+    val title: StringResource,
 ) {
-    General("general", "General"),
-    Playback("playback", "Playback"),
-    DataSaving("data_saving", "Data saving"),
-    Downloads("downloads", "Downloads & storage"),
-    Privacy("privacy", "Privacy & data"),
-    About("about", "About Refine Music"),
+    General("general", Res.string.ytm_general),
+    Playback("playback", Res.string.ytm_playback),
+    DataSaving("data_saving", Res.string.ytm_data_saving),
+    Downloads("downloads", Res.string.ytm_downloads_storage),
+    Privacy("privacy", Res.string.ytm_privacy),
+    About("about", Res.string.ytm_about),
     ;
 
     companion object {
@@ -93,11 +166,11 @@ fun SettingsHomeScreen(
     innerPadding: PaddingValues = PaddingValues(),
 ) {
     Column(Modifier.fillMaxSize().background(Ytm.Background)) {
-        YtmTopBar(navController = navController, title = "Settings", onBack = { navController.navigateUp() })
+        YtmTopBar(navController = navController, title = stringResource(Res.string.ytm_settings), onBack = { navController.navigateUp() }, showActions = false)
         LazyColumn(Modifier.fillMaxSize()) {
             items(SettingsCategory.entries) { category ->
-                SettingRow(title = category.title) {
-                    navController.navigate(SettingsCategoryDestination(category = category.key))
+                SettingRow(title = stringResource(category.title)) {
+                    navController.navigate(SettingsCategoryDestination(category = category.key)) { launchSingleTop = true }
                 }
             }
         }
@@ -114,6 +187,7 @@ fun SettingScreen(
     viewModel: SettingsViewModel = koinViewModel(),
     sharedViewModel: SharedViewModel = koinInject(),
     dataStoreManager: DataStoreManager = koinInject(),
+    accountRepository: AccountRepository = koinInject(),
 ) {
     LaunchedEffect(Unit) { viewModel.getData() }
     val platformContext = LocalPlatformContext.current
@@ -127,39 +201,56 @@ fun SettingScreen(
     val cacheSize by viewModel.cacheSize.collectAsStateWithLifecycle()
     val downloadedSize by viewModel.downloadedCacheSize.collectAsStateWithLifecycle()
     val autoplay by dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }.collectAsStateWithLifecycle(false)
+    val signInExpired by accountRepository.signInExpired.collectAsStateWithLifecycle()
     var choice by remember { mutableStateOf<ChoiceDialog?>(null) }
     var confirm by remember { mutableStateOf<ConfirmDialog?>(null) }
     var showLicenses by remember { mutableStateOf(false) }
 
+    val appLanguage = stringResource(Res.string.ytm_app_language)
+    val locationTitle = stringResource(Res.string.ytm_location)
+    val audioQuality = stringResource(Res.string.audio_quality)
+    val downloadAudioQuality = stringResource(Res.string.ytm_download_audio_quality)
+    val noEqualizer = stringResource(Res.string.ytm_no_equalizer)
+    val clearDownloadsConfirm = stringResource(Res.string.ytm_clear_downloads_confirm)
+    val clearDownloadsConfirmBody = stringResource(Res.string.ytm_clear_downloads_confirm_body)
+    val clearCacheConfirm = stringResource(Res.string.ytm_clear_cache_confirm)
+    val clearCacheConfirmBody = stringResource(Res.string.ytm_clear_cache_confirm_body)
+    val clearHistoryConfirm = stringResource(Res.string.ytm_clear_history_confirm)
+    val clearHistoryConfirmBody = stringResource(Res.string.ytm_clear_history_confirm_body)
+    val shareCrashLog = stringResource(Res.string.ytm_share_crash_log)
+
     Column(Modifier.fillMaxSize().background(Ytm.Background)) {
-        YtmTopBar(navController = navController, title = category.title, onBack = { navController.navigateUp() })
+        YtmTopBar(navController = navController, title = stringResource(category.title), onBack = { navController.navigateUp() }, showActions = false)
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             when (category) {
                 SettingsCategory.General -> {
                     SwitchRow(
-                        title = "Restricted mode",
-                        summary = "Hides songs that may contain mature content",
+                        title = stringResource(Res.string.ytm_restricted_mode),
+                        summary = stringResource(Res.string.ytm_restricted_mode_summary),
                         checked = !explicit,
                     ) { viewModel.setExplicitContentEnabled(!it) }
                     SettingRow(
-                        title = "App language",
+                        title = appLanguage,
                         summary = SUPPORTED_LANGUAGE.getLanguageFromCode(language ?: "en-US"),
                     ) {
                         val names = SUPPORTED_LANGUAGE.items.map { it.toString() }
                         choice =
                             ChoiceDialog(
-                                title = "App language",
+                                title = appLanguage,
                                 options = names,
                                 selected = names.indexOf(SUPPORTED_LANGUAGE.getLanguageFromCode(language ?: "en-US")),
                             ) { index ->
-                                sharedViewModel.activityRecreate()
-                                viewModel.changeLanguage(SUPPORTED_LANGUAGE.getCodeFromLanguage(names[index]))
+                                // Recreate only once the new language is saved, or the new
+                                // activity can come up in the old one.
+                                viewModel.changeLanguage(SUPPORTED_LANGUAGE.getCodeFromLanguage(names[index])) {
+                                    sharedViewModel.activityRecreate()
+                                }
                             }
                     }
-                    SettingRow(title = "Location", summary = location.orEmpty()) {
+                    SettingRow(title = locationTitle, summary = location.orEmpty()) {
                         val codes = SUPPORTED_LOCATION.items.map { it.toString() }
                         choice =
-                            ChoiceDialog("Location", codes, codes.indexOf(location)) { index ->
+                            ChoiceDialog(locationTitle, codes, codes.indexOf(location)) { index ->
                                 viewModel.changeLocation(codes[index])
                             }
                     }
@@ -167,85 +258,112 @@ fun SettingScreen(
                         // ytmdesktop's window options.
                         if (isStartOnBootSupported()) {
                             var onBoot by remember { mutableStateOf(isStartOnBootEnabled()) }
-                            SwitchRow(title = "Start on boot", summary = "Open in the tray when you sign in to Windows", checked = onBoot) {
+                            SwitchRow(
+                                title = stringResource(Res.string.ytm_start_on_boot),
+                                summary = stringResource(Res.string.ytm_start_on_boot_summary),
+                                checked = onBoot,
+                            ) {
                                 setStartOnBoot(it)
                                 onBoot = isStartOnBootEnabled()
                             }
                         }
                         val startMinimized by dataStoreManager.getString(DesktopSettings.START_MINIMIZED).collectAsStateWithLifecycle(null)
-                        SwitchRow(title = "Start minimized", summary = "Open in the tray instead of a window", checked = startMinimized == DataStoreManager.TRUE) {
+                        SwitchRow(
+                            title = stringResource(Res.string.ytm_start_minimized),
+                            summary = stringResource(Res.string.ytm_start_minimized_summary),
+                            checked = startMinimized == DataStoreManager.TRUE,
+                        ) {
                             scope.launch { dataStoreManager.putString(DesktopSettings.START_MINIMIZED, if (it) DataStoreManager.TRUE else DataStoreManager.FALSE) }
                         }
                         val closeToTray by dataStoreManager.getString(DesktopSettings.CLOSE_TO_TRAY).collectAsStateWithLifecycle(null)
-                        SwitchRow(title = "Hide to tray on close", summary = "Keep playing in the background when the window is closed", checked = closeToTray != DataStoreManager.FALSE) {
+                        SwitchRow(
+                            title = stringResource(Res.string.ytm_close_to_tray),
+                            summary = stringResource(Res.string.ytm_close_to_tray_summary),
+                            checked = closeToTray != DataStoreManager.FALSE,
+                        ) {
                             scope.launch { dataStoreManager.putString(DesktopSettings.CLOSE_TO_TRAY, if (it) DataStoreManager.TRUE else DataStoreManager.FALSE) }
                         }
                     }
                 }
                 SettingsCategory.Playback -> {
                     if (hasSystemEqualizer()) {
-                        SettingRow(title = "Equalizer", summary = "Adjust audio settings") {
-                            if (!openSystemEqualizer()) viewModel.makeToast("No equalizer found on this device")
+                        SettingRow(title = stringResource(Res.string.ytm_equalizer), summary = stringResource(Res.string.ytm_equalizer_summary)) {
+                            if (!openSystemEqualizer()) viewModel.makeToast(noEqualizer)
                         }
                     }
                     SwitchRow(
-                        title = "Autoplay",
-                        summary = "Add similar content for endless listening",
+                        title = stringResource(Res.string.ytm_autoplay),
+                        summary = stringResource(Res.string.ytm_autoplay_summary),
                         checked = autoplay,
                     ) { enabled -> scope.launch { dataStoreManager.setEndlessQueue(enabled) } }
                 }
                 SettingsCategory.DataSaving -> {
-                    SettingRow(title = "Audio quality", summary = quality.orEmpty()) {
+                    SettingRow(title = audioQuality, summary = quality.orEmpty()) {
                         val options = QUALITY.items.map { it.toString() }
-                        choice = ChoiceDialog("Audio quality", options, options.indexOf(quality)) { viewModel.changeQuality(options[it]) }
+                        choice = ChoiceDialog(audioQuality, options, options.indexOf(quality)) { viewModel.changeQuality(options[it]) }
                     }
-                    SwitchRow(
-                        title = "Don't play music videos",
-                        summary = "Switch music videos to audio-only or album versions of songs",
-                        checked = true,
-                        enabled = false,
-                    ) {}
                 }
                 SettingsCategory.Downloads -> {
-                    SettingRow(title = "Audio quality", summary = downloadQuality.orEmpty()) {
+                    SettingRow(title = audioQuality, summary = downloadQuality.orEmpty()) {
                         val options = QUALITY.items.map { it.toString() }
                         choice =
-                            ChoiceDialog("Download audio quality", options, options.indexOf(downloadQuality)) {
+                            ChoiceDialog(downloadAudioQuality, options, options.indexOf(downloadQuality)) {
                                 viewModel.setDownloadQuality(options[it])
                             }
                     }
-                    SettingRow(title = "Downloads", summary = "Using ${formatBytes(downloadedSize)}")
-                    SettingRow(title = "Clear downloads", summary = "Remove every downloaded song from this device") {
-                        confirm = ConfirmDialog("Clear downloads?", "Every downloaded song will be removed from this device.") { viewModel.clearDownloadedCache() }
+                    SettingRow(title = stringResource(Res.string.ytm_downloads), summary = stringResource(Res.string.ytm_using_space, formatBytes(downloadedSize)))
+                    SettingRow(title = stringResource(Res.string.ytm_clear_downloads), summary = stringResource(Res.string.ytm_clear_downloads_summary)) {
+                        confirm = ConfirmDialog(clearDownloadsConfirm, clearDownloadsConfirmBody) { viewModel.clearDownloadedCache() }
                     }
-                    SettingRow(title = "Cache", summary = "Using ${formatBytes(cacheSize)}")
-                    SettingRow(title = "Clear cache", summary = "Free up space used by songs played recently") {
-                        confirm = ConfirmDialog("Clear cache?", "Recently played songs will need to load again.") {
-                            viewModel.clearPlayerCache()
-                            viewModel.clearThumbnailCache(platformContext)
-                        }
+                    SettingRow(title = stringResource(Res.string.ytm_cache), summary = stringResource(Res.string.ytm_using_space, formatBytes(cacheSize)))
+                    SettingRow(title = stringResource(Res.string.ytm_clear_cache), summary = stringResource(Res.string.ytm_clear_cache_summary)) {
+                        confirm =
+                            ConfirmDialog(clearCacheConfirm, clearCacheConfirmBody) {
+                                viewModel.clearPlayerCache()
+                                viewModel.clearThumbnailCache(platformContext)
+                            }
                     }
                 }
                 SettingsCategory.Privacy -> {
                     SwitchRow(
-                        title = "Pause watch history",
-                        summary = "Songs you play won't be saved to your YouTube history or used for recommendations",
+                        title = stringResource(Res.string.ytm_pause_history),
+                        summary = stringResource(Res.string.ytm_pause_history_summary),
                         checked = sendBackToGoogle == DataStoreManager.FALSE,
                     ) { paused -> viewModel.setSendBackToGoogle(!paused) }
-                    SettingRow(title = "Clear listening history on this device", summary = "Your YouTube history is not affected") {
-                        confirm = ConfirmDialog("Clear listening history?", "Play counts and recently played songs on this device will be removed.") {
-                            viewModel.clearListeningHistory()
+                    // Whether listening is reaching the account: the one thing that makes Home
+                    // learn from what is played, and otherwise invisible.
+                    if (sendBackToGoogle != DataStoreManager.FALSE) {
+                        val ping by produceState<PlaybackPingStatus?>(null) {
+                            while (true) {
+                                value = sharedViewModel.lastPlaybackPingStatus()
+                                delay(5_000)
+                            }
                         }
+                        Text(
+                            pingStatusText(ping, signInExpired),
+                            style = typo().bodySmall,
+                            color = Ytm.TextSecondary,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+                        )
                     }
-                    SettingRow(title = "Manage all history", summary = "music.youtube.com › History") {
-                        openUrl("https://myactivity.google.com/product/youtube")
+                    SettingRow(title = stringResource(Res.string.ytm_clear_history), summary = stringResource(Res.string.ytm_clear_history_summary)) {
+                        confirm = ConfirmDialog(clearHistoryConfirm, clearHistoryConfirmBody) { viewModel.clearListeningHistory() }
+                    }
+                    SettingRow(title = stringResource(Res.string.ytm_manage_history), summary = stringResource(Res.string.ytm_manage_history_summary)) {
+                        openUrl("https://myactivity.google.com/product/youtube_music")
                     }
                 }
                 SettingsCategory.About -> {
-                    SettingRow(title = "App version", summary = VersionManager.getVersionName())
-                    SettingRow(title = "Open source licenses", summary = "License details for open source software") { showLicenses = true }
-                    SettingRow(title = "Source code", summary = "github.com/CLPow/refine_simpmusic") {
+                    SettingRow(title = stringResource(Res.string.ytm_app_version), summary = VersionManager.getVersionName())
+                    SettingRow(title = stringResource(Res.string.ytm_licenses), summary = stringResource(Res.string.ytm_licenses_summary)) { showLicenses = true }
+                    SettingRow(title = stringResource(Res.string.ytm_source_code), summary = "github.com/CLPow/refine_simpmusic") {
                         openUrl("https://github.com/CLPow/refine_simpmusic")
+                    }
+                    val crashLog = remember { readCrashLog() }
+                    if (!crashLog.isNullOrBlank()) {
+                        SettingRow(title = shareCrashLog, summary = stringResource(Res.string.ytm_share_crash_log_summary)) {
+                            shareUrl(shareCrashLog, crashLog)
+                        }
                     }
                 }
             }
@@ -261,7 +379,7 @@ fun SettingScreen(
                 LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     items(dialog.options.size) { index ->
                         Row(
-                            Modifier.fillMaxWidth().clickable {
+                            Modifier.fillMaxWidth().selectable(selected = index == dialog.selected, role = Role.RadioButton) {
                                 dialog.onSelect(index)
                                 choice = null
                             },
@@ -278,7 +396,7 @@ fun SettingScreen(
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { choice = null }) { Text("Cancel", color = Color.White) } },
+            confirmButton = { TextButton(onClick = { choice = null }) { Text(stringResource(Res.string.cancel), color = Color.White) } },
         )
     }
     confirm?.let { dialog ->
@@ -291,9 +409,9 @@ fun SettingScreen(
                 TextButton(onClick = {
                     dialog.onConfirm()
                     confirm = null
-                }) { Text("Clear", color = Color.White) }
+                }) { Text(stringResource(Res.string.ytm_clear), color = Color.White) }
             },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel", color = Ytm.TextSecondary) } },
+            dismissButton = { TextButton(onClick = { confirm = null }) { Text(stringResource(Res.string.cancel), color = Ytm.TextSecondary) } },
         )
     }
     if (showLicenses) {
@@ -307,6 +425,30 @@ fun SettingScreen(
         }
     }
 }
+
+/** One line on what happened to the last listen sent to YouTube. */
+@Composable
+private fun pingStatusText(
+    ping: PlaybackPingStatus?,
+    signInExpired: Boolean,
+): String =
+    when {
+        signInExpired || ping?.signInExpired == true -> stringResource(Res.string.ytm_ping_expired)
+        ping == null -> stringResource(Res.string.ytm_ping_none)
+        ping.notSignedIn -> stringResource(Res.string.ytm_ping_not_signed_in)
+        ping.accepted -> {
+            val minutes = ((Clock.System.now().toEpochMilliseconds() - ping.acceptedAt) / 60_000).toInt()
+            val ago =
+                when {
+                    minutes < 1 -> stringResource(Res.string.ytm_ping_just_now)
+                    minutes < 60 -> pluralStringResource(Res.plurals.ytm_minutes_ago, minutes, minutes)
+                    else -> pluralStringResource(Res.plurals.ytm_hours_ago, minutes / 60, minutes / 60)
+                }
+            stringResource(Res.string.ytm_ping_accepted, ago)
+        }
+        ping.code == 0 -> stringResource(Res.string.ytm_ping_unreachable)
+        else -> stringResource(Res.string.ytm_ping_rejected, ping.code)
+    }
 
 private class ChoiceDialog(
     val title: String,
@@ -331,7 +473,7 @@ private fun SettingRow(
     Column(
         Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         Text(title, style = typo().bodyLarge.copy(fontSize = 16.sp), color = Color.White)
@@ -341,7 +483,7 @@ private fun SettingRow(
     }
 }
 
-/** A settings row with a switch on the right. */
+/** A settings row with a switch on the right; the row is the one switch for accessibility. */
 @Composable
 private fun SwitchRow(
     title: String,
@@ -353,7 +495,7 @@ private fun SwitchRow(
     Row(
         Modifier
             .fillMaxWidth()
-            .clickable(enabled = enabled) { onChange(!checked) }
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -366,7 +508,7 @@ private fun SwitchRow(
         Spacer(Modifier.width(16.dp))
         Switch(
             checked = checked,
-            onCheckedChange = if (enabled) onChange else null,
+            onCheckedChange = null,
             enabled = enabled,
             colors =
                 SwitchDefaults.colors(

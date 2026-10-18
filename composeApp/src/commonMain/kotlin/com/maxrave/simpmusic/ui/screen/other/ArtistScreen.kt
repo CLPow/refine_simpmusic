@@ -74,6 +74,25 @@ import com.maxrave.simpmusic.viewModel.ArtistViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import androidx.compose.foundation.lazy.itemsIndexed
+import com.maxrave.simpmusic.ui.component.ytm.YtmErrorPage
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.albums
+import simpmusic.composeapp.generated.resources.more
+import simpmusic.composeapp.generated.resources.radio
+import simpmusic.composeapp.generated.resources.featured_inArtist
+import simpmusic.composeapp.generated.resources.ytm_shuffle
+import simpmusic.composeapp.generated.resources.ytm_top_songs
+import simpmusic.composeapp.generated.resources.ytm_show_all
+import simpmusic.composeapp.generated.resources.ytm_singles_eps
+import simpmusic.composeapp.generated.resources.ytm_fans_also_like
+import simpmusic.composeapp.generated.resources.ytm_about_artist
+import simpmusic.composeapp.generated.resources.ytm_back
+import simpmusic.composeapp.generated.resources.ytm_subscribed
+import simpmusic.composeapp.generated.resources.ytm_subscribe
+import simpmusic.composeapp.generated.resources.album
+import simpmusic.composeapp.generated.resources.ytm_single
 
 /**
  * YouTube Music's artist page: the artist's picture across the top, fading into the page, the
@@ -92,6 +111,8 @@ fun ArtistScreen(
     val followed by viewModel.followed.collectAsStateWithLifecycle()
     val playingVideoId by viewModel.nowPlayingVideoId.collectAsStateWithLifecycle()
     var menuTrack by remember { mutableStateOf<Track?>(null) }
+    val albumLabel = stringResource(Res.string.album)
+    val singleLabel = stringResource(Res.string.ytm_single)
 
     LaunchedEffect(channelId) { if (channelId != state.data.channelId) viewModel.browseArtist(channelId) }
     menuTrack?.let { NowPlayingBottomSheet(onDismiss = { menuTrack = null }, navController = navController, song = it.toSongEntity()) }
@@ -100,7 +121,8 @@ fun ArtistScreen(
         when (val s = state) {
             is ArtistScreenState.Loading ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
-            is ArtistScreenState.Error -> LaunchedEffect(Unit) { navController.navigateUp() }
+            is ArtistScreenState.Error ->
+                YtmErrorPage(onBack = { navController.navigateUp() }) { viewModel.browseArtist(channelId) }
             is ArtistScreenState.Success -> {
                 val data = s.data
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
@@ -141,10 +163,10 @@ fun ArtistScreen(
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 data.shuffleParam?.let { endpoint ->
-                                    ArtistPill(SimpIcons.Shuffle, "Shuffle", filled = true) { viewModel.onShuffleClick(endpoint) }
+                                    ArtistPill(SimpIcons.Shuffle, stringResource(Res.string.ytm_shuffle), filled = true) { viewModel.onShuffleClick(endpoint) }
                                 }
                                 data.radioParam?.let { endpoint ->
-                                    ArtistPill(SimpIcons.Sensors, "Radio", filled = false) { viewModel.onRadioClick(endpoint) }
+                                    ArtistPill(SimpIcons.Sensors, stringResource(Res.string.radio), filled = false) { viewModel.onRadioClick(endpoint) }
                                 }
                                 Spacer(Modifier.weight(1f))
                                 SubscribeButton(followed) {
@@ -156,29 +178,32 @@ fun ArtistScreen(
                     if (data.popularSongs.isNotEmpty()) {
                         item(key = "songs-h") {
                             YtmShelfHeader(
-                                title = "Top songs",
-                                actionLabel = if (data.listSongParam != null) "Show all" else null,
+                                title = stringResource(Res.string.ytm_top_songs),
+                                actionLabel = if (data.listSongParam != null) stringResource(Res.string.ytm_show_all) else null,
                                 onAction = data.listSongParam?.let { id -> { navController.navigate(PlaylistDestination(id)) } },
                             )
                         }
-                        items(data.popularSongs.take(5), key = { "song-${it.videoId}" }) { song ->
+                        val topSongs = data.popularSongs.take(5)
+                        itemsIndexed(topSongs, key = { index, song -> "song-$index-${song.videoId}" }) { index, song ->
                             YtmSongRow(
                                 title = song.title,
                                 subtitle = listOfNotNull(song.artists?.joinToString(", ") { it.name }, song.album?.name).filter { it.isNotBlank() }.joinToString(" • "),
                                 thumbnail = song.thumbnails?.lastOrNull()?.url,
                                 isCurrent = song.videoId == playingVideoId,
                                 onClick = {
+                                    // YouTube Music plays the artist's top songs as a list, from
+                                    // the tapped one, not a one-song radio.
                                     viewModel.setQueueData(
                                         QueueData.Data(
-                                            listTracks = arrayListOf(song),
+                                            listTracks = ArrayList(data.popularSongs),
                                             firstPlayedTrack = song,
-                                            playlistId = "RDAMVM${song.videoId}",
-                                            playlistName = "\"${song.title}\" Radio",
-                                            playlistType = PlaylistType.RADIO,
+                                            playlistId = data.listSongParam,
+                                            playlistName = data.title.orEmpty(),
+                                            playlistType = PlaylistType.PLAYLIST,
                                             continuation = null,
                                         ),
                                     )
-                                    viewModel.loadMediaItem(song, type = Config.SONG_CLICK)
+                                    viewModel.loadMediaItem(song, type = Config.PLAYLIST_CLICK, index = index)
                                 },
                                 onMore = { menuTrack = song },
                             )
@@ -187,36 +212,36 @@ fun ArtistScreen(
                     data.albums?.results?.takeIf { it.isNotEmpty() }?.let { albums ->
                         item(key = "albums") {
                             YtmShelfHeader(
-                                title = "Albums",
-                                actionLabel = "More",
+                                title = stringResource(Res.string.albums),
+                                actionLabel = stringResource(Res.string.more),
                                 onAction = data.channelId?.let { id ->
                                     { navController.navigate(MoreAlbumsDestination(id = "MPAD$id", type = MoreAlbumsDestination.ALBUM_TYPE)) }
                                 },
                             )
-                            CardRow(albums.map { CardItem(it.title, listOf("Album", it.year).filter { y -> y.isNotBlank() }.joinToString(" • "), it.thumbnails.lastOrNull()?.url) { navController.navigate(AlbumDestination(it.browseId)) } })
+                            CardRow(albums.map { CardItem(it.title, listOf(albumLabel, it.year).filter { y -> y.isNotBlank() }.joinToString(" • "), it.thumbnails.lastOrNull()?.url) { navController.navigate(AlbumDestination(it.browseId)) } })
                         }
                     }
                     data.singles?.results?.takeIf { it.isNotEmpty() }?.let { singles ->
                         item(key = "singles") {
                             YtmShelfHeader(
-                                title = "Singles & EPs",
-                                actionLabel = "More",
+                                title = stringResource(Res.string.ytm_singles_eps),
+                                actionLabel = stringResource(Res.string.more),
                                 onAction = data.channelId?.let { id ->
                                     { navController.navigate(MoreAlbumsDestination(id = "MPAD$id", type = MoreAlbumsDestination.SINGLE_TYPE)) }
                                 },
                             )
-                            CardRow(singles.map { CardItem(it.title, listOf("Single", it.year).filter { y -> y.isNotBlank() }.joinToString(" • "), it.thumbnails.lastOrNull()?.url) { navController.navigate(AlbumDestination(it.browseId)) } })
+                            CardRow(singles.map { CardItem(it.title, listOf(singleLabel, it.year).filter { y -> y.isNotBlank() }.joinToString(" • "), it.thumbnails.lastOrNull()?.url) { navController.navigate(AlbumDestination(it.browseId)) } })
                         }
                     }
                     if (data.featuredOn.isNotEmpty()) {
                         item(key = "featured") {
-                            YtmShelfHeader(title = "Featured on")
+                            YtmShelfHeader(title = stringResource(Res.string.featured_inArtist))
                             CardRow(data.featuredOn.map { CardItem(it.title, it.author, it.thumbnails.lastOrNull()?.url) { navController.navigate(PlaylistDestination(it.id)) } })
                         }
                     }
                     data.related?.results?.takeIf { it.isNotEmpty() }?.let { related ->
                         item(key = "related") {
-                            YtmShelfHeader(title = "Fans might also like")
+                            YtmShelfHeader(title = stringResource(Res.string.ytm_fans_also_like))
                             CardRow(
                                 related.map { CardItem(it.title, it.subscribers, it.thumbnails.lastOrNull()?.url, round = true) { navController.navigate(ArtistDestination(it.browseId)) } },
                             )
@@ -224,7 +249,7 @@ fun ArtistScreen(
                     }
                     if (!data.description.isNullOrBlank()) {
                         item(key = "about") {
-                            YtmShelfHeader(title = "About")
+                            YtmShelfHeader(title = stringResource(Res.string.ytm_about_artist))
                             var expanded by remember { mutableStateOf(false) }
                             Text(
                                 data.description.orEmpty(),
@@ -242,7 +267,7 @@ fun ArtistScreen(
                     onClick = { navController.navigateUp() },
                     modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(4.dp),
                 ) {
-                    Icon(SimpIcons.ArrowBackIosNew, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(22.dp))
+                    Icon(SimpIcons.ArrowBackIosNew, contentDescription = stringResource(Res.string.ytm_back), tint = Color.White, modifier = Modifier.size(22.dp))
                 }
             }
         }
@@ -316,7 +341,7 @@ private fun SubscribeButton(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            if (subscribed) "Subscribed" else "Subscribe",
+            stringResource(if (subscribed) Res.string.ytm_subscribed else Res.string.ytm_subscribe),
             style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium),
             color = Color.White,
         )

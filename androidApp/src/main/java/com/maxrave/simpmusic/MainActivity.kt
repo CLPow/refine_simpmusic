@@ -42,7 +42,6 @@ import com.maxrave.simpmusic.utils.ComposeResUtils
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.koin.android.ext.android.inject
 import org.koin.core.context.loadKoinModules
 import org.koin.core.context.unloadKoinModules
@@ -51,6 +50,7 @@ import org.simpmusic.crashlytics.pushPlayerError
 import pub.devrel.easypermissions.EasyPermissions
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.runBlocking
 
 @Suppress("DEPRECATION")
 class MainActivity : AppCompatActivity() {
@@ -211,21 +211,24 @@ class MainActivity : AppCompatActivity() {
 
         if (!EasyPermissions.hasPermissions(this, Manifest.permission.POST_NOTIFICATIONS)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val doNotAsk = getString("notification_permission_do_not_ask")
-                if (doNotAsk != "true") {
-                    val wasAsked = getString("notification_permission_asked")
-                    if (wasAsked != "true") {
-                        // First time: request system permission
-                        EasyPermissions.requestPermissions(
-                            this,
-                            runBlocking { ComposeResUtils.getResString(ComposeResUtils.StringType.NOTIFICATION_REQUEST) },
-                            1,
-                            Manifest.permission.POST_NOTIFICATIONS,
-                        )
-                        putString("notification_permission_asked", "true")
-                    } else {
-                        // Already asked before: show custom dialog with "Don't show again"
-                        viewModel.showNotificationPermissionDialog()
+                // Read off the main thread: DataStore reads wait for pending writes.
+                lifecycleScope.launch {
+                    val doNotAsk = viewModel.readString("notification_permission_do_not_ask")
+                    if (doNotAsk != "true") {
+                        val wasAsked = viewModel.readString("notification_permission_asked")
+                        if (wasAsked != "true") {
+                            // First time: request system permission
+                            EasyPermissions.requestPermissions(
+                                this@MainActivity,
+                                ComposeResUtils.getResString(ComposeResUtils.StringType.NOTIFICATION_REQUEST),
+                                1,
+                                Manifest.permission.POST_NOTIFICATIONS,
+                            )
+                            putString("notification_permission_asked", "true")
+                        } else {
+                            // Already asked before: show custom dialog with "Don't show again"
+                            viewModel.showNotificationPermissionDialog()
+                        }
                     }
                 }
             }
@@ -262,18 +265,18 @@ class MainActivity : AppCompatActivity() {
         mediaPlayerHandler.pushPlayerError = { it ->
             pushPlayerError(it)
         }
+        // Called from the player's threads; the text is looked up without blocking them.
         mediaPlayerHandler.showToast = { type ->
-            viewModel.makeToast(
-                when (type) {
-                    is ToastType.ExplicitContent -> {
-                        runBlocking { ComposeResUtils.getResString(ComposeResUtils.StringType.EXPLICIT_CONTENT_BLOCKED) }
-                    }
-
-                    is ToastType.PlayerError -> {
-                        runBlocking { ComposeResUtils.getResString(ComposeResUtils.StringType.TIME_OUT_ERROR, type.error) }
-                    }
-                },
-            )
+            lifecycleScope.launch {
+                viewModel.makeToast(
+                    when (type) {
+                        is ToastType.ExplicitContent ->
+                            ComposeResUtils.getResString(ComposeResUtils.StringType.EXPLICIT_CONTENT_BLOCKED)
+                        is ToastType.PlayerError ->
+                            ComposeResUtils.getResString(ComposeResUtils.StringType.TIME_OUT_ERROR, type.error)
+                    },
+                )
+            }
         }
         viewModel.isServiceRunning = true
         shouldUnbind = true
@@ -293,7 +296,11 @@ class MainActivity : AppCompatActivity() {
         viewModel.putString(key, value)
     }
 
-    private fun getString(key: String): String? = viewModel.getString(key)
+    /**
+     * Blocking on purpose, and only for the start-up locale check in onCreate: the language has to
+     * be settled before the first frame, or the app draws once in the wrong one and recreates.
+     */
+    private fun getString(key: String): String? = runBlocking { viewModel.readString(key) }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)

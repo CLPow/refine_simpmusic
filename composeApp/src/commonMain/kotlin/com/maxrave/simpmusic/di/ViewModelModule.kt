@@ -81,6 +81,7 @@ val viewModelModule =
             HomeViewModel(
                 get(),
                 get(),
+                get(),
             )
         }
         viewModel {

@@ -4,6 +4,7 @@ import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.lifecycle.viewModelScope
 import com.maxrave.common.Config.ALBUM_CLICK
+import com.maxrave.common.MERGING_DATA_TYPE
 import com.maxrave.common.Config.DOWNLOAD_CACHE
 import com.maxrave.common.Config.PLAYLIST_CLICK
 import com.maxrave.common.Config.RECOVER_TRACK_QUEUE
@@ -98,12 +99,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.getString
-import org.simpmusic.lastfm.completeLogin
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.added_to_queue
 import simpmusic.composeapp.generated.resources.added_to_youtube_liked
 import simpmusic.composeapp.generated.resources.error
-import simpmusic.composeapp.generated.resources.lastfm_login_failed
 import simpmusic.composeapp.generated.resources.login_success
 import simpmusic.composeapp.generated.resources.play_next
 import simpmusic.composeapp.generated.resources.removed_from_youtube_liked
@@ -323,7 +322,7 @@ class SharedViewModel(
 //            controllerStateJob.join()
         }
 
-        runBlocking {
+        viewModelScope.launch {
             dataStoreManager.getString("miniplayer_guide").first().let {
                 isFirstMiniplayer = it != STATUS_DONE
             }
@@ -538,32 +537,6 @@ class SharedViewModel(
         _intent.value = intent
     }
 
-    /**
-     * Finishes a Last.fm login from the `wordbyword://lastfm-auth` callback.
-     *
-     * It lands here, and not on the login screen, because the callback arrives at the app rather
-     * than at any one screen: the user left for their browser, and the screen they left from may
-     * not even exist any more if the process was killed. Routing the token onwards through
-     * navigation would push a second copy of the login screen on top of the one already open.
-     *
-     * The screen learns it succeeded by watching the stored session key, not by being told.
-     */
-    fun completeLastfmLogin(token: String) {
-        if (token.isEmpty()) return
-        viewModelScope.launch {
-            val session = completeLogin(token)
-            if (session != null) {
-                dataStoreManager.setLastfmSession(
-                    sessionKey = session.sessionKey,
-                    username = session.username,
-                )
-                makeToast(getString(Res.string.login_success))
-            } else {
-                makeToast(getString(Res.string.lastfm_login_failed))
-            }
-        }
-    }
-
     fun showNotificationPermissionDialog() {
         _showNotificationPermissionDialog.value = true
     }
@@ -581,6 +554,13 @@ class SharedViewModel(
                 _likeStatus.value = false
                 songRepository.getLikeStatus(videoId).collectLatest { status ->
                     _likeStatus.value = status
+                    // Liked on YouTube elsewhere (the web, another phone): show it as liked here
+                    // too, the way YouTube Music's thumb follows the account.
+                    val id = videoId.removePrefix(MERGING_DATA_TYPE.VIDEO)
+                    if (status && !mediaPlayerHandler.controlState.value.isLiked) {
+                        songRepository.updateLikeStatus(id, 1)
+                        mediaPlayerHandler.like(true)
+                    }
                 }
             }
         }
@@ -634,13 +614,13 @@ class SharedViewModel(
         }
     }
 
-    fun getString(key: String): String? = runBlocking { dataStoreManager.getString(key).first() }
+    suspend fun readString(key: String): String? = dataStoreManager.getString(key).first()
 
     fun putString(
         key: String,
         value: String,
     ) {
-        runBlocking { dataStoreManager.putString(key, value) }
+        viewModelScope.launch { dataStoreManager.putString(key, value) }
     }
 
     fun setSleepTimer(minutes: Int) {
@@ -967,6 +947,8 @@ class SharedViewModel(
                     mediaPlayerHandler.onPlayerEvent(PlayerEvent.ToggleLike)
                 }
 
+                UIEvent.Dislike -> mediaPlayerHandler.dislike()
+
                 is UIEvent.UpdateVolume -> {
                     val newVolume = uiEvent.newVolume
                     // Apply to the player first: persisting to DataStore is a suspending disk write
@@ -982,8 +964,10 @@ class SharedViewModel(
     }
 
     fun getLocation() {
-        regionCode = runBlocking { dataStoreManager.location.first() }
-        language = runBlocking { dataStoreManager.getString(SELECTED_LANGUAGE).first() }
+        viewModelScope.launch {
+            regionCode = dataStoreManager.location.first()
+            language = dataStoreManager.getString(SELECTED_LANGUAGE).first()
+        }
     }
 
     private fun checkAllDownloadingLocalPlaylists() {
@@ -1256,11 +1240,8 @@ class SharedViewModel(
             }
         }
 
-        val shouldSendLyricsToSimpMusic =
-            runBlocking {
-                dataStoreManager.helpBuildLyricsDatabase.first() == TRUE
-            } &&
-                lyricsProvider != LyricsProvider.SIMPMUSIC
+        // Uploading lyrics to SimpMusic's database went with its setting; Refine never sends them.
+        val shouldSendLyricsToSimpMusic = false
         if (_nowPlayingState.value?.songEntity?.videoId == videoId) {
             val track = _nowPlayingState.value?.track
             when (isTranslatedLyrics) {
@@ -2147,15 +2128,21 @@ class SharedViewModel(
         }
     }
 
-    fun shouldStopMusicService(): Boolean = runBlocking { dataStoreManager.killServiceOnExit.first() == TRUE }
+    // Kept warm so these synchronous checks (an activity's onDestroy, the player) never block on
+    // DataStore, whose reads now wait for pending writes.
+    private val killServiceOnExit = dataStoreManager.killServiceOnExit.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    private val signedInCookie = dataStoreManager.cookie.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+    private val combineLiked = dataStoreManager.combineLocalAndYouTubeLiked.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    fun isUserLoggedIn(): Boolean = runBlocking { dataStoreManager.cookie.first().isNotEmpty() }
+    fun shouldStopMusicService(): Boolean = killServiceOnExit.value == TRUE
+
+    fun isUserLoggedIn(): Boolean = signedInCookie.value.isNotEmpty()
 
     // Flow-based variant of [isUserLoggedIn] so composables can collect login state once
     // instead of calling runBlocking inside composition (used by NowPlayingScreenContent).
     fun isUserLoggedInFlow(): Flow<Boolean> = dataStoreManager.cookie.map { it.isNotEmpty() }
 
-    fun isCombineFavoriteAndYTLiked(): Boolean = runBlocking { dataStoreManager.combineLocalAndYouTubeLiked.first() == TRUE }
+    fun isCombineFavoriteAndYTLiked(): Boolean = combineLiked.value == TRUE
 }
 
 sealed class UIEvent {
@@ -2191,6 +2178,9 @@ sealed class UIEvent {
     ) : UIEvent()
 
     data object ToggleLike : UIEvent()
+
+    /** YouTube Music's thumbs down: rates the song down and skips it. */
+    data object Dislike : UIEvent()
 }
 
 enum class LyricsProvider {

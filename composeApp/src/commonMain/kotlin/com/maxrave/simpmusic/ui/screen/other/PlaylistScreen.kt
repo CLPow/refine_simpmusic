@@ -58,6 +58,20 @@ import com.maxrave.simpmusic.viewModel.PlaylistViewModel
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
+import com.maxrave.simpmusic.ui.component.ytm.YtmErrorPage
+import com.maxrave.simpmusic.viewModel.UIEvent
+import org.jetbrains.compose.resources.pluralStringResource
+import org.jetbrains.compose.resources.stringResource
+import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.playlist
+import simpmusic.composeapp.generated.resources.radio
+import simpmusic.composeapp.generated.resources.n_song
+import simpmusic.composeapp.generated.resources.ytm_download
+import simpmusic.composeapp.generated.resources.ytm_downloaded
+import simpmusic.composeapp.generated.resources.ytm_downloading
+import simpmusic.composeapp.generated.resources.ytm_save_to_library
+import simpmusic.composeapp.generated.resources.ytm_saved_to_library
+import com.maxrave.simpmusic.ui.component.YtmCollectionTopBar
 
 /**
  * YouTube Music's playlist page: the cover centred on a wash of its colour, title, owner,
@@ -140,9 +154,14 @@ fun PlaylistScreen(
         when (val state = uiState) {
             is PlaylistUIState.Loading ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
-            is PlaylistUIState.Error -> LaunchedEffect(Unit) { navController.navigateUp() }
+            is PlaylistUIState.Error ->
+                YtmErrorPage(onBack = { navController.navigateUp() }) { viewModel.getData(id) }
             is PlaylistUIState.Success -> {
-                val playlist = state.data ?: return@Box
+                val playlist =
+                    state.data ?: run {
+                        YtmErrorPage(onBack = { navController.navigateUp() }) { viewModel.getData(id) }
+                        return@Box
+                    }
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 32.dp)) {
                     item(key = "header") {
                         Box(Modifier.fillMaxWidth().background(wash)) {
@@ -152,14 +171,14 @@ fun PlaylistScreen(
                                 subtitle = playlist.author.name,
                                 meta =
                                     listOf(
-                                        if (playlist.isRadio) "Radio" else "Playlist",
+                                        stringResource(if (playlist.isRadio) Res.string.radio else Res.string.playlist),
                                         playlist.year,
-                                        if (playlist.trackCount > 0) "${playlist.trackCount} songs" else "",
+                                        if (playlist.trackCount > 0) pluralStringResource(Res.plurals.n_song, playlist.trackCount, playlist.trackCount) else "",
                                     ).filter { it.isNotBlank() }.joinToString(" • "),
                                 isPlaying = isPlayingThis && controllerState.isPlaying,
                                 onBack = { navController.navigateUp() },
                                 onMore = { playlistMenu = true },
-                                onPlay = { viewModel.onUIEvent(PlaylistUIEvent.PlayAll) },
+                                onPlay = { if (isPlayingThis) sharedViewModel.onUIEvent(UIEvent.PlayPause) else viewModel.onUIEvent(PlaylistUIEvent.PlayAll) },
                                 onShuffle = { viewModel.onUIEvent(PlaylistUIEvent.Shuffle) },
                                 onArtworkLoaded = { artwork = it },
                                 leadingAction = {
@@ -170,12 +189,20 @@ fun PlaylistScreen(
                                             else -> SimpIcons.Download
                                         },
                                         onClick = { viewModel.onUIEvent(PlaylistUIEvent.Download) },
+                                        label = stringResource(
+                                            when (downloadState) {
+                                                DownloadState.STATE_DOWNLOADED -> Res.string.ytm_downloaded
+                                                DownloadState.STATE_DOWNLOADING -> Res.string.ytm_downloading
+                                                else -> Res.string.ytm_download
+                                            },
+                                        ),
                                     )
                                 },
                                 secondAction = {
                                     YtmRoundAction(
                                         if (liked) SimpIcons.Check else SimpIcons.LibraryMusic,
                                         onClick = { viewModel.onUIEvent(PlaylistUIEvent.Favorite) },
+                                        label = stringResource(if (liked) Res.string.ytm_saved_to_library else Res.string.ytm_save_to_library),
                                     )
                                 },
                             )
@@ -211,6 +238,7 @@ fun PlaylistScreen(
                         }
                     }
                 }
+                YtmCollectionTopBar(listState, playlist.title, onBack = { navController.navigateUp() }, onMore = { playlistMenu = true })
             }
         }
     }

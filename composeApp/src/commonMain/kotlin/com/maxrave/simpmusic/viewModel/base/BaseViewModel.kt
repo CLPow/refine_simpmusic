@@ -81,7 +81,9 @@ abstract class BaseViewModel :
         }
 
     // Loading dialog
-    private val _showLoadingDialog: MutableStateFlow<Pair<Boolean, String>> = MutableStateFlow(false to getString(Res.string.loading))
+    // Starts with no text: the label is only shown once the dialog opens, and resolving it here
+    // blocked the main thread on a resource read for every view model created.
+    private val _showLoadingDialog: MutableStateFlow<Pair<Boolean, String>> = MutableStateFlow(false to "")
     val showLoadingDialog: StateFlow<Pair<Boolean, String>> get() = _showLoadingDialog
 
     fun showLoadingDialog(message: String? = null) {
@@ -89,7 +91,7 @@ abstract class BaseViewModel :
     }
 
     fun hideLoadingDialog() {
-        _showLoadingDialog.value = false to getString(Res.string.loading)
+        _showLoadingDialog.value = false to _showLoadingDialog.value.second
     }
 
     private fun getNowPlayingVideoId() {

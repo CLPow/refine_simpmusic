@@ -42,6 +42,9 @@ interface MediaPlayerHandler {
 
     fun toggleLike()
 
+    /** YouTube Music's thumbs down: rates the playing song down on the account and skips it. */
+    fun dislike()
+
     fun like(liked: Boolean)
 
     fun resetSongAndQueue()

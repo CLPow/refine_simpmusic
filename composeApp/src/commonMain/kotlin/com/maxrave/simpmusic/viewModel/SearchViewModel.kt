@@ -19,7 +19,7 @@ import com.maxrave.domain.utils.toQueryList
 import com.maxrave.logger.LogLevel
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,7 +27,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import org.jetbrains.compose.resources.StringResource
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.albums
@@ -106,59 +105,28 @@ class SearchViewModel(
     private val _searchHistory: MutableStateFlow<List<String>> = MutableStateFlow(emptyList())
     val searchHistory: StateFlow<List<String>> get() = _searchHistory.asStateFlow()
 
-    /** Browse categories shown on the empty search screen, the way YouTube Music itself does. */
-    private val _moodAndGenres: MutableStateFlow<Mood?> = MutableStateFlow(null)
-    val moodAndGenres: StateFlow<Mood?> get() = _moodAndGenres.asStateFlow()
-
-    /** Cover art per category params, filled in as tiles scroll into view. */
-    private val _moodArtwork: MutableStateFlow<Map<String, String>> = MutableStateFlow(emptyMap())
-    val moodArtwork: StateFlow<Map<String, String>> get() = _moodArtwork.asStateFlow()
-
-    private val requestedArtwork = mutableSetOf<String>()
-
     var regionCode: String? = null
     var language: String? = null
 
+    /** The filtered search in flight; a newer chip or query replaces it. */
+    private var filterJob: Job? = null
+
+    /** The suggestion request in flight; each keystroke replaces it. */
+    private var suggestJob: Job? = null
+
+    private var historyJob: Job? = null
+
     init {
-        regionCode = runBlocking { dataStoreManager.location.first() }
-        language = runBlocking { dataStoreManager.getString(SELECTED_LANGUAGE).first() }
+        viewModelScope.launch {
+            regionCode = dataStoreManager.location.first()
+            language = dataStoreManager.getString(SELECTED_LANGUAGE).first()
+        }
         getSearchHistory()
     }
 
-    /**
-     * Fetched once for the app's lifetime — this ViewModel is a Koin `single`, and the category
-     * list changes about as often as YouTube ships a new mood, so re-fetching on every visit to
-     * the search tab would be pure waste.
-     */
-    private fun getMoodAndGenres() {
-        if (_moodAndGenres.value != null) return
-        viewModelScope.launch {
-            homeRepository.getMoodAndMomentsData().collect { resource ->
-                if (resource is Resource.Success) {
-                    _moodAndGenres.value = resource.data
-                }
-            }
-        }
-    }
-
-    /**
-     * Resolve the cover for one category. Called from the tile itself, so only categories the user
-     * actually scrolls to cost a request — [requestedArtwork] keeps a tile scrolling in and out of
-     * view from firing it again.
-     */
-    fun loadMoodArtwork(params: String) {
-        if (!requestedArtwork.add(params)) return
-        viewModelScope.launch {
-            homeRepository.getMoodCategoryArtwork(params).collect { url ->
-                if (url != null) {
-                    _moodArtwork.update { it + (params to url) }
-                }
-            }
-        }
-    }
-
     private fun getSearchHistory() {
-        viewModelScope.launch {
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
             searchRepository.getSearchHistory().collect { values ->
                 if (values.isNotEmpty()) {
                     values.toQueryList().reversed().let { list ->
@@ -177,23 +145,33 @@ class SearchViewModel(
         viewModelScope.launch {
             searchRepository.insertSearchHistory(SearchHistory(query = query)).collectLatest {
                 Logger.d(tag, "Inserted search history: $query, $it")
-                getSearchHistory()
             }
+            getSearchHistory()
         }
     }
 
     fun deleteSearchHistory() {
         viewModelScope.launch {
             searchRepository.deleteSearchHistory()
-            delay(1000)
+            getSearchHistory()
+        }
+    }
+
+    /** YouTube Music removes one recent search at a time, from a long press on it. */
+    fun deleteSearchHistoryItem(query: String) {
+        _searchHistory.update { list -> list.filter { it != query } }
+        viewModelScope.launch {
+            searchRepository.deleteSearchHistoryItem(query)
             getSearchHistory()
         }
     }
 
     fun searchSongs(query: String) {
         _searchScreenUIState.value = SearchScreenUIState.Loading
-        viewModelScope.launch {
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
             searchRepository.getSearchDataSong(query).collect { values ->
+                if (_searchScreenState.value.query.isNotBlank() && _searchScreenState.value.query != query) return@collect
                 when (values) {
                     is Resource.Success -> {
                         values.data?.let { songsList ->
@@ -275,7 +253,9 @@ class SearchViewModel(
     }
 
     fun suggestQuery(query: String) {
-        viewModelScope.launch {
+        // A slow answer for an older prefix must never replace the newer one.
+        suggestJob?.cancel()
+        suggestJob = viewModelScope.launch {
             searchRepository.getSuggestQuery(query).collect { values ->
                 when (values) {
                     is Resource.Success -> {
@@ -300,8 +280,10 @@ class SearchViewModel(
 
     fun searchAlbums(query: String) {
         _searchScreenUIState.value = SearchScreenUIState.Loading
-        viewModelScope.launch {
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
             searchRepository.getSearchDataAlbum(query).collect { values ->
+                if (_searchScreenState.value.query.isNotBlank() && _searchScreenState.value.query != query) return@collect
                 when (values) {
                     is Resource.Success -> {
                         values.data?.let { albumsList ->
@@ -325,8 +307,10 @@ class SearchViewModel(
 
     fun searchFeaturedPlaylist(query: String) {
         _searchScreenUIState.value = SearchScreenUIState.Loading
-        viewModelScope.launch {
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
             searchRepository.getSearchDataFeaturedPlaylist(query).collect { values ->
+                if (_searchScreenState.value.query.isNotBlank() && _searchScreenState.value.query != query) return@collect
                 when (values) {
                     is Resource.Success -> {
                         values.data?.let { featuredPlaylistList ->
@@ -350,8 +334,10 @@ class SearchViewModel(
 
     fun searchPodcast(query: String) {
         _searchScreenUIState.value = SearchScreenUIState.Loading
-        viewModelScope.launch {
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
             searchRepository.getSearchDataPodcast(query).collect { values ->
+                if (_searchScreenState.value.query.isNotBlank() && _searchScreenState.value.query != query) return@collect
                 when (values) {
                     is Resource.Success -> {
                         values.data?.let { podcastList ->
@@ -375,8 +361,10 @@ class SearchViewModel(
 
     fun searchArtists(query: String) {
         _searchScreenUIState.value = SearchScreenUIState.Loading
-        viewModelScope.launch {
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
             searchRepository.getSearchDataArtist(query).collect { values ->
+                if (_searchScreenState.value.query.isNotBlank() && _searchScreenState.value.query != query) return@collect
                 when (values) {
                     is Resource.Success -> {
                         values.data?.let { artistsList ->
@@ -400,8 +388,10 @@ class SearchViewModel(
 
     fun searchPlaylists(query: String) {
         _searchScreenUIState.value = SearchScreenUIState.Loading
-        viewModelScope.launch {
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
             searchRepository.getSearchDataPlaylist(query).collect { values ->
+                if (_searchScreenState.value.query.isNotBlank() && _searchScreenState.value.query != query) return@collect
                 when (values) {
                     is Resource.Success -> {
                         values.data?.let { playlistsList ->
@@ -425,8 +415,10 @@ class SearchViewModel(
 
     fun searchVideos(query: String) {
         _searchScreenUIState.value = SearchScreenUIState.Loading
-        viewModelScope.launch {
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
             searchRepository.getSearchDataVideo(query).collect { values ->
+                if (_searchScreenState.value.query.isNotBlank() && _searchScreenState.value.query != query) return@collect
                 when (values) {
                     is Resource.Success -> {
                         values.data?.let { videosList ->
