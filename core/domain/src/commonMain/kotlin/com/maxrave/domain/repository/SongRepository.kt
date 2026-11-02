@@ -12,6 +12,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDateTime
 
 interface SongRepository {
+    /**
+     * The song (`MUSIC_VIDEO_TYPE_ATV`) that an official music video [track] is the video of, or
+     * null when [track] is not an official video or no result matches it exactly.
+     */
+    suspend fun findSongVersion(track: Track): Track?
+
     fun getAllSongs(limit: Int): Flow<List<SongEntity>>
 
     suspend fun setInLibrary(

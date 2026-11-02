@@ -9,7 +9,6 @@ import com.maxrave.simpmusic.viewModel.LibraryViewModel
 import com.maxrave.simpmusic.viewModel.LocalPlaylistViewModel
 import com.maxrave.simpmusic.viewModel.LogInViewModel
 import com.maxrave.simpmusic.viewModel.MoreAlbumsViewModel
-import com.maxrave.simpmusic.viewModel.NotificationViewModel
 import com.maxrave.simpmusic.viewModel.NowPlayingBottomSheetViewModel
 import com.maxrave.simpmusic.viewModel.PlaylistViewModel
 import com.maxrave.simpmusic.viewModel.RecentlySongsViewModel
@@ -129,11 +128,6 @@ val viewModelModule =
             LocalPlaylistViewModel(
                 get(),
                 get(),
-                get(),
-            )
-        }
-        viewModel {
-            NotificationViewModel(
                 get(),
             )
         }

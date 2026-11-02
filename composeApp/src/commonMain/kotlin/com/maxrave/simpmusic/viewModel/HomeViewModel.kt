@@ -41,6 +41,10 @@ import org.jetbrains.compose.resources.getString
 import simpmusic.composeapp.generated.resources.shelf_on_repeat
 import simpmusic.composeapp.generated.resources.shelf_buried_favourites
 import com.maxrave.domain.repository.AccountRepository
+import com.maxrave.domain.utils.MusicVideoType
+import com.maxrave.domain.utils.toTrack
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 
 class HomeViewModel(
     private val dataStoreManager: DataStoreManager,
@@ -296,6 +300,7 @@ class HomeViewModel(
                     _continuation.value = home.data?.first
                     _homeItemList.value = home.data?.second ?: listOf()
                     lastLoadedAtMs = currentTimeMs()
+                    launch { showSongVersionsOnSpeedDial() }
                     // A dead cookie still gets a feed, only a signed-out one. Ask once per load.
                     launch { accountRepository.verifySignIn() }
                 } else {
@@ -417,6 +422,51 @@ class HomeViewModel(
     override fun onCleared() {
         super.onCleared()
         homeJob?.cancel()
+    }
+
+    /**
+     * Speed dial (the web's "Listen again") shows what YouTube sends, and for a song that also has
+     * an official video it sometimes sends the video: A2O's "NEON" came as KGK2KZOFAPE, its tile
+     * a frame of the group, and playing it carried that frame into the player. Each such tile is
+     * swapped for its song once found, so the tile shows the album cover and plays the song.
+     * Tiles with no exact match stay as sent.
+     */
+    private suspend fun showSongVersionsOnSpeedDial() {
+        val videos =
+            _homeItemList.value
+                .filter { it.isSpeedDial }
+                .flatMap { it.contents.filterNotNull() }
+                .filter { !it.videoId.isNullOrEmpty() && MusicVideoType.isOfficialVideo(it.videoType) }
+                .distinctBy { it.videoId }
+        if (videos.isEmpty()) return
+        val songs =
+            videos
+                .map { tile -> viewModelScope.async { tile.videoId to songVersionLookup.findSongVersion(tile.toTrack()) } }
+                .awaitAll()
+                .mapNotNull { (videoId, song) -> song?.let { videoId to it } }
+                .toMap()
+        if (songs.isEmpty()) return
+        _homeItemList.update { shelves ->
+            shelves.map { shelf ->
+                if (!shelf.isSpeedDial) {
+                    shelf
+                } else {
+                    shelf.copy(
+                        contents =
+                            shelf.contents.map { tile ->
+                                val song = tile?.videoId?.let(songs::get) ?: return@map tile
+                                tile.copy(
+                                    videoId = song.videoId,
+                                    videoType = song.videoType,
+                                    thumbnails = song.thumbnails?.takeIf { it.isNotEmpty() } ?: tile.thumbnails,
+                                    album = song.album ?: tile.album,
+                                    durationSeconds = song.durationSeconds ?: tile.durationSeconds,
+                                )
+                            },
+                    )
+                }
+            }
+        }
     }
 
     companion object {

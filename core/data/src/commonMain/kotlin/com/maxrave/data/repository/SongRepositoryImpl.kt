@@ -41,6 +41,8 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDateTime
 import org.koin.mp.KoinPlatform.getKoin
@@ -344,6 +346,60 @@ internal class SongRepositoryImpl(
     private fun List<SongItem>.songsOnly(): List<SongItem> = filter { MusicVideoType.isPlayableSong(it.musicVideoType) }
 
     /**
+     * [songsOnly] for a radio, except that a radio with no songs left keeps its official videos.
+     *
+     * The radio of an official video is itself almost all official videos (measured on A2O's
+     * "NEON" video, KGK2KZOFAPE: 48 of 50), so filtering it to songs left nothing and playback
+     * stopped after the one track. Videos played as audio are better than silence.
+     */
+    private fun List<SongItem>.songsOrOfficialVideos(): List<SongItem> =
+        songsOnly().ifEmpty { filter { MusicVideoType.isOfficialVideo(it.musicVideoType) } }
+
+    // Official video id -> its song, or null when YouTube had none. For this run of the app.
+    private val songVersions = mutableMapOf<String, Track?>()
+    private val songVersionsLock = Mutex()
+
+    override suspend fun findSongVersion(track: Track): Track? =
+        withContext(Dispatchers.IO) {
+            if (!MusicVideoType.isOfficialVideo(track.videoType)) return@withContext null
+            songVersionsLock.withLock {
+                if (songVersions.containsKey(track.videoId)) return@withContext songVersions[track.videoId]
+            }
+            // A tile or queue row for a video carries no link to its song (checked on Home, the
+            // radio and the player response), so ask the Songs search and accept only an exact
+            // match: the same title and at least one of the same artists. Anything less plays
+            // the video as before.
+            val title = track.title.songTitleKey()
+            val artistIds = track.artists.orEmpty().mapNotNull { it.id?.takeIf(String::isNotBlank) }.toSet()
+            val artistNames = track.artists.orEmpty().map { it.name.trim().lowercase() }.filter(String::isNotEmpty).toSet()
+            if (title.isEmpty() || (artistIds.isEmpty() && artistNames.isEmpty())) return@withContext null
+            val query = (listOf(track.title.songTitleQuery()) + track.artists.orEmpty().map { it.name }).joinToString(" ")
+            val result = youTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull() ?: return@withContext null
+            val song =
+                result.items
+                    .filterIsInstance<SongItem>()
+                    .take(5)
+                    .firstOrNull { item ->
+                        (item.musicVideoType == null || MusicVideoType.isAudio(item.musicVideoType)) &&
+                            item.title.songTitleKey() == title &&
+                            item.artists.any { artist ->
+                                (artist.id != null && artist.id in artistIds) || artist.name.trim().lowercase() in artistNames
+                            }
+                    }?.toTrack()
+                    ?.let { found ->
+                        found.copy(
+                            thumbnails =
+                                found.thumbnails?.map {
+                                    it.copy(url = Regex("=w\\d+-h\\d+").replace(it.url, "=w544-h544"), width = 544, height = 544)
+                                },
+                        )
+                    }
+            Logger.d(TAG, "findSongVersion ${track.videoId} (${track.title}) -> ${song?.videoId}")
+            songVersionsLock.withLock { songVersions[track.videoId] = song }
+            song
+        }
+
+    /**
      * Drop entries shorter than the user's skip-short threshold. Unknown duration is kept:
      * a missing length is not a reason to hide a track.
      */
@@ -379,7 +435,7 @@ internal class SongRepositoryImpl(
                     Logger.e(TAG, "getContinueTrack -> ${result.exceptionOrNull()?.message}")
                     emit(Pair(null, null))
                 } else {
-                    val data = next.items.songsOnly().dropShortWhenConfigured()
+                    val data = next.items.songsOrOfficialVideos().dropShortWhenConfigured()
                     emit(Pair(data.toListTrack(), next.continuation))
                 }
             } else {
@@ -562,7 +618,7 @@ internal class SongRepositoryImpl(
                     next.items
                         .filter { it.id != videoId }
                         .distinct()
-                        .songsOnly()
+                        .songsOrOfficialVideos()
                         .dropShortWhenConfigured()
                 emit(Resource.Success<Pair<List<Track>, String?>>(Pair(data.toListTrack().toList(), next.continuation)))
             }
@@ -575,7 +631,22 @@ internal class SongRepositoryImpl(
             if (next == null) {
                 emit(Resource.Error(result.exceptionOrNull()?.message ?: "Error"))
             } else {
-                emit(Resource.Success<Pair<List<Track>, String?>>(Pair(next.items.songsOnly().toListTrack(), next.continuation)))
+                emit(Resource.Success<Pair<List<Track>, String?>>(Pair(next.items.songsOrOfficialVideos().toListTrack(), next.continuation)))
             }
         }.flowOn(Dispatchers.IO)
 }
+
+// What a video title says inside quotes is the song: A2O MAY 'BAD HABITS TONITE' Official Video.
+// The quotes must open after a space and close before one, so the apostrophes in "Don't" and
+// "let's" are never read as quotes.
+private val QUOTED_TITLE = Regex("""(?:^|\s)['\u2018\u201C"](.+?)['\u2019\u201D"](?=\s|$)""")
+
+// Bracketed video labels that are not part of the song's title.
+private val VIDEO_LABEL =
+    Regex("""\s*[(\[][^)\]]*\b(official|video|mv|m/v|lyrics?|visuali[sz]er|performance|audio|teaser)\b[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
+
+/** The song title a video title stands for, for the search query. */
+private fun String.songTitleQuery(): String = (QUOTED_TITLE.find(this)?.groupValues?.get(1) ?: this).replace(VIDEO_LABEL, "").trim()
+
+/** [songTitleQuery] in a form two titles can be compared by. */
+private fun String.songTitleKey(): String = songTitleQuery().lowercase().replace(Regex("\\s+"), " ")

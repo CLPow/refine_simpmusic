@@ -96,7 +96,6 @@ import com.maxrave.simpmusic.ui.icon.PersonAdd
 import com.maxrave.simpmusic.ui.icon.Search
 import com.maxrave.simpmusic.ui.icon.Settings
 import com.maxrave.simpmusic.ui.icon.SimpIcons
-import com.maxrave.simpmusic.ui.navigation.destination.home.NotificationDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.RecentlySongsDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
@@ -223,9 +222,6 @@ fun YtmTopBar(
             Spacer(Modifier.weight(1f))
         }
         if (showActions) {
-            IconButton(onClick = { navController.navigate(NotificationDestination) { launchSingleTop = true } }) {
-                Icon(SimpIcons.Notifications, contentDescription = stringResource(Res.string.ytm_notifications), tint = Color.White)
-            }
             if (onBack != null) {
                 IconButton(onClick = { navController.navigate(SearchDestination) { launchSingleTop = true } }) {
                     Icon(SimpIcons.Search, contentDescription = stringResource(Res.string.ytm_search), tint = Color.White)

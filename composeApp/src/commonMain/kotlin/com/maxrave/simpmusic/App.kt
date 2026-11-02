@@ -47,7 +47,6 @@ import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.ui.component.AppBottomNavigationBar
 import com.maxrave.simpmusic.ui.component.AppNavigationRail
-import com.maxrave.simpmusic.ui.navigation.destination.home.NotificationDestination
 import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDestination
 import com.maxrave.simpmusic.ui.navigation.destination.library.LibraryDynamicPlaylistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
@@ -108,10 +107,8 @@ fun App(viewModel: SharedViewModel = koinInject()) {
         Logger.d("MainActivity", "onCreate: $data")
         if (data != null) {
             if (data == "simpmusic://notification".toUri()) {
+                // A release notification left in the shade from an older version: nothing to open.
                 viewModel.setIntent(null)
-                navController.navigate(
-                    NotificationDestination,
-                )
             } else if (data.host == "simpmusic.org" || data.scheme == "simpmusic") {
                 // https://simpmusic.org/app/watch?v=VIDEO_ID
                 // https://simpmusic.org/app/playlist?list=PLAYLIST_ID
