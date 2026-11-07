@@ -3,10 +3,10 @@ package com.maxrave.simpmusic.utils
 import org.jetbrains.compose.resources.getString
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.explicit_content_blocked
-import simpmusic.composeapp.generated.resources.new_albums
-import simpmusic.composeapp.generated.resources.new_singles
 import simpmusic.composeapp.generated.resources.this_app_needs_to_access_your_notification
 import simpmusic.composeapp.generated.resources.time_out_check_internet_connection_or_change_piped_instance_in_settings
+import simpmusic.composeapp.generated.resources.ytm_stream_wifi_only_blocked
+import simpmusic.composeapp.generated.resources.ytm_track_skipped
 
 object ComposeResUtils {
     suspend fun getResString(
@@ -26,12 +26,12 @@ object ComposeResUtils {
                 getString(Res.string.time_out_check_internet_connection_or_change_piped_instance_in_settings, *format)
             }
 
-            StringType.NEW_SINGLES -> {
-                getString(Res.string.new_singles)
+            StringType.TRACK_SKIPPED -> {
+                getString(Res.string.ytm_track_skipped)
             }
 
-            StringType.NEW_ALBUMS -> {
-                getString(Res.string.new_albums)
+            StringType.WIFI_ONLY -> {
+                getString(Res.string.ytm_stream_wifi_only_blocked)
             }
         }
 
@@ -39,7 +39,7 @@ object ComposeResUtils {
         EXPLICIT_CONTENT_BLOCKED,
         NOTIFICATION_REQUEST,
         TIME_OUT_ERROR,
-        NEW_SINGLES,
-        NEW_ALBUMS,
+        TRACK_SKIPPED,
+        WIFI_ONLY,
     }
 }

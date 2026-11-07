@@ -365,7 +365,7 @@ fun SearchScreen(
                     when (state.searchType) {
                         SearchType.SONGS ->
                             itemsIndexed(state.searchSongsResult, key = { i, it -> "s-$i-" + it.videoId }) { _, song ->
-                                SongResultRow(song, { playSong(song) }) { menuTrack = song.toTrack() }
+                                SongResultRow(song, { playSong(song) }, { menuTrack = song.toTrack() }, { sharedViewModel.addSongToQueue(song.toTrack()) })
                             }
 
                         SearchType.VIDEOS ->
@@ -645,6 +645,7 @@ private fun SongResultRow(
     song: SongsResult,
     onClick: () -> Unit,
     onMore: (() -> Unit)?,
+    onSwipeQueue: (() -> Unit)? = null,
 ) {
     YtmSongRow(
         title = song.title.orEmpty(),
@@ -657,6 +658,7 @@ private fun SongResultRow(
         thumbnail = song.thumbnails?.lastOrNull()?.url,
         onClick = onClick,
         onMore = onMore,
+        onSwipeQueue = onSwipeQueue,
     )
 }
 

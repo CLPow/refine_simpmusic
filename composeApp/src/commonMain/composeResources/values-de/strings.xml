@@ -295,7 +295,6 @@
     <string name="play_video_instead_of_audio_warning">Diese Aktion wird den Player-Cache löschen. Fortfahren?</string>
     <string name="quality_video">Videoqualität</string>
     <string name="add_to_queue">Zur Warteschlange hinzufügen</string>
-    <string name="added_to_queue">Zur Warteschlange hinzugefügt</string>
     <string name="new_release">Neuerscheinung</string>
     <string name="music_video">Musikvideo</string>
     <string name="your_music_is_always_up_to_date">DEINE MUSIK IST IMMER AKTUELL</string>
@@ -333,8 +332,6 @@
     <string name="delete">Löschen</string>
     <string name="top_videos">Top Videos</string>
     <string name="trending">Im Trend</string>
-    <string name="new_singles">Neue Singles</string>
-    <string name="new_albums">Neue Alben</string>
     <string name="notification">Benachrichtigung</string>
     <string name="month_s_ago">Vor %1$d Monaten</string>
     <string name="day_s_ago">Vor %1$d Tagen</string>

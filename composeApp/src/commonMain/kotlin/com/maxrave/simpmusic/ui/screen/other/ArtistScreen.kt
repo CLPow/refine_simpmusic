@@ -190,6 +190,7 @@ fun ArtistScreen(
                                 subtitle = listOfNotNull(song.artists?.joinToString(", ") { it.name }, song.album?.name).filter { it.isNotBlank() }.joinToString(" • "),
                                 thumbnail = song.thumbnails?.lastOrNull()?.url,
                                 isCurrent = song.videoId == playingVideoId,
+                                onSwipeQueue = { sharedViewModel.addSongToQueue(song) },
                                 onClick = {
                                     // YouTube Music plays the artist's top songs as a list, from
                                     // the tapped one, not a one-song radio.

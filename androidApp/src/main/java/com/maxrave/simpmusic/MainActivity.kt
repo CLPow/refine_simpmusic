@@ -254,6 +254,10 @@ class MainActivity : AppCompatActivity() {
                     when (type) {
                         is ToastType.ExplicitContent ->
                             ComposeResUtils.getResString(ComposeResUtils.StringType.EXPLICIT_CONTENT_BLOCKED)
+                        is ToastType.TrackSkipped ->
+                            ComposeResUtils.getResString(ComposeResUtils.StringType.TRACK_SKIPPED)
+                        is ToastType.WifiOnly ->
+                            ComposeResUtils.getResString(ComposeResUtils.StringType.WIFI_ONLY)
                         is ToastType.PlayerError ->
                             ComposeResUtils.getResString(ComposeResUtils.StringType.TIME_OUT_ERROR, type.error)
                     },

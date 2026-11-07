@@ -96,7 +96,6 @@
     </plurals>
     <string name="ytm_back">Back</string>
     <string name="ytm_search_hint">Search songs, albums, artists</string>
-    <string name="ytm_notifications">Notifications</string>
     <string name="ytm_search">Search</string>
     <string name="ytm_account">Account</string>
     <string name="ytm_not_signed_in">Not signed in</string>
@@ -178,6 +177,25 @@
     <string name="ytm_subscribe">Subscribe</string>
     <string name="ytm_subscribed">Subscribed</string>
     <string name="ytm_single">Single</string>
-    <string name="ytm_no_notifications">No notifications</string>
     <string name="ytm_explicit">Explicit</string>
+    <string name="ytm_track_skipped">Track is unavailable. Skipping to the next one.</string>
+    <string name="ytm_stream_wifi_only_blocked">Current settings allow streaming over Wi-Fi or unmetered data only.</string>
+    <string name="ytm_audio_quality_wifi">Audio quality on Wi-Fi</string>
+    <string name="ytm_audio_quality_mobile">Audio quality on mobile network</string>
+    <string name="ytm_stream_wifi_only">Stream via Wi-Fi only</string>
+    <string name="ytm_stream_wifi_only_summary">Streaming over Wi-Fi and unmetered data only helps reduce mobile data usage</string>
+    <string name="ytm_double_tap_seek">Double-tap to seek</string>
+    <string name="ytm_n_seconds">%1$d seconds</string>
+    <string name="ytm_allow_external_start">Allow external devices to start playback</string>
+    <string name="ytm_allow_external_start_summary">For example, car Bluetooth, wired headsets</string>
+    <string name="ytm_song_play_next">Song will play next</string>
+    <string name="ytm_song_added_to_queue">Song added to queue</string>
+    <string name="ytm_album_added_to_queue">Album added to queue</string>
+    <string name="ytm_playlist_added_to_queue">Playlist added to queue</string>
+    <string name="ytm_songs_added_to_queue">%1$d songs added to queue</string>
+    <string name="ytm_songs_play_next">%1$d songs will play next</string>
+    <string name="ytm_pin">Pin to top</string>
+    <string name="ytm_unpin">Unpin</string>
+    <string name="ytm_pinned">Pinned</string>
+    <string name="ytm_autoplay_off_message">Autoplay is now off. This setting controls autoplay for tracks, albums, and playlists.</string>
 </resources>

@@ -21,14 +21,16 @@ object LyricsSourceOrder {
      */
     const val SPOTIFY = "spotify_lyrics_source"
 
-    /**
-     * SimpMusic first because it is the app's own database and carries timing contributed for these
-     * exact videos; Spotify next because its coverage is the best of the remainder when a session
-     * exists; LRCLIB then BetterLyrics as broad community sources; YouTube captions last, since a
-     * caption track is often auto-generated or a translation rather than lyrics.
-     */
+    /** YouTube Music's own lyrics (see `YouTube.youTubeMusicLyrics`). */
+    const val YOUTUBE_MUSIC = "youtube_music_lyrics_source"
+
+    /** The order lyrics sources are asked in; the comments below give each one's reason. */
     val DEFAULT: List<String> =
         listOf(
+            // YouTube Music's own lyrics first (2.3.8): what YouTube Music itself shows, licensed
+            // and timed for this exact recording, so they neither go missing for want of a
+            // match nor drift the way a lyric matched by title and length can.
+            YOUTUBE_MUSIC,
             // Best timing first (2.3.2): BetterLyrics carries Apple Music's professionally timed
             // lyrics, the closest to YouTube Music's own; LRCLIB is matched on the track's length.
             // SimpMusic's crowd-sourced timings were often off, so they now only fill gaps.

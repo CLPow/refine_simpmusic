@@ -1,5 +1,6 @@
 package com.maxrave.domain.repository
 
+import com.maxrave.domain.data.model.queue.RadioChip
 import com.maxrave.domain.data.model.home.HomeItem
 import com.maxrave.domain.data.entities.QueueEntity
 import com.maxrave.domain.data.entities.SongEntity
@@ -17,6 +18,12 @@ interface SongRepository {
      * null when [track] is not an official video or no result matches it exactly.
      */
     suspend fun findSongVersion(track: Track): Track?
+
+    /** Up next's radio tuning chips for the radio of [videoId] in [playlistId]; empty when none. */
+    suspend fun getRadioChips(
+        videoId: String,
+        playlistId: String,
+    ): List<RadioChip>
 
     fun getAllSongs(limit: Int): Flow<List<SongEntity>>
 

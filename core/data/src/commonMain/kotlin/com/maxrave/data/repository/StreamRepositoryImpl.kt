@@ -14,6 +14,7 @@ import com.maxrave.domain.extension.isAfter
 import com.maxrave.domain.extension.isBefore
 import com.maxrave.domain.extension.now
 import com.maxrave.domain.extension.plusSeconds
+import com.maxrave.data.platform.isNetworkMetered
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.repository.PlaybackPingStatus
 import com.maxrave.domain.repository.PlaybackTracking
@@ -185,13 +186,14 @@ internal class StreamRepositoryImpl(
         isDownloading: Boolean,
         isVideo: Boolean,
         muxed: Boolean,
+        audioItag: Int?,
     ): Flow<String?> =
         flow {
             val itag =
-                if (isDownloading) {
-                    QUALITY.itagOf(dataStoreManager.downloadQuality.first())
-                } else {
-                    QUALITY.itagOf(dataStoreManager.quality.first())
+                when {
+                    audioItag != null -> audioItag
+                    isDownloading -> QUALITY.itagOf(dataStoreManager.downloadQuality.first())
+                    else -> wantedAudioItag(dataStoreManager)
                 }
             val videoItag =
                 if (!muxed) {
@@ -480,6 +482,10 @@ internal class StreamRepositoryImpl(
         }.flowOn(Dispatchers.IO)
 
     override fun is403Url(url: String) = flow { emit(youTube.is403Url(url)) }.flowOn(Dispatchers.IO)
+
+    override suspend fun wantedAudioItag(dataStoreManager: DataStoreManager): Int =
+        // YouTube Music's separate "Audio quality on Wi-Fi" / "on mobile network".
+        QUALITY.itagOf(if (isNetworkMetered()) dataStoreManager.qualityMobile.first() else dataStoreManager.quality.first())
 
     override suspend fun invalidateFormat(videoId: String) {
         withContext(Dispatchers.IO) {

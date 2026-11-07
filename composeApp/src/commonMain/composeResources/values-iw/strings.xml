@@ -277,7 +277,6 @@ SimpMusic תמיד בחינם וללא פרסומות\n\nבונה מ ❤️מ-Tu
     <string name="play_video_instead_of_audio_warning">פעולה זו תמחק את המטמון של הנגן. לְהַמשִׁיך?</string>
     <string name="quality_video">איכות וידאו</string>
     <string name="add_to_queue">הוסף לתור</string>
-    <string name="added_to_queue">נוסף לתור</string>
     <string name="new_release">פרסום חדש</string>
     <string name="music_video">קליפ מוזיקה</string>
     <string name="your_music_is_always_up_to_date">המוזיקה שלך תמיד מעודכנת</string>
@@ -315,8 +314,6 @@ SimpMusic תמיד בחינם וללא פרסומות\n\nבונה מ ❤️מ-Tu
     <string name="delete">מחק</string>
     <string name="top_videos">סרטונים מובילים</string>
     <string name="trending">מגמתי</string>
-    <string name="new_singles">סינגלים חדשים</string>
-    <string name="new_albums">אלבומים חדשים</string>
     <string name="notification">התראה</string>
     <string name="month_s_ago">לפני %1$d חודש(ים)</string>
     <string name="day_s_ago">לפני %1$d ימים</string>

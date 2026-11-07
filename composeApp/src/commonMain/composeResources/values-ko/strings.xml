@@ -294,7 +294,6 @@
     <string name="play_video_instead_of_audio_warning">계속하면 플레이어 캐시가 지워집니다. 계속합니까?</string>
     <string name="quality_video">동영상 품질</string>
     <string name="add_to_queue">대기열에 추가</string>
-    <string name="added_to_queue">대기열에 추가됨</string>
     <string name="new_release">최신 음악</string>
     <string name="music_video">뮤직비디오</string>
     <string name="your_music_is_always_up_to_date">항상 최신 상태입니다</string>
@@ -332,8 +331,6 @@
     <string name="delete">삭제</string>
     <string name="top_videos">인기 동영상</string>
     <string name="trending">인기 급상승</string>
-    <string name="new_singles">새 싱글</string>
-    <string name="new_albums">새 앨범</string>
     <string name="notification">알림</string>
     <string name="month_s_ago">%1$d개월 전</string>
     <string name="day_s_ago">%1$d일 전</string>

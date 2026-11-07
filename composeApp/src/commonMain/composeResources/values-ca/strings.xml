@@ -295,7 +295,6 @@
     <string name="play_video_instead_of_audio_warning">Aquesta acció suprimirà la memòria cau del jugador. Continuar?</string>
     <string name="quality_video">Qualitat del vídeo</string>
     <string name="add_to_queue">Afegeix a la cua</string>
-    <string name="added_to_queue">Afegit a la cua</string>
     <string name="new_release">Nova versió</string>
     <string name="music_video">Vídeo musical</string>
     <string name="your_music_is_always_up_to_date">LA TEVA MÚSICA SEMPRE ESTÀ ACTUALITZADA</string>
@@ -333,8 +332,6 @@
     <string name="delete">Eliminar</string>
     <string name="top_videos">Els millors vídeos</string>
     <string name="trending">Tendències</string>
-    <string name="new_singles">Nous singles</string>
-    <string name="new_albums">Nous àlbums</string>
     <string name="notification">Notificació</string>
     <string name="month_s_ago">Fa %1$d mesos(s)</string>
     <string name="day_s_ago">Fa %1$d mesos(s)</string>

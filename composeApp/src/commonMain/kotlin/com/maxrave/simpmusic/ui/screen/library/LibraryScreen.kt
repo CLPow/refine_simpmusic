@@ -1,5 +1,16 @@
 package com.maxrave.simpmusic.ui.screen.library
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.runtime.rememberCoroutineScope
+import com.maxrave.domain.manager.DataStoreManager
+import com.maxrave.simpmusic.ui.component.selection.SongSelectionOverlay
+import com.maxrave.simpmusic.ui.component.selection.rememberSongSelectionState
+import com.maxrave.simpmusic.ui.icon.PushPin
+import kotlinx.coroutines.launch
+import simpmusic.composeapp.generated.resources.ytm_pin
+import simpmusic.composeapp.generated.resources.ytm_unpin
+import simpmusic.composeapp.generated.resources.ytm_pinned
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -115,6 +126,8 @@ private data class LibraryEntry(
     val round: Boolean = false,
     val songCount: Int? = null,
     val sortKey: Long = 0,
+    /** Pinned to the top of the Library, as YouTube Music lets you pin. */
+    val pinned: Boolean = false,
     val onClick: () -> Unit,
 )
 
@@ -150,6 +163,15 @@ fun LibraryScreen(
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     var menuSong by remember { mutableStateOf<SongEntity?>(null) }
     var showNewPlaylist by remember { mutableStateOf(false) }
+    val dataStoreManager: DataStoreManager = koinInject()
+    val pinnedKeys by dataStoreManager.pinnedLibraryKeys.collectAsStateWithLifecycle(emptySet())
+    val scope = rememberCoroutineScope()
+    val selection = rememberSongSelectionState()
+    // Picks belong to the chip they were made in (Songs and Downloads list different songs).
+    LaunchedEffect(chip) { selection.exit() }
+    val onPinChange: (LibraryEntry) -> Unit = { entry ->
+        scope.launch { dataStoreManager.setLibraryPinned(entry.key, !entry.pinned) }
+    }
 
     menuSong?.let { song ->
         NowPlayingBottomSheet(onDismiss = { menuSong = null }, navController = navController, song = song)
@@ -189,7 +211,7 @@ fun LibraryScreen(
 
     // Built once per change of the underlying lists, not on every recomposition.
     val entries: List<LibraryEntry> =
-        remember(chip, sort, loggedIn, youTubePlaylists, localPlaylists, liked, albums, artists, downloads, likedMusic) {
+        remember(chip, sort, loggedIn, youTubePlaylists, localPlaylists, liked, albums, artists, downloads, likedMusic, pinnedKeys) {
             fun playlistEntries() =
                 buildList {
                     add(
@@ -277,12 +299,17 @@ fun LibraryScreen(
                     LibraryChip.Artists -> artistEntries()
                     LibraryChip.Downloads -> songEntries(downloads, downloadsName) { (it.downloadedAt ?: it.inLibrary).toEpochKey() }
                 }
-            when (sort) {
-                // Most recently touched first. The sort is stable, so the account's YouTube
-                // playlists (no local timestamp) keep the order YouTube sent them in.
-                LibrarySort.RecentActivity, LibrarySort.RecentlyAdded -> list.sortedByDescending { it.sortKey }
-                LibrarySort.Alphabetical -> list.sortedBy { if (it.key == "liked") "" else it.title.lowercase() }
-            }
+            val sorted =
+                when (sort) {
+                    // Most recently touched first. The sort is stable, so the account's YouTube
+                    // playlists (no local timestamp) keep the order YouTube sent them in.
+                    LibrarySort.RecentActivity, LibrarySort.RecentlyAdded -> list.sortedByDescending { it.sortKey }
+                    LibrarySort.Alphabetical -> list.sortedBy { if (it.key == "liked") "" else it.title.lowercase() }
+                }
+            // Pins come first under every sort, after Liked Music, which keeps its fixed place.
+            val (likedMusicEntry, rest) = sorted.partition { it.key == "liked" }
+            val (pinned, others) = rest.partition { it.key in pinnedKeys }
+            likedMusicEntry + pinned.map { it.copy(pinned = true) } + others
         }
     val songChip = chip == LibraryChip.Songs || chip == LibraryChip.Downloads
     val useGrid = grid && !songChip
@@ -293,7 +320,12 @@ fun LibraryScreen(
 
     Box(Modifier.fillMaxSize().background(Ytm.Background)) {
         Column(Modifier.fillMaxSize()) {
-            YtmTopBar(navController = navController)
+            // The selection bar takes the top bar's place rather than stacking above it.
+            if (songChip && selection.isActive) {
+                SongSelectionOverlay(selection, entries.mapNotNull { songsById[it.key]?.toTrack() })
+            } else {
+                YtmTopBar(navController = navController)
+            }
             PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = { viewModel.refreshYouTubePlaylists() },
@@ -342,17 +374,20 @@ fun LibraryScreen(
                     }
                     items(entries, key = { it.key }) { entry ->
                         if (useGrid) {
-                            GridTile(entry)
+                            GridTile(entry, onPinChange)
                         } else if (songChip) {
                             YtmSongRow(
                                 title = entry.title,
                                 subtitle = entry.subtitle,
                                 thumbnail = entry.thumbnail,
-                                onClick = entry.onClick,
+                                onClick = { if (selection.isActive) selection.toggle(entry.key) else entry.onClick() },
                                 onMore = { menuSong = songsById[entry.key] },
+                                onLongClick = { selection.start(entry.key) },
+                                onSwipeQueue = { songsById[entry.key]?.let { sharedViewModel.addSongToQueue(it.toTrack()) } },
+                                selected = if (selection.isActive) selection.isSelected(entry.key) else null,
                             )
                         } else {
-                            ListRow(entry)
+                            ListRow(entry, onPinChange)
                         }
                     }
                 }
@@ -439,36 +474,87 @@ private fun EntryThumb(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun ListRow(entry: LibraryEntry) {
+private fun ListRow(
+    entry: LibraryEntry,
+    onPinChange: (LibraryEntry) -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = entry.onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier
+            .fillMaxWidth()
+            .combinedClickable(onClick = entry.onClick, onLongClick = { menu = true }.takeIf { entry.key != LIKED_KEY })
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        PinMenu(entry, menu, onDismiss = { menu = false }, onPinChange = onPinChange)
         EntryThumb(entry, 56.dp, if (entry.round) CircleShape else RoundedCornerShape(4.dp))
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(entry.title, style = typo().bodyLarge.copy(fontSize = 15.sp), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val second = entry.secondLine()
-            if (second.isNotBlank()) {
-                Text(second, style = typo().bodyMedium, color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
+            SecondLine(entry, typo().bodyMedium)
         }
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-private fun GridTile(entry: LibraryEntry) {
-    Column(Modifier.padding(vertical = 8.dp).clickable(onClick = entry.onClick)) {
+private fun GridTile(
+    entry: LibraryEntry,
+    onPinChange: (LibraryEntry) -> Unit,
+) {
+    var menu by remember { mutableStateOf(false) }
+    Column(Modifier.padding(vertical = 8.dp).combinedClickable(onClick = entry.onClick, onLongClick = { menu = true }.takeIf { entry.key != LIKED_KEY })) {
+        PinMenu(entry, menu, onDismiss = { menu = false }, onPinChange = onPinChange)
         androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
             EntryThumb(entry, maxWidth, if (entry.round) CircleShape else RoundedCornerShape(4.dp))
         }
         Spacer(Modifier.height(8.dp))
         Text(entry.title, style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium), color = Color.White, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        val second = entry.secondLine()
-        if (second.isNotBlank()) {
-            Text(second, style = typo().bodyMedium.copy(fontSize = 13.sp), color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        SecondLine(entry, typo().bodyMedium.copy(fontSize = 13.sp))
+    }
+}
+
+/** The grey second line, after YouTube Music's pin when the entry is pinned. */
+@Composable
+private fun SecondLine(
+    entry: LibraryEntry,
+    style: androidx.compose.ui.text.TextStyle,
+) {
+    val second = entry.secondLine()
+    if (second.isBlank() && !entry.pinned) return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (entry.pinned) {
+            Icon(
+                SimpIcons.PushPin,
+                contentDescription = stringResource(Res.string.ytm_pinned),
+                tint = Ytm.TextSecondary,
+                modifier = Modifier.padding(end = 4.dp).size(14.dp),
+            )
         }
+        Text(second, style = style, color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** Long-press menu on a Library entry: pin it to the top, or unpin it. Liked Music stays put. */
+@Composable
+private fun PinMenu(
+    entry: LibraryEntry,
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    onPinChange: (LibraryEntry) -> Unit,
+) {
+    if (entry.key == LIKED_KEY) return
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, containerColor = Ytm.Surface) {
+        DropdownMenuItem(
+            text = { Text(stringResource(if (entry.pinned) Res.string.ytm_unpin else Res.string.ytm_pin), color = Color.White) },
+            leadingIcon = { Icon(SimpIcons.PushPin, contentDescription = null, tint = Color.White) },
+            onClick = {
+                onDismiss()
+                onPinChange(entry)
+            },
+        )
     }
 }
 
@@ -530,3 +616,6 @@ internal fun NewPlaylistDialog(
 
 private fun kotlinx.datetime.LocalDateTime.toEpochKey(): Long =
     ((((year * 12L + month.ordinal) * 31 + day) * 24 + hour) * 60 + minute) * 60 + second
+
+/** Liked Music's entry: always first, never pinned. */
+private const val LIKED_KEY = "liked"

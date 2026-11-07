@@ -289,7 +289,6 @@
     <string name="play_video_instead_of_audio_warning">Това действие ще изтрие кеша. Сигурни ли сте?</string>
     <string name="quality_video">Качество на видеото</string>
     <string name="add_to_queue">Добави в опашка</string>
-    <string name="added_to_queue">Добавено в опашка</string>
     <string name="new_release">Ново издание</string>
     <string name="music_video">Музикално видео</string>
     <string name="your_music_is_always_up_to_date">МУЗИКАТА Е ВИНАГИ АКТУАЛНА</string>
@@ -327,8 +326,6 @@
     <string name="delete">Изтриване</string>
     <string name="top_videos">Най-популярните видеа</string>
     <string name="trending">Набиращи популярност</string>
-    <string name="new_singles">Нови сигнали</string>
-    <string name="new_albums">Нови албуми</string>
     <string name="notification">Известия</string>
     <string name="month_s_ago">Преди %1$d месеца(и)</string>
     <string name="day_s_ago">Преди %1$d ден(и)</string>

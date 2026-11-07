@@ -1,5 +1,9 @@
 package com.maxrave.simpmusic.ui.screen.other
 
+import com.maxrave.simpmusic.ui.component.selection.SongSelectionOverlay
+import com.maxrave.simpmusic.ui.component.selection.rememberSongSelectionState
+import com.maxrave.simpmusic.ui.component.ytm.SwipeToQueueRow
+import com.maxrave.simpmusic.viewModel.QueueItemKind
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -106,6 +110,7 @@ fun AlbumScreen(
     val playingVideoId by viewModel.nowPlayingVideoId.collectAsStateWithLifecycle()
     val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
     var menuTrack by remember { mutableStateOf<Track?>(null) }
+    val selection = rememberSongSelectionState()
     var albumMenu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
@@ -129,7 +134,7 @@ fun AlbumScreen(
             playlistName = uiState.title,
             isYourYouTubePlaylist = false,
             onSaveToLocal = {},
-            onAddToQueue = { sharedViewModel.addListToQueue(ArrayList(uiState.listTrack)) },
+            onAddToQueue = { sharedViewModel.addListToQueue(ArrayList(uiState.listTrack), QueueItemKind.ALBUM) },
         )
     }
 
@@ -219,8 +224,11 @@ fun AlbumScreen(
                             track = track,
                             isCurrent = track.videoId == playingVideoId,
                             showArtist = track.artists?.firstOrNull()?.name != uiState.artist.name,
-                            onClick = { viewModel.playTrack(track) },
+                            onClick = { if (selection.isActive) selection.toggle(track.videoId) else viewModel.playTrack(track) },
                             onMore = { menuTrack = track },
+                            onLongClick = { selection.start(track.videoId) },
+                            onSwipeQueue = { sharedViewModel.addSongToQueue(track) },
+                            selected = if (selection.isActive) selection.isSelected(track.videoId) else null,
                         )
                     }
                     item(key = "footer") {
@@ -255,6 +263,7 @@ fun AlbumScreen(
         }
         if (uiState.loadState == LocalPlaylistState.PlaylistLoadState.Success) {
             YtmCollectionTopBar(listState, uiState.title, onBack = { navController.navigateUp() }, onMore = { albumMenu = true })
+            SongSelectionOverlay(selection, uiState.listTrack)
         }
     }
 }
@@ -268,10 +277,16 @@ fun NumberedTrackRow(
     showArtist: Boolean,
     onClick: () -> Unit,
     onMore: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    onSwipeQueue: (() -> Unit)? = null,
+    selected: Boolean? = null,
 ) {
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    SwipeToQueueRow(
+        modifier = Modifier.fillMaxWidth().height(64.dp),
+        onClick = onClick,
+        onLongClick = onLongClick ?: onMore,
+        onSwipeQueue = onSwipeQueue,
+        selected = selected,
     ) {
         Text(
             number.toString(),
@@ -301,8 +316,12 @@ fun NumberedTrackRow(
                 }
             }
         }
-        androidx.compose.material3.IconButton(onClick = onMore) {
-            Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Ytm.TextSecondary)
+        if (selected == null) {
+            androidx.compose.material3.IconButton(onClick = onMore) {
+                Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Ytm.TextSecondary)
+            }
+        } else {
+            Spacer(Modifier.width(16.dp))
         }
     }
 }

@@ -1168,7 +1168,10 @@ class MpvPlayerAdapter(
      * JvmMediaPlayerHandlerImpl uses thread-safe StateFlow updates
      * and contains runBlocking calls that would deadlock on Main.
      */
-    private fun transitionToState(newState: InternalState) {
+    private fun transitionToState(
+        newState: InternalState,
+        emitError: Boolean = true,
+    ) {
         if (internalState == newState) return
 
         val oldState = internalState
@@ -1234,14 +1237,19 @@ class MpvPlayerAdapter(
             InternalState.ERROR -> {
                 listeners.forEach { it.onPlaybackStateChanged(PlayerConstants.STATE_IDLE) }
                 listeners.forEach { it.onIsPlayingChanged(false) }
-                listeners.forEach {
-                    it.onPlayerError(
-                        PlayerError(
-                            errorCode = 403,
-                            errorCodeName = "ERROR_UNKNOWN",
-                            message = "Can not extract playable URL or playback error",
-                        ),
-                    )
+                // A generic report for the load failures that have no error of their own. A caller
+                // that already reported the real error passes false: a second report counted as a
+                // second failure, and skipped a good track.
+                if (emitError) {
+                    listeners.forEach {
+                        it.onPlayerError(
+                            PlayerError(
+                                errorCode = 403,
+                                errorCodeName = "ERROR_UNKNOWN",
+                                message = "Can not extract playable URL or playback error",
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -1524,7 +1532,7 @@ class MpvPlayerAdapter(
                                 message = "Playback error",
                             )
                         listeners.forEach { it.onPlayerError(error) }
-                        transitionToState(InternalState.ERROR)
+                        transitionToState(InternalState.ERROR, emitError = false)
                     }
                 }
 

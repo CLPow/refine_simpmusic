@@ -349,7 +349,6 @@
     <string name="play_video_instead_of_audio_warning">This action will delete player cache. Continue?</string>
     <string name="quality_video">Video Quality</string>
     <string name="add_to_queue">Add to queue</string>
-    <string name="added_to_queue">Added to queue</string>
     <string name="new_release">New release</string>
     <string name="music_video">Music video</string>
     <string name="your_music_is_always_up_to_date">YOUR MUSIC IS ALWAYS UP-TO-DATE</string>
@@ -411,8 +410,6 @@
     <string name="delete">Delete</string>
     <string name="top_videos">Top videos</string>
     <string name="trending">Trending</string>
-    <string name="new_singles">New singles</string>
-    <string name="new_albums">New albums</string>
     <string name="notification">Notification</string>
     <string name="month_s_ago">%1$d month(s) ago</string>
     <string name="day_s_ago">%1$d day(s) ago</string>

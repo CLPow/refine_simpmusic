@@ -287,7 +287,6 @@
     <string name="play_video_instead_of_audio_warning">यह कार्य प्लेयर कैश को हटा देगा। जारी रखें?</string>
     <string name="quality_video">वीडियो गुणवत्ता</string>
     <string name="add_to_queue">कतार में जोड़ें</string>
-    <string name="added_to_queue">कतार में जोड़ दिया गया</string>
     <string name="new_release">नई रिलीज</string>
     <string name="music_video">संगीत वीडियो</string>
     <string name="your_music_is_always_up_to_date">आपका संगीत हमेशा अप-टू-डेट है</string>
@@ -324,8 +323,6 @@
     <string name="delete">हटाएं</string>
     <string name="top_videos">शीर्ष वीडियो</string>
     <string name="trending">ट्रेंडिंग</string>
-    <string name="new_singles">नए सिंगल्स</string>
-    <string name="new_albums">नए एल्बम</string>
     <string name="notification">सूचना</string>
     <string name="month_s_ago">%1$d महीने पहले</string>
     <string name="day_s_ago">%1$d दिन पहले</string>

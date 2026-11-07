@@ -82,7 +82,13 @@ interface StreamRepository {
         isDownloading: Boolean,
         isVideo: Boolean,
         muxed: Boolean = false, // m3u8 or mp4 (both contain audio and video)
+        // Asks for this audio itag instead of the quality setting's: a partly cached song keeps
+        // the format its cached bytes are in.
+        audioItag: Int? = null,
     ): Flow<String?>
+
+    /** The audio itag streaming would ask for right now: the Wi-Fi or mobile quality setting's. */
+    suspend fun wantedAudioItag(dataStoreManager: DataStoreManager): Int
 
     fun initPlayback(
         playback: String,

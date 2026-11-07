@@ -39,14 +39,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.ytm_song_play_next
+import simpmusic.composeapp.generated.resources.ytm_song_added_to_queue
 import simpmusic.composeapp.generated.resources.added_to_playlist
-import simpmusic.composeapp.generated.resources.added_to_queue
 import simpmusic.composeapp.generated.resources.added_to_youtube_playlist
 import simpmusic.composeapp.generated.resources.delete_song_from_playlist
 import simpmusic.composeapp.generated.resources.downloading
 import simpmusic.composeapp.generated.resources.error
 import simpmusic.composeapp.generated.resources.error_occurred
-import simpmusic.composeapp.generated.resources.play_next
 import simpmusic.composeapp.generated.resources.removed_download
 import simpmusic.composeapp.generated.resources.removed_from_YouTube_playlist
 import simpmusic.composeapp.generated.resources.share_url
@@ -353,13 +353,13 @@ class NowPlayingBottomSheetViewModel(
                 is NowPlayingBottomSheetUIEvent.PlayNext -> {
                     val songEntity = songRepository.getSongById(songUIState.videoId).singleOrNull() ?: return@launch
                     mediaPlayerHandler.playNext(songEntity.toTrack())
-                    makeToast(getString(Res.string.play_next))
+                    makeToast(getString(Res.string.ytm_song_play_next))
                 }
 
                 is NowPlayingBottomSheetUIEvent.AddToQueue -> {
                     val songEntity = songRepository.getSongById(songUIState.videoId).singleOrNull() ?: return@launch
-                    mediaPlayerHandler.loadMoreCatalog(arrayListOf(songEntity.toTrack()), isAddToQueue = true)
-                    makeToast(getString(Res.string.added_to_queue))
+                    mediaPlayerHandler.addToQueue(listOf(songEntity.toTrack()))
+                    makeToast(getString(Res.string.ytm_song_added_to_queue))
                 }
 
                 is NowPlayingBottomSheetUIEvent.ChangeLyricsProvider -> {

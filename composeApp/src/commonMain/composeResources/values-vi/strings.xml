@@ -294,7 +294,6 @@
     <string name="play_video_instead_of_audio_warning">Hành động này sẽ xoá cache phát nhạc. Tiếp tục?</string>
     <string name="quality_video">Chất lượng video</string>
     <string name="add_to_queue">Thêm vào hàng đợi</string>
-    <string name="added_to_queue">Đã thêm vào hàng đợi</string>
     <string name="new_release">Mới phát hành</string>
     <string name="music_video">Video âm nhạc</string>
     <string name="your_music_is_always_up_to_date">ÂM NHẠC CỦA BẠN LUÔN ĐƯỢC CẬP NHẬT</string>
@@ -332,8 +331,6 @@
     <string name="delete">Xóa</string>
     <string name="top_videos">Video hàng đầu</string>
     <string name="trending">Xu hướng</string>
-    <string name="new_singles">Đĩa đơn mới</string>
-    <string name="new_albums">Album mới</string>
     <string name="notification">Thông báo</string>
     <string name="month_s_ago">%1$d tháng trước</string>
     <string name="day_s_ago">%1$d ngày trước</string>

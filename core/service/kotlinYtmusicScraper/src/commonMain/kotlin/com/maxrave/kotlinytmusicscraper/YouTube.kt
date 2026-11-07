@@ -33,6 +33,9 @@ import com.maxrave.kotlinytmusicscraper.models.YouTubeClient
 import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.TVHTML5
 import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.WEB
 import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.WEB_REMIX
+import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.ANDROID_MUSIC
+import com.maxrave.kotlinytmusicscraper.models.YouTubeLyrics
+import com.maxrave.kotlinytmusicscraper.models.MusicQueueRenderer
 import com.maxrave.kotlinytmusicscraper.models.YouTubeLocale
 import com.maxrave.kotlinytmusicscraper.models.getContinuation
 import com.maxrave.kotlinytmusicscraper.models.oddElements
@@ -113,6 +116,7 @@ import kotlinx.datetime.daysUntil
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.todayIn
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
@@ -1769,6 +1773,72 @@ class YouTube {
             }
         }
 
+    /**
+     * YouTube Music's own lyrics for [videoId], as its Android app shows them.
+     *
+     * The lyrics page (`MPLYt…`, from the watch page's Lyrics tab) answers the web client with
+     * plain text only. The Android client gets the same lyrics timed line by line for this
+     * recording (Musixmatch or LyricFind, credited in `source`); measured on 2026-11-07, 18 of
+     * 20 recently played songs had timing and the other 2 plain text. When there is no timing,
+     * the web client's plain text is returned. Null when the track has no Lyrics tab at all.
+     */
+    suspend fun youTubeMusicLyrics(videoId: String): Result<YouTubeLyrics?> =
+        runCatching {
+            val endpoint =
+                ytMusic
+                    .next(WEB_REMIX, videoId, null, null, null, null)
+                    .body<NextResponse>()
+                    .contents
+                    .singleColumnMusicWatchNextResultsRenderer
+                    ?.tabbedRenderer
+                    ?.watchNextTabbedResultsRenderer
+                    ?.tabs
+                    ?.tabEndpoint(BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.MUSIC_PAGE_TYPE_TRACK_LYRICS)
+                    ?: return@runCatching null
+            val timed =
+                runCatching {
+                    YouTubeLyrics.fromAndroidBrowse(
+                        ytMusic.browse(ANDROID_MUSIC, endpoint.browseId, endpoint.params, withoutLogin = true).body<JsonElement>(),
+                    )
+                }.onFailure { Logger.w(TAG, "Timed lyrics for $videoId: ${it.message}") }
+                    .getOrNull()
+            timed ?: lyrics(endpoint).getOrNull()?.takeIf { it.isNotBlank() }?.let { YouTubeLyrics(lines = null, plain = it, source = null) }
+        }
+
+    /**
+     * The radio tuning chips YouTube Music shows over Up next for the radio of [videoId] in
+     * [playlistId]: "All", "Familiar", "Popular", "Discover", "Deep cuts", moods and a
+     * genre, each a re-tuned radio (its own playlistId and params). The "Save" chip has no
+     * watch endpoint and comes back with a null playlistId.
+     */
+    suspend fun radioChips(
+        videoId: String,
+        playlistId: String,
+    ): Result<List<RadioChip>> =
+        runCatching {
+            ytMusic
+                .next(WEB_REMIX, videoId, playlistId, null, null, null)
+                .body<NextResponse>()
+                .contents
+                .singleColumnMusicWatchNextResultsRenderer
+                ?.tabbedRenderer
+                ?.watchNextTabbedResultsRenderer
+                ?.tabs
+                ?.firstOrNull()
+                ?.tabRenderer
+                ?.content
+                ?.musicQueueRenderer
+                ?.subHeaderChipCloud
+                .toRadioChips()
+        }
+
+    data class RadioChip(
+        val title: String,
+        val playlistId: String?,
+        val params: String?,
+        val selected: Boolean,
+    )
+
     suspend fun lyrics(endpoint: BrowseEndpoint): Result<String?> =
         runCatching {
             val response = ytMusic.browse(WEB_REMIX, endpoint.browseId, endpoint.params).body<BrowseResponse>()
@@ -2222,3 +2292,20 @@ private fun List<Tabs.Tab>.tabEndpoint(pageType: String): BrowseEndpoint? =
             it.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType == pageType
         }
     }
+
+/** Up next's chips in YouTube's order. A chip without a radio endpoint is the Save action. */
+internal fun MusicQueueRenderer.SubHeaderChipCloud?.toRadioChips(): List<YouTube.RadioChip> =
+    this
+        ?.chipCloudRenderer
+        ?.chips
+        ?.mapNotNull { chip ->
+            val renderer = chip.chipCloudChipRenderer ?: return@mapNotNull null
+            val title = renderer.text?.runs?.joinToString("") { it.text }?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val watch = renderer.navigationEndpoint?.radioEndpoint
+            YouTube.RadioChip(
+                title = title,
+                playlistId = watch?.playlistId,
+                params = watch?.params,
+                selected = renderer.isSelected == true,
+            )
+        }.orEmpty()

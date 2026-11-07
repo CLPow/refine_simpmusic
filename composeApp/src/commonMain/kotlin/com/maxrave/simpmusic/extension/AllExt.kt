@@ -59,12 +59,6 @@ fun <T> Iterable<T>.indexMap(): Map<T, Int> {
     return map
 }
 
-infix fun <E> Collection<E>.symmetricDifference(other: Collection<E>): Set<E> {
-    val left = this subtract other
-    val right = other subtract this
-    return left union right
-}
-
 @OptIn(ExperimentalTime::class)
 @Composable
 fun LocalDateTime.formatTimeAgo(): String {

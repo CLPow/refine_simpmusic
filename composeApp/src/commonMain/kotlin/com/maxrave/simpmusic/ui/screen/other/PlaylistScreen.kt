@@ -1,5 +1,8 @@
 package com.maxrave.simpmusic.ui.screen.other
 
+import com.maxrave.simpmusic.ui.component.selection.SongSelectionOverlay
+import com.maxrave.simpmusic.ui.component.selection.rememberSongSelectionState
+import com.maxrave.simpmusic.viewModel.QueueItemKind
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -99,6 +102,7 @@ fun PlaylistScreen(
     val playingVideoId by viewModel.nowPlayingVideoId.collectAsStateWithLifecycle()
     val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
     var menuTrack by remember { mutableStateOf<Track?>(null) }
+    val selection = rememberSongSelectionState()
     var playlistMenu by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
@@ -141,7 +145,7 @@ fun PlaylistScreen(
                 if (data.isRadio) {
                     null
                 } else {
-                    { viewModel.getFullTracks { sharedViewModel.addListToQueue(ArrayList(it)) } }
+                    { viewModel.getFullTracks { sharedViewModel.addListToQueue(ArrayList(it), QueueItemKind.PLAYLIST) } }
                 },
         )
     }
@@ -226,8 +230,13 @@ fun PlaylistScreen(
                             subtitle = listOfNotNull(track.artists?.toListName()?.connectArtists(), track.album?.name).filter { it.isNotBlank() }.joinToString(" • "),
                             thumbnail = track.thumbnails?.lastOrNull()?.url,
                             isCurrent = track.videoId == playingVideoId,
-                            onClick = { viewModel.onUIEvent(PlaylistUIEvent.ItemClick(track.videoId)) },
+                            onClick = {
+                                if (selection.isActive) selection.toggle(track.videoId) else viewModel.onUIEvent(PlaylistUIEvent.ItemClick(track.videoId))
+                            },
                             onMore = { menuTrack = track },
+                            onLongClick = { selection.start(track.videoId) },
+                            onSwipeQueue = { sharedViewModel.addSongToQueue(track) },
+                            selected = if (selection.isActive) selection.isSelected(track.videoId) else null,
                         )
                     }
                     if (tracksListState == ListState.PAGINATING) {
@@ -239,6 +248,7 @@ fun PlaylistScreen(
                     }
                 }
                 YtmCollectionTopBar(listState, playlist.title, onBack = { navController.navigateUp() }, onMore = { playlistMenu = true })
+                SongSelectionOverlay(selection, tracks)
             }
         }
     }

@@ -1,5 +1,6 @@
 package com.maxrave.data.repository
 
+import com.maxrave.domain.data.model.queue.RadioChip
 import com.maxrave.data.parser.parseMixedContent
 import com.maxrave.domain.data.model.home.HomeItem
 import com.maxrave.common.MERGING_DATA_TYPE
@@ -358,6 +359,19 @@ internal class SongRepositoryImpl(
     // Official video id -> its song, or null when YouTube had none. For this run of the app.
     private val songVersions = mutableMapOf<String, Track?>()
     private val songVersionsLock = Mutex()
+
+    override suspend fun getRadioChips(
+        videoId: String,
+        playlistId: String,
+    ): List<RadioChip> =
+        withContext(Dispatchers.IO) {
+            youTube
+                .radioChips(videoId, playlistId)
+                .onFailure { Logger.w(TAG, "getRadioChips $playlistId: ${it.message}") }
+                .getOrNull()
+                .orEmpty()
+                .map { RadioChip(it.title, it.playlistId, it.params, it.selected) }
+        }
 
     override suspend fun findSongVersion(track: Track): Track? =
         withContext(Dispatchers.IO) {

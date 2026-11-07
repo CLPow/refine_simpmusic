@@ -1,5 +1,7 @@
 package com.maxrave.simpmusic.viewModel
 
+import org.jetbrains.compose.resources.getString
+import com.maxrave.domain.data.model.browse.album.Track
 import androidx.lifecycle.viewModelScope
 import com.maxrave.domain.data.entities.DownloadState
 import com.maxrave.domain.data.entities.LocalPlaylistEntity
@@ -8,6 +10,7 @@ import com.maxrave.domain.mediaservice.handler.DownloadHandler
 import com.maxrave.domain.repository.LocalPlaylistRepository
 import com.maxrave.domain.repository.SongRepository
 import com.maxrave.domain.utils.collectResource
+import com.maxrave.domain.utils.toSongEntity
 import com.maxrave.domain.utils.toTrack
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
 import kotlinx.coroutines.flow.SharingStarted
@@ -17,13 +20,15 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.koin.core.component.inject
 import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.ytm_song_play_next
+import simpmusic.composeapp.generated.resources.ytm_songs_play_next
+import simpmusic.composeapp.generated.resources.ytm_song_added_to_queue
+import simpmusic.composeapp.generated.resources.ytm_songs_added_to_queue
 import simpmusic.composeapp.generated.resources.added_to_playlist
-import simpmusic.composeapp.generated.resources.added_to_queue
 import simpmusic.composeapp.generated.resources.delete_song_from_playlist
 import simpmusic.composeapp.generated.resources.downloading
 import simpmusic.composeapp.generated.resources.error
 import simpmusic.composeapp.generated.resources.error_occurred
-import simpmusic.composeapp.generated.resources.play_next
 import simpmusic.composeapp.generated.resources.removed_from_YouTube_playlist
 
 /**
@@ -58,7 +63,9 @@ class SongSelectionViewModel(
                 return@launch
             }
             songs.asReversed().forEach { mediaPlayerHandler.playNext(it.toTrack()) }
-            makeToast(getString(Res.string.play_next))
+            makeToast(
+                if (songs.size == 1) getString(Res.string.ytm_song_play_next) else getString(Res.string.ytm_songs_play_next, songs.size),
+            )
         }
     }
 
@@ -69,11 +76,10 @@ class SongSelectionViewModel(
                 makeToast(getString(Res.string.error_occurred))
                 return@launch
             }
-            mediaPlayerHandler.loadMoreCatalog(
-                ArrayList(songs.map { it.toTrack() }),
-                isAddToQueue = true,
+            mediaPlayerHandler.addToQueue(songs.map { it.toTrack() })
+            makeToast(
+                if (songs.size == 1) getString(Res.string.ytm_song_added_to_queue) else getString(Res.string.ytm_songs_added_to_queue, songs.size),
             )
-            makeToast(getString(Res.string.added_to_queue))
         }
     }
 
@@ -139,6 +145,51 @@ class SongSelectionViewModel(
             makeToast(
                 if (added > 0) getString(Res.string.added_to_playlist) else getString(Res.string.error),
             )
+        }
+    }
+
+    /**
+     * Up next's "Save" chip: the queue into a playlist. Queue tracks that were never played are
+     * not in the song table yet, and [addToPlaylist] reads from it, so they are stored first.
+     */
+    fun saveTracksToPlaylist(
+        playlistId: Long,
+        tracks: List<Track>,
+    ) {
+        viewModelScope.launch {
+            tracks.forEach { songRepository.insertSong(it.toSongEntity()).firstOrNull() }
+            addToPlaylist(playlistId, tracks.map { it.videoId }.distinct())
+        }
+    }
+
+    /** [playNext] for tracks from a page; no database lookup, so unsaved songs work too. */
+    fun playNextTracks(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        viewModelScope.launch {
+            tracks.asReversed().forEach { mediaPlayerHandler.playNext(it) }
+            makeToast(
+                if (tracks.size == 1) getString(Res.string.ytm_song_play_next) else getString(Res.string.ytm_songs_play_next, tracks.size),
+            )
+        }
+    }
+
+    /** [addToQueue] for tracks from a page. */
+    fun addTracksToQueue(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        viewModelScope.launch {
+            mediaPlayerHandler.addToQueue(tracks)
+            makeToast(
+                if (tracks.size == 1) getString(Res.string.ytm_song_added_to_queue) else getString(Res.string.ytm_songs_added_to_queue, tracks.size),
+            )
+        }
+    }
+
+    /** [download] for tracks from a page: they are stored first, since downloads work from the song table. */
+    fun downloadTracks(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        viewModelScope.launch {
+            tracks.forEach { songRepository.insertSong(it.toSongEntity()).firstOrNull() }
+            download(tracks.map { it.videoId })
         }
     }
 

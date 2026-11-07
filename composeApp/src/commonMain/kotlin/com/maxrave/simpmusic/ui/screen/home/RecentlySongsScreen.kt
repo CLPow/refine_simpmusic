@@ -107,6 +107,7 @@ fun RecentlySongsScreen(
                                     thumbnail = track.thumbnails?.lastOrNull()?.url,
                                     onClick = { play(track) },
                                     onMore = { menuTrack = track },
+                                    onSwipeQueue = { sharedViewModel.addSongToQueue(track) },
                                 )
                             }
                         }
@@ -122,6 +123,7 @@ fun RecentlySongsScreen(
                                 thumbnail = song.thumbnails,
                                 onClick = { play(song.toTrack()) },
                                 onMore = { menuTrack = song.toTrack() },
+                                onSwipeQueue = { sharedViewModel.addSongToQueue(song.toTrack()) },
                             )
                         }
                     }

@@ -296,7 +296,6 @@
     <string name="play_video_instead_of_audio_warning">Ta akcja usunie pamięć podręczną odtwarzacza. Kontynuować?</string>
     <string name="quality_video">Jakość wideo</string>
     <string name="add_to_queue">Dodaj do kolejki</string>
-    <string name="added_to_queue">Dodano do kolejki</string>
     <string name="new_release">Nowości</string>
     <string name="music_video">Teledyski</string>
     <string name="your_music_is_always_up_to_date">TWOJA MUZYKA JEST ZAWSZE AKTUALNA</string>
@@ -334,8 +333,6 @@
     <string name="delete">Usuń</string>
     <string name="top_videos">Najlepsze filmy</string>
     <string name="trending">Popularne</string>
-    <string name="new_singles">Nowe single</string>
-    <string name="new_albums">Nowe albumy</string>
     <string name="notification">Powiadomienie</string>
     <string name="month_s_ago">%1$d miesięcy temu</string>
     <string name="day_s_ago">%1$d dni temu</string>

@@ -1,5 +1,15 @@
 package com.maxrave.media3.service.callback
 
+import android.content.BroadcastReceiver
+import android.content.IntentFilter
+import android.media.AudioManager
+import androidx.core.content.ContextCompat
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import android.content.Intent
+import android.os.Build
+import android.view.KeyEvent
+import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
 import com.maxrave.domain.repository.AlbumRepository
 import android.content.ContentResolver
@@ -81,7 +91,36 @@ internal class SimpleMediaSessionCallback(
     private val artistRepository: ArtistRepository,
     private val streamRepository: StreamRepository,
     private val albumRepository: AlbumRepository,
+    dataStoreManager: DataStoreManager,
 ) : MediaLibrarySession.Callback {
+    /** Read on every media key, so kept warm instead of read from disk on the main thread. */
+    private val externalStartAllowed =
+        dataStoreManager.allowExternalStartPlayback.stateIn(scope, SharingStarted.Eagerly, true)
+
+    /**
+     * Whether the listener has had music playing since the app started or since the audio
+     * output last went away. While it is true, a headset or car may resume what they paused.
+     * A disconnect clears it, so a car that connects later cannot start playback on its own.
+     */
+    @Volatile private var listeningSession = false
+
+    init {
+        scope.launch { mediaPlayerHandler.controlState.collect { if (it.isPlaying) listeningSession = true } }
+        ContextCompat.registerReceiver(
+            context,
+            object : BroadcastReceiver() {
+                override fun onReceive(
+                    context: Context?,
+                    intent: Intent?,
+                ) {
+                    // Headphones unplugged or Bluetooth dropped: the same moment the player pauses itself.
+                    listeningSession = false
+                }
+            },
+            IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+    }
     var toggleLike: () -> Unit = {
         mediaPlayerHandler.toggleLike()
     }
@@ -253,10 +292,45 @@ internal class SimpleMediaSessionCallback(
         isForPlayback: Boolean,
     ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> {
         Logger.w(TAG, "onPlaybackResumption: ${controller.packageName}, isForPlayback=$isForPlayback")
-        if (isForPlayback) resumeSavedQueue()
+        if (isForPlayback && externalStartAllowed.value) resumeSavedQueue()
         return Futures.immediateFuture(
             MediaSession.MediaItemsWithStartPosition(emptyList(), C.INDEX_UNSET, C.TIME_UNSET),
         )
+    }
+
+    /**
+     * YouTube Music's "Allow external devices to start playback". When it is off, a play key
+     * from a headset or car (which reaches the session as a media button) cannot start music
+     * that the listener did not have playing: nothing is loaded, or nothing has played since
+     * the app started or the audio output last disconnected. Pausing always works, and so does
+     * resuming within a listening session. The notification's own buttons also arrive here on
+     * Android 12 and older, and always pass.
+     */
+    override fun onMediaButtonEvent(
+        session: MediaSession,
+        controllerInfo: MediaSession.ControllerInfo,
+        intent: Intent,
+    ): Boolean {
+        val player = session.player
+        val nothingLoaded = player.mediaItemCount == 0 || player.playbackState == Player.STATE_IDLE
+        if (!externalStartAllowed.value &&
+            !session.isMediaNotificationController(controllerInfo) &&
+            !player.isPlaying &&
+            (nothingLoaded || !listeningSession)
+        ) {
+            val keyCode =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)?.keyCode
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)?.keyCode
+                }
+            if (keyCode in PLAY_KEYS) {
+                Logger.w(TAG, "Ignoring external play key $keyCode from ${controllerInfo.packageName}")
+                return true
+            }
+        }
+        return super.onMediaButtonEvent(session, controllerInfo, intent)
     }
 
     private fun resumeSavedQueue() {
@@ -1423,3 +1497,5 @@ internal class SimpleMediaSessionCallback(
         const val MEDIA_SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"
     }
 }
+
+private val PLAY_KEYS = setOf(KeyEvent.KEYCODE_MEDIA_PLAY, KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_HEADSETHOOK)

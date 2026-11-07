@@ -296,7 +296,6 @@
     <string name="play_video_instead_of_audio_warning">การดำเนินการนี้จะลบแคชของเครื่องเล่น ดำเนินการต่อหรือไม่</string>
     <string name="quality_video">คุณภาพวิดีโอ</string>
     <string name="add_to_queue">เพิ่มเข้าคิว</string>
-    <string name="added_to_queue">เพิ่มเข้าคิวแล้ว</string>
     <string name="new_release">เวอร์ชั่นล่าสุด</string>
     <string name="music_video">มิวสิควีดีโอ</string>
     <string name="your_music_is_always_up_to_date">เพลงของคุณได้รับการอัพเดทแล้ว</string>
@@ -334,8 +333,6 @@
     <string name="delete">ลบ</string>
     <string name="top_videos">วิดีโอยอดนิยม</string>
     <string name="trending">กำลังเป็นที่นิยม</string>
-    <string name="new_singles">ซิงเกิลใหม่</string>
-    <string name="new_albums">อัลบั้มใหม่</string>
     <string name="notification">การแจ้งเตือน</string>
     <string name="month_s_ago">%1$d เดือนที่แล้ว</string>
     <string name="day_s_ago">%1$d วันที่แล้ว</string>

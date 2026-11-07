@@ -297,7 +297,6 @@
     <string name="play_video_instead_of_audio_warning">Это действие удалит кэш плеера. Продолжить?</string>
     <string name="quality_video">Качество видео</string>
     <string name="add_to_queue">Добавить в очередь</string>
-    <string name="added_to_queue">Добавлено в очередь!</string>
     <string name="new_release">Новинки</string>
     <string name="music_video">Музыкальное видео</string>
     <string name="your_music_is_always_up_to_date">ВАША МУЗЫКА ВСЕГДА СВЕЖАЯ</string>
@@ -335,8 +334,6 @@
     <string name="delete">Удалить</string>
     <string name="top_videos">Лучшие видео</string>
     <string name="trending">В тренде</string>
-    <string name="new_singles">Новые синглы</string>
-    <string name="new_albums">Новые альбомы</string>
     <string name="notification">Уведомление</string>
     <string name="month_s_ago">%1$d мес. назад</string>
     <string name="day_s_ago">%1$d дн назад</string>

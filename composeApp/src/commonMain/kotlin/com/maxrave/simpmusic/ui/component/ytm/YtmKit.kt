@@ -1,5 +1,20 @@
 package com.maxrave.simpmusic.ui.component.ytm
 
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import com.maxrave.simpmusic.ui.icon.QueueMusic
+import com.maxrave.simpmusic.ui.icon.CheckCircle
+import com.maxrave.simpmusic.ui.icon.AddCircleOutline
+import simpmusic.composeapp.generated.resources.add_to_queue
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -91,7 +106,6 @@ import com.maxrave.simpmusic.ui.icon.ArrowBackIosNew
 import com.maxrave.simpmusic.ui.icon.History
 import com.maxrave.simpmusic.ui.icon.Logout
 import com.maxrave.simpmusic.ui.icon.MoreVert
-import com.maxrave.simpmusic.ui.icon.Notifications
 import com.maxrave.simpmusic.ui.icon.PersonAdd
 import com.maxrave.simpmusic.ui.icon.Search
 import com.maxrave.simpmusic.ui.icon.Settings
@@ -127,7 +141,6 @@ import simpmusic.composeapp.generated.resources.ytm_back
 import simpmusic.composeapp.generated.resources.ytm_history
 import simpmusic.composeapp.generated.resources.ytm_next
 import simpmusic.composeapp.generated.resources.ytm_not_signed_in
-import simpmusic.composeapp.generated.resources.ytm_notifications
 import simpmusic.composeapp.generated.resources.ytm_play_all
 import simpmusic.composeapp.generated.resources.ytm_previous
 import simpmusic.composeapp.generated.resources.ytm_search
@@ -163,7 +176,7 @@ object Ytm {
 
 /**
  * YouTube Music's top bar. On a tab page it carries the logo; on a sub-page, a back arrow and the
- * page title. Notifications and the account avatar sit on the right of both, and sub-pages add
+ * page title. The account avatar sits on the right of both, and sub-pages add
  * search (tab pages have the Search tab right below them).
  */
 @Composable
@@ -866,7 +879,6 @@ fun YtmQuickPicks(
 }
 
 /** YouTube Music's song row: 48dp cover, title, grey subtitle, the ⋮ menu. */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun YtmSongRow(
     title: String,
@@ -878,13 +890,17 @@ fun YtmSongRow(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     onMore: (() -> Unit)? = null,
+    /** YouTube Music's swipe-right-to-queue on a song row; null turns the swipe off. */
+    onSwipeQueue: (() -> Unit)? = null,
+    /** Non-null while the list is selecting songs: whether this one is picked. */
+    selected: Boolean? = null,
 ) {
-    Row(
-        modifier
-            .height(64.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick ?: onMore)
-            .padding(start = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    SwipeToQueueRow(
+        modifier = modifier.height(64.dp),
+        onClick = onClick,
+        onLongClick = onLongClick ?: onMore,
+        onSwipeQueue = onSwipeQueue,
+        selected = selected,
     ) {
         if (leading != null) {
             leading()
@@ -904,7 +920,7 @@ fun YtmSongRow(
                 Text(subtitle, style = typo().bodyMedium, color = Ytm.TextSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
-        if (onMore != null) {
+        if (onMore != null && selected == null) {
             IconButton(onClick = onMore) {
                 Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Ytm.TextSecondary)
             }
@@ -913,6 +929,93 @@ fun YtmSongRow(
         }
     }
 }
+
+/**
+ * The shell every song row shares: tap and long-press, YouTube Music's swipe right to add the song
+ * to the queue (the queue icon shows behind the row, and releasing past half-way queues it), and,
+ * while the list is selecting ([selected] non-null), the pick circle in front with no swipe.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SwipeToQueueRow(
+    modifier: Modifier,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)?,
+    onSwipeQueue: (() -> Unit)?,
+    selected: Boolean?,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val swipe = remember { Animatable(0f) }
+    val swipeLimit = with(LocalDensity.current) { SWIPE_QUEUE_DISTANCE.toPx() }
+    Box(modifier) {
+        if (swipe.value > 0f) {
+            Icon(
+                SimpIcons.QueueMusic,
+                contentDescription = stringResource(Res.string.add_to_queue),
+                tint = if (swipe.value >= swipeLimit / 2) Color.White else Ytm.TextSecondary,
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 24.dp),
+            )
+        }
+        Row(
+            Modifier
+                .matchParentSize()
+                .offset { IntOffset(swipe.value.roundToInt(), 0) }
+                .background(
+                    when {
+                        selected == true -> Color.White.copy(alpha = 0.12f)
+                        swipe.value > 0f -> Ytm.Background
+                        else -> Color.Transparent
+                    },
+                ).then(
+                    if (onSwipeQueue != null && selected == null) {
+                        Modifier.pointerInput(onSwipeQueue) {
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag = { change, amount ->
+                                    val next = (swipe.value + amount).coerceIn(0f, swipeLimit)
+                                    if (next != swipe.value) {
+                                        change.consume()
+                                        scope.launch { swipe.snapTo(next) }
+                                    }
+                                },
+                                onDragEnd = {
+                                    if (swipe.value >= swipeLimit / 2) onSwipeQueue()
+                                    scope.launch { swipe.animateTo(0f) }
+                                },
+                                onDragCancel = { scope.launch { swipe.animateTo(0f) } },
+                            )
+                        }
+                    } else {
+                        Modifier
+                    },
+                ).combinedClickable(onClick = onClick, onLongClick = onLongClick)
+                .then(
+                    if (selected != null) {
+                        // Read as "<title>, selected" / "not selected" while picking songs.
+                        Modifier.semantics {
+                            this.selected = selected
+                            role = Role.Checkbox
+                        }
+                    } else {
+                        Modifier
+                    },
+                ).padding(start = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (selected != null) {
+                Icon(
+                    if (selected) SimpIcons.CheckCircle else SimpIcons.AddCircleOutline,
+                    contentDescription = null,
+                    tint = if (selected) Color.White else Ytm.TextSecondary,
+                    modifier = Modifier.padding(end = 12.dp).size(24.dp),
+                )
+            }
+            content()
+        }
+    }
+}
+
+private val SWIPE_QUEUE_DISTANCE = 120.dp
 
 /** A cover image clipped to [shape]; square unless the caller sizes it otherwise. */
 @Composable

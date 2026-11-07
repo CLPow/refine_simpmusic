@@ -1,5 +1,26 @@
 package com.maxrave.simpmusic.ui.screen.player.content
 
+import com.maxrave.simpmusic.ui.component.ytm.YtmChip
+import com.maxrave.domain.data.model.queue.RadioChip
+import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
+import com.maxrave.domain.utils.isRadioQueueId
+import com.maxrave.simpmusic.viewModel.SongSelectionViewModel
+import com.maxrave.simpmusic.ui.component.AddToPlaylistModalBottomSheet
+import org.koin.compose.viewmodel.koinViewModel
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.map
+import multiplatform.network.cmptoast.ToastGravity
+import multiplatform.network.cmptoast.showToast
+import simpmusic.composeapp.generated.resources.ytm_autoplay
+import simpmusic.composeapp.generated.resources.ytm_autoplay_summary
+import simpmusic.composeapp.generated.resources.ytm_autoplay_off_message
+import androidx.compose.foundation.gestures.detectTapGestures
+import com.maxrave.domain.manager.DataStoreManager
+import kotlinx.coroutines.delay
+import simpmusic.composeapp.generated.resources.ytm_n_seconds
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyRow
 import com.maxrave.simpmusic.ui.component.ytm.subtitle
@@ -342,9 +363,41 @@ private fun Artwork(
     actions: NowPlayingContentActions,
 ) {
     val queue = state.artworkQueue
+    val dataStoreManager: DataStoreManager = koinInject()
+    val seekSeconds by dataStoreManager.doubleTapSeekSeconds.collectAsState(10)
+    // Which side was double-tapped last, for the brief "+N seconds" label on that side; the time
+    // makes a second tap on the same side a new value, so the label restarts.
+    var seekFlash by remember { mutableStateOf<Pair<Boolean, Long>?>(null) }
+    LaunchedEffect(seekFlash) {
+        if (seekFlash != null) {
+            delay(650)
+            seekFlash = null
+        }
+    }
     // Square, as large as the space allows; YouTube Music keeps the cover and lets a horizontal
     // swipe skip, which is what the shared artwork pager already does.
-    Box(Modifier.widthIn(max = 520.dp).fillMaxWidth().aspectRatio(1f, matchHeightConstraintsFirst = true)) {
+    Box(
+        Modifier
+            .widthIn(max = 520.dp)
+            .fillMaxWidth()
+            .aspectRatio(1f, matchHeightConstraintsFirst = true)
+            // YouTube Music's double-tap to seek: the left half goes back, the right half forward,
+            // by the step set in Settings. Taps only, so the pager's swipe is untouched.
+            .pointerInput(seekSeconds) {
+                detectTapGestures(
+                    onDoubleTap = { offset ->
+                        val timeline = state.timelineFlow.value
+                        if (timeline.total > 0) {
+                            val forward = offset.x > size.width / 2f
+                            val step = seekSeconds * 1000L * (if (forward) 1 else -1)
+                            val target = (timeline.current + step).coerceIn(0L, timeline.total)
+                            actions.onSeek(target * 100f / timeline.total)
+                            seekFlash = forward to Clock.System.now().toEpochMilliseconds()
+                        }
+                    },
+                )
+            },
+    ) {
         if (queue.isEmpty()) {
             CoverImage(state.screenData.thumbnailURL, onLoaded = actions.onArtworkBitmap)
         } else {
@@ -363,6 +416,19 @@ private fun Artwork(
                     }
                 CoverImage(url, onLoaded = if (isCurrent) actions.onArtworkBitmap else null)
             }
+        }
+        seekFlash?.let { (forward, _) ->
+            Text(
+                text = (if (forward) "+" else "−") + stringResource(Res.string.ytm_n_seconds, seekSeconds),
+                style = typo().titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = Color.White,
+                modifier =
+                    Modifier
+                        .align(if (forward) Alignment.CenterEnd else Alignment.CenterStart)
+                        .padding(horizontal = 24.dp)
+                        .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+            )
         }
     }
 }
@@ -734,7 +800,11 @@ private fun PlayerSheet(
     }
 }
 
-/** Up next: "Playing from", then the whole queue with the playing track marked; long-press to reorder. */
+/**
+ * Up next, as YouTube Music lays it out: "Playing from", the radio's tuning chips (Save, All,
+ * Familiar, Discover, …) when the queue is a radio, the queue with the playing track marked, and
+ * an Autoplay header with its switch where Autoplay's songs begin. Long-press to reorder.
+ */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun UpNextTab(
@@ -743,6 +813,45 @@ private fun UpNextTab(
     musicServiceHandler: MediaPlayerHandler = koinInject(),
 ) {
     val scope = rememberCoroutineScope()
+    val dataStoreManager: DataStoreManager = koinInject()
+    val songRepository: SongRepository = koinInject()
+    val selectionViewModel: SongSelectionViewModel = koinViewModel()
+    val queueData by musicServiceHandler.queueData.collectAsState()
+    val autoplayStart = queueData?.data?.autoplayStartIndex
+    val radioId = queueData?.data?.playlistId?.takeIf { it.isRadioQueueId() }
+    val autoplayOn by dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }.collectAsState(true)
+    val autoplayOffMessage = stringResource(Res.string.ytm_autoplay_off_message)
+    val currentId = state.artworkQueue.getOrNull(state.currentOrderIndex)?.videoId
+    // The radio's own seed: Autoplay's radio is named after the song it grew from.
+    // Remembered per radio, so the chips are fetched once per radio and not again on every song.
+    val seed = remember(radioId) { radioId?.removePrefix("RDAMVM")?.takeIf { radioId.startsWith("RDAMVM") && it.length == 11 } ?: currentId }
+    val chips by produceState(emptyList<RadioChip>(), radioId) {
+        value = if (radioId != null && seed != null) songRepository.getRadioChips(seed, radioId) else emptyList()
+    }
+    // The chip the user just picked, until the new radio's own chips say which one is selected.
+    var tuning by remember(radioId) { mutableStateOf<String?>(null) }
+    // A radio is already endless, and under shuffle the boundary has no place in the shown order.
+    val showAutoplayHeader = queueData?.data?.isRadio != true && !state.controllerState.isShuffle
+    var savingQueue by remember { mutableStateOf(false) }
+    val onAutoplayChange: (Boolean) -> Unit = { enabled ->
+        scope.launch { dataStoreManager.setEndlessQueue(enabled) }
+        // YouTube Music's mealbar when Autoplay is switched off from the queue.
+        if (!enabled) showToast(autoplayOffMessage, ToastGravity.Bottom)
+    }
+    if (savingQueue) {
+        val localPlaylists by selectionViewModel.listLocalPlaylist.collectAsStateWithLifecycle()
+        AddToPlaylistModalBottomSheet(
+            isBottomSheetVisible = true,
+            listLocalPlaylist = localPlaylists,
+            listYouTubePlaylist = emptyList(),
+            onDismiss = { savingQueue = false },
+            onClick = { playlist ->
+                selectionViewModel.saveTracksToPlaylist(playlist.id, state.artworkQueue)
+                savingQueue = false
+            },
+            onYTPlaylistClick = {},
+        )
+    }
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (state.currentOrderIndex).coerceAtLeast(0))
     val dragDropState = rememberDragDropState(listState) { from, to -> actions.onMoveQueueItem(from, to) }
     var overscrollJob by remember { mutableStateOf<Job?>(null) }
@@ -778,6 +887,31 @@ private fun UpNextTab(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+        }
+        if (chips.isNotEmpty()) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(bottom = 8.dp),
+            ) {
+                itemsIndexed(chips, key = { index, chip -> "$index-${chip.title}" }) { _, chip ->
+                    val selected = if (tuning != null) chip.title == tuning else chip.selected
+                    YtmChip(label = chip.title, selected = selected && !chip.isSave) {
+                        if (chip.isSave) {
+                            savingQueue = true
+                        } else if (!selected) {
+                            tuning = chip.title
+                            scope.launch {
+                                val tuned =
+                                    musicServiceHandler.replaceUpcomingRadio(
+                                        YouTubeWatchEndpoint(videoId = seed, playlistId = chip.playlistId, params = chip.params),
+                                    )
+                                if (!tuned) tuning = null
+                            }
+                        }
+                    }
+                }
             }
         }
         LazyColumn(
@@ -816,16 +950,61 @@ private fun UpNextTab(
         ) {
             itemsIndexed(state.artworkQueue, key = { index, track -> "$index${track.videoId}" }) { index, track ->
                 DraggableItem(dragDropState = dragDropState, index = index, modifier = Modifier) { _ ->
-                    QueueRow(
-                        track = track,
-                        isCurrent = index == state.currentOrderIndex,
-                        isPlaying = state.controllerState.isPlaying,
-                        onClick = { actions.onSeekToQueueIndex(index) },
-                        onMore = { itemSheet = track.videoId to index },
-                    )
+                    Column {
+                        // Inside the row rather than an item of its own, so the list's indices stay
+                        // the queue's and drag-to-reorder keeps working.
+                        if (showAutoplayHeader && index == autoplayStart) AutoplayHeader(autoplayOn, onAutoplayChange)
+                        QueueRow(
+                            track = track,
+                            isCurrent = index == state.currentOrderIndex,
+                            isPlaying = state.controllerState.isPlaying,
+                            onClick = { actions.onSeekToQueueIndex(index) },
+                            onMore = { itemSheet = track.videoId to index },
+                        )
+                    }
                 }
             }
+            // An album or playlist that Autoplay has not reached yet still offers the switch at the
+            // end, as YouTube Music does; a radio is already endless.
+            if (showAutoplayHeader && radioId == null && (autoplayStart == null || autoplayStart >= state.artworkQueue.size)) {
+                item(key = "autoplay") { AutoplayHeader(autoplayOn, onAutoplayChange) }
+            }
         }
+    }
+}
+
+/** YouTube Music's Autoplay row in Up next: the title, its byline and the switch. */
+@Composable
+private fun AutoplayHeader(
+    enabled: Boolean,
+    onChange: (Boolean) -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .toggleable(value = enabled, role = Role.Switch, onValueChange = onChange)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(Res.string.ytm_autoplay),
+                style = typo().titleMedium.copy(fontSize = 16.sp, fontWeight = FontWeight.Bold),
+                color = Color.White,
+            )
+            Text(stringResource(Res.string.ytm_autoplay_summary), style = typo().bodySmall, color = TextSecondary)
+        }
+        Switch(
+            checked = enabled,
+            onCheckedChange = null,
+            colors =
+                SwitchDefaults.colors(
+                    checkedThumbColor = Color.Black,
+                    checkedTrackColor = Color.White,
+                    uncheckedThumbColor = TextSecondary,
+                    uncheckedTrackColor = Color.White.copy(alpha = 0.15f),
+                ),
+        )
     }
 }
 
@@ -1003,7 +1182,7 @@ private fun LyricsTab(
         }
         item(key = "source") {
             Text(
-                stringResource(Res.string.ytm_lyrics_source, data.lyricsProvider.displayName()),
+                data.sourceText ?: stringResource(Res.string.ytm_lyrics_source, data.lyricsProvider.displayName()),
                 style = typo().bodyMedium,
                 color = TextSecondary,
                 modifier = Modifier.padding(top = 24.dp),
@@ -1014,7 +1193,7 @@ private fun LyricsTab(
 
 private fun LyricsProvider.displayName(): String =
     when (this) {
-        LyricsProvider.YOUTUBE -> "YouTube Music"
+        LyricsProvider.YOUTUBE_MUSIC, LyricsProvider.YOUTUBE -> "YouTube Music"
         LyricsProvider.LRCLIB -> "LRCLIB"
         LyricsProvider.SIMPMUSIC -> "SimpMusic Lyrics"
         LyricsProvider.BETTER_LYRICS -> "Better Lyrics"

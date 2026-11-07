@@ -73,6 +73,8 @@ import simpmusic.composeapp.generated.resources.app_name
 import simpmusic.composeapp.generated.resources.circle_app_icon
 import simpmusic.composeapp.generated.resources.close_miniplayer
 import simpmusic.composeapp.generated.resources.explicit_content_blocked
+import simpmusic.composeapp.generated.resources.ytm_stream_wifi_only_blocked
+import simpmusic.composeapp.generated.resources.ytm_track_skipped
 import simpmusic.composeapp.generated.resources.open_app
 import simpmusic.composeapp.generated.resources.open_miniplayer
 import simpmusic.composeapp.generated.resources.quit_app
@@ -228,6 +230,8 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
             showToast(
                 when (type) {
                     ToastType.ExplicitContent -> getString(Res.string.explicit_content_blocked)
+                    ToastType.TrackSkipped -> getString(Res.string.ytm_track_skipped)
+                    ToastType.WifiOnly -> getString(Res.string.ytm_stream_wifi_only_blocked)
                     is ToastType.PlayerError ->
                         getString(Res.string.time_out_check_internet_connection_or_change_piped_instance_in_settings, type.error)
                 },

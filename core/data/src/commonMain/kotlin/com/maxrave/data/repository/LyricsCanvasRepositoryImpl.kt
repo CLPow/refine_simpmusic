@@ -10,6 +10,7 @@ import com.maxrave.domain.data.entities.TranslatedLyricsEntity
 import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.data.model.browse.artist.ArtistLogo
 import com.maxrave.domain.data.model.canvas.CanvasResult
+import com.maxrave.domain.data.model.metadata.Line
 import com.maxrave.domain.data.model.metadata.Lyrics
 import com.maxrave.domain.data.model.metadata.SimpMusicLyrics
 import com.maxrave.domain.extension.now
@@ -74,6 +75,34 @@ internal class LyricsCanvasRepositoryImpl(
     ) = withContext(Dispatchers.IO) {
         localDataSource.removeTranslatedLyrics(videoId, language)
     }
+
+    override fun getYouTubeMusicLyrics(videoId: String): Flow<Resource<Pair<Lyrics, String?>>> =
+        flow {
+            val result = youTube.youTubeMusicLyrics(videoId)
+            val found = result.getOrNull()
+            val lyrics =
+                found?.lines?.let { lines ->
+                    Lyrics(
+                        lines =
+                            lines
+                                // YouTube Music marks instrumental stretches with a lone "\u266a"
+                                // line and shows them as a gap, not as a lyric.
+                                .filter { it.text.isNotBlank() && it.text.trim() != "\u266a" }
+                                .map { Line(startTimeMs = it.startMs.toString(), endTimeMs = it.endMs.toString(), words = it.text) },
+                        syncType = "LINE_SYNCED",
+                    )
+                } ?: found?.plain?.let { text ->
+                    Lyrics(
+                        lines = text.lines().map { Line(startTimeMs = "0", endTimeMs = "0", words = it) },
+                        syncType = "UNSYNCED",
+                    )
+                }
+            if (lyrics == null || lyrics.lines.isNullOrEmpty()) {
+                emit(Resource.Error<Pair<Lyrics, String?>>(result.exceptionOrNull()?.message ?: "No YouTube Music lyrics"))
+            } else {
+                emit(Resource.Success<Pair<Lyrics, String?>>(lyrics to found?.source))
+            }
+        }.flowOn(Dispatchers.IO)
 
     override fun getYouTubeCaption(
         preferLang: String,

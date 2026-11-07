@@ -294,7 +294,6 @@
     <string name="play_video_instead_of_audio_warning">此操作将删除播放器缓存。是否继续？</string>
     <string name="quality_video">视频质量</string>
     <string name="add_to_queue">添加到队列</string>
-    <string name="added_to_queue">加入队列!</string>
     <string name="new_release">新建发布</string>
     <string name="music_video">音乐视频</string>
     <string name="your_music_is_always_up_to_date">您的所有消息都是最新数据</string>
@@ -332,8 +331,6 @@
     <string name="delete">删除</string>
     <string name="top_videos">热门视频</string>
     <string name="trending">热门趋势</string>
-    <string name="new_singles">新单曲</string>
-    <string name="new_albums">新专辑</string>
     <string name="notification">通知</string>
     <string name="month_s_ago">%1$d 个月前</string>
     <string name="day_s_ago">%1$d 天前</string>

@@ -1,5 +1,7 @@
 package com.maxrave.media3.exoplayer
 
+import com.maxrave.media3.di.WifiOnlyException
+import com.maxrave.domain.mediaservice.handler.WIFI_ONLY_ERROR_CODE_NAME
 import android.annotation.SuppressLint
 import android.content.Context
 import android.media.AudioFocusRequest
@@ -1366,15 +1368,22 @@ internal class CrossfadeExoPlayerAdapter(
                         PlaybackException.ERROR_CODE_TIMEOUT -> PlayerConstants.ERROR_CODE_TIMEOUT
                         else -> error.errorCode
                     },
-                errorCodeName = error.errorCodeName,
+                // The cause is lost on the way to the handler (the message is only "Source error"),
+                // so a stream refused under "Stream via Wi-Fi only" is named here.
+                errorCodeName = if (error.isWifiOnlyRefusal()) WIFI_ONLY_ERROR_CODE_NAME else error.errorCodeName,
                 message = error.message,
             )
         Logger.e(TAG, "Playback error: ${error.message}")
         listeners.forEach { it.onPlayerError(genericError) }
-        transitionToState(InternalState.ERROR)
+        transitionToState(InternalState.ERROR, emitError = false)
     }
 
-    private fun transitionToState(newState: InternalState) {
+    private fun Throwable.isWifiOnlyRefusal(): Boolean = generateSequence(this) { it.cause }.any { it is WifiOnlyException }
+
+    private fun transitionToState(
+        newState: InternalState,
+        emitError: Boolean = true,
+    ) {
         if (internalState == newState) {
             Logger.d(TAG, "State transition ignored: already in $newState")
             return
@@ -1432,14 +1441,19 @@ internal class CrossfadeExoPlayerAdapter(
             InternalState.ERROR -> {
                 listeners.forEach { it.onPlaybackStateChanged(PlayerConstants.STATE_IDLE) }
                 listeners.forEach { it.onIsPlayingChanged(false) }
-                listeners.forEach {
-                    it.onPlayerError(
-                        PlayerError(
-                            errorCode = 403,
-                            errorCodeName = "ERROR_UNKNOWN",
-                            message = "Can not extract playable URL or playback error",
-                        ),
-                    )
+                // A generic report for the load failures that have no error of their own. A caller
+                // that already reported the real error passes false: a second report counted as a
+                // second failure, and skipped a good track.
+                if (emitError) {
+                    listeners.forEach {
+                        it.onPlayerError(
+                            PlayerError(
+                                errorCode = 403,
+                                errorCodeName = "ERROR_UNKNOWN",
+                                message = "Can not extract playable URL or playback error",
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -1665,6 +1679,13 @@ internal class CrossfadeExoPlayerAdapter(
                 override fun onPlayerError(error: PlaybackException) {
                     if (player != currentPlayer) {
                         Logger.d(TAG, "Ignoring onPlayerError from non-current player")
+                        return
+                    }
+
+                    // A stream refused under "Stream via Wi-Fi only" is final: retrying would
+                    // invalidate the stored format and reload into the same refusal.
+                    if (error.isWifiOnlyRefusal()) {
+                        propagatePlayerError(error)
                         return
                     }
 

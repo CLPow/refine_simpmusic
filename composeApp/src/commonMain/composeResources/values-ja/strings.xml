@@ -284,7 +284,6 @@
     <string name="play_video_instead_of_audio_warning">この操作によりプレイヤーのキャッシュが削除されます。続行しますか？</string>
     <string name="quality_video">画質</string>
     <string name="add_to_queue">キューに追加</string>
-    <string name="added_to_queue">キューに追加しました</string>
     <string name="new_release">新作</string>
     <string name="music_video">ミュージックビデオ</string>
     <string name="your_music_is_always_up_to_date">常に最新の状態です</string>
@@ -321,8 +320,6 @@
     <string name="delete">削除</string>
     <string name="top_videos">上位の動画</string>
     <string name="trending">急上昇</string>
-    <string name="new_singles">ニューシングル</string>
-    <string name="new_albums">ニューアルバム</string>
     <string name="notification">通知</string>
     <string name="month_s_ago">%1$dか月前</string>
     <string name="day_s_ago">%1$d日前</string>

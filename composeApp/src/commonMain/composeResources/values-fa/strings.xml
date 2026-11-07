@@ -301,7 +301,6 @@
     می‌دهید؟</string>
     <string name="quality_video">کیفیت ویدیو</string>
     <string name="add_to_queue">افزودن به صف</string>
-    <string name="added_to_queue">به صف افزوده شد</string>
     <string name="new_release">انتشار جدید</string>
     <string name="music_video">ویدیو موسیقی</string>
     <string name="your_music_is_always_up_to_date">موسیقی شما همیشه به‌روز است</string>
@@ -338,8 +337,6 @@
     <string name="delete">پاک‌کردن</string>
     <string name="top_videos">ویدیوهای برتر</string>
     <string name="trending">پرطرفدار</string>
-    <string name="new_singles">تک‌آهنگ‌های جدید</string>
-    <string name="new_albums">آلبوم‌های جدید</string>
     <string name="notification">آگاه‌ساز</string>
     <string name="month_s_ago">%1$d ماه پیش</string>
     <string name="day_s_ago">%1$d روز پیش</string>

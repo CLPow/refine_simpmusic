@@ -294,7 +294,6 @@
     <string name="play_video_instead_of_audio_warning">此操作將清除播放器快取。 繼續嗎？</string>
     <string name="quality_video">影片畫質</string>
     <string name="add_to_queue">加入至播放佇列</string>
-    <string name="added_to_queue">已新增至佇列</string>
     <string name="new_release">最新發行</string>
     <string name="music_video">音樂影片</string>
     <string name="your_music_is_always_up_to_date">您隨時都能聆聽最新的音樂</string>
@@ -332,8 +331,6 @@
     <string name="delete">刪除</string>
     <string name="top_videos">熱門影片</string>
     <string name="trending">熱門</string>
-    <string name="new_singles">最新單曲</string>
-    <string name="new_albums">最新專輯</string>
     <string name="notification">通知</string>
     <string name="month_s_ago">%1$d個月前</string>
     <string name="day_s_ago">%1$d天前</string>

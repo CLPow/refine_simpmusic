@@ -363,6 +363,34 @@ interface DataStoreManager {
 
     suspend fun setEndlessQueue(endlessQueue: Boolean)
 
+    /** Streaming quality on a metered (mobile) network; [quality] is the Wi-Fi one. */
+    val qualityMobile: Flow<String>
+
+    suspend fun setQualityMobile(quality: String)
+
+    /** YouTube Music's "Stream via Wi-Fi only": no streaming on a metered network. */
+    val streamOverWifiOnly: Flow<Boolean>
+
+    suspend fun setStreamOverWifiOnly(enabled: Boolean)
+
+    /** YouTube Music's "Double-tap to seek" step, in seconds. */
+    val doubleTapSeekSeconds: Flow<Int>
+
+    suspend fun setDoubleTapSeekSeconds(seconds: Int)
+
+    /** YouTube Music's "Allow external devices to start playback" (car Bluetooth, headsets). */
+    val allowExternalStartPlayback: Flow<Boolean>
+
+    suspend fun setAllowExternalStartPlayback(enabled: Boolean)
+
+    /** Library entries pinned to the top, by their Library key. */
+    val pinnedLibraryKeys: Flow<Set<String>>
+
+    suspend fun setLibraryPinned(
+        key: String,
+        pinned: Boolean,
+    )
+
     val keepYouTubePlaylistOffline: Flow<String>
 
     suspend fun setKeepYouTubePlaylistOffline(keep: Boolean)
@@ -608,8 +636,9 @@ interface DataStoreManager {
          *
          * 1 — the matcher that took the first search result, so live takes, covers and karaoke
          *     tracks were stored under the right song's name.
+         * 2 — 2.3.8: YouTube Music's own timed lyrics replace the older matched timings.
          */
-        const val LYRICS_CACHE_GENERATION = 1
+        const val LYRICS_CACHE_GENERATION = 2
 
         const val AA_LYRICS_OFF = "aa_lyrics_off"
 

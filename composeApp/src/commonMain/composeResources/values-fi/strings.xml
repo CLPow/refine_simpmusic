@@ -271,7 +271,6 @@
     <string name="play_video_instead_of_audio_warning">Tämä toiminto poistaa soittimen välimuistin. Jatka?</string>
     <string name="quality_video">Videon laatu</string>
     <string name="add_to_queue">Lisää jonoon</string>
-    <string name="added_to_queue">Lisätty jonoon</string>
     <string name="new_release">Uusi julkaisu</string>
     <string name="music_video">Musiikkivideo</string>
     <string name="your_music_is_always_up_to_date">MUSIIKKISI ON AINA AJAN TASALLA</string>

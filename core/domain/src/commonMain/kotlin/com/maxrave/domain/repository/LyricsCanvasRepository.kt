@@ -36,6 +36,12 @@ interface LyricsCanvasRepository {
         language: String,
     )
 
+    /**
+     * YouTube Music's own lyrics for [videoId] with the "Source: …" line YouTube shows under them.
+     * LINE_SYNCED when YouTube has timing for this recording, UNSYNCED when it only has the text.
+     */
+    fun getYouTubeMusicLyrics(videoId: String): Flow<Resource<Pair<Lyrics, String?>>>
+
     fun getYouTubeCaption(
         preferLang: String,
         videoId: String,

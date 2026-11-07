@@ -223,15 +223,20 @@ class Ytmusic {
         setLogin: Boolean = false,
         isUsingReferer: Boolean = true,
         customCookie: String? = null,
+        // A request made as no one: without the account selectors as well as without the cookie,
+        // since a brand account's Authuser/Pageid on a cookieless request can be refused.
+        anonymous: Boolean = false,
     ) {
         contentType(ContentType.Application.Json)
         headers {
             append("X-Goog-Api-Format-Version", "1")
             append("X-YouTube-Client-Name", "${client.xClientName ?: 1}")
             append("X-YouTube-Client-Version", client.clientVersion)
-            append("X-Goog-Authuser", authUser.toString())
-            pageId?.let {
-                append("X-Goog-Pageid", it)
+            if (!anonymous) {
+                append("X-Goog-Authuser", authUser.toString())
+                pageId?.let {
+                    append("X-Goog-Pageid", it)
+                }
             }
             append("x-origin", "https://music.youtube.com")
             if (client.referer != null && isUsingReferer) {
@@ -667,8 +672,11 @@ class Ytmusic {
         continuation: String? = null,
         countryCode: String? = null,
         setLogin: Boolean = false,
+        // Sends no cookie even when signed in. ANDROID_MUSIC answers a cookie-authenticated
+        // request with 400, but serves public pages (lyrics) without one.
+        withoutLogin: Boolean = false,
     ) = httpClient.post("browse") {
-        ytClient(client, if (setLogin) true else cookie != "" && cookie != null, isUsingReferer = false)
+        ytClient(client, !withoutLogin && (setLogin || (cookie != "" && cookie != null)), isUsingReferer = false, anonymous = withoutLogin)
 
         if (continuation != null && browseId != null) {
             setBody(

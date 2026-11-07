@@ -1,5 +1,7 @@
 package com.maxrave.simpmusic.ui.screen.library
 
+import com.maxrave.simpmusic.ui.component.selection.SongSelectionOverlay
+import com.maxrave.simpmusic.ui.component.selection.rememberSongSelectionState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -103,8 +105,14 @@ fun LibraryDynamicPlaylistScreen(
     var menuSong by remember { mutableStateOf<SongEntity?>(null) }
     menuSong?.let { NowPlayingBottomSheet(onDismiss = { menuSong = null }, navController = navController, song = it) }
 
+    val selection = rememberSongSelectionState()
     Column(Modifier.fillMaxSize().background(Ytm.Background)) {
-        YtmTopBar(navController = navController, title = title, onBack = { navController.navigateUp() })
+        // The selection bar takes the top bar's place rather than stacking above it.
+        if (selection.isActive) {
+            SongSelectionOverlay(selection, songs.orEmpty().map { it.toTrack() })
+        } else {
+            YtmTopBar(navController = navController, title = title, onBack = { navController.navigateUp() })
+        }
         val list = songs
         if (list == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color.White) }
@@ -166,8 +174,17 @@ fun LibraryDynamicPlaylistScreen(
                     subtitle = song.artistName?.joinToString(", ").orEmpty(),
                     thumbnail = song.thumbnails,
                     // The whole list in order, starting at the tapped song, as in YouTube Music.
-                    onClick = { playAll(list.map { it.toTrack() }, title, sharedViewModel, startIndex = list.indexOf(song).coerceAtLeast(0)) },
+                    onClick = {
+                        if (selection.isActive) {
+                            selection.toggle(song.videoId)
+                        } else {
+                            playAll(list.map { it.toTrack() }, title, sharedViewModel, startIndex = list.indexOf(song).coerceAtLeast(0))
+                        }
+                    },
                     onMore = { menuSong = song },
+                    onLongClick = { selection.start(song.videoId) },
+                    onSwipeQueue = { sharedViewModel.addSongToQueue(song.toTrack()) },
+                    selected = if (selection.isActive) selection.isSelected(song.videoId) else null,
                 )
             }
         }

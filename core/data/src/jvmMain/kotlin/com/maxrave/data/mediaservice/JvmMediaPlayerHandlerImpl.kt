@@ -1,5 +1,10 @@
 package com.maxrave.data.mediaservice
 
+import com.maxrave.domain.mediaservice.handler.playerErrorAction
+import com.maxrave.domain.mediaservice.handler.WIFI_ONLY_ERROR_CODE_NAME
+import com.maxrave.domain.mediaservice.handler.PlayerErrorAction
+import kotlinx.coroutines.async
+import com.maxrave.data.platform.hasValidatedInternet
 import com.maxrave.common.ASC
 import com.maxrave.common.CUSTOM_ORDER
 import com.maxrave.common.Config.ALBUM_CLICK
@@ -243,6 +248,14 @@ class JvmMediaPlayerHandlerImpl(
         dataStoreManager.endlessQueue
             .map { it == TRUE }
             .stateIn(coroutineScope, SharingStarted.Eagerly, false)
+
+
+    /**
+     * Consecutive tracks skipped as unavailable. YouTube Music moves on from a track that will
+     * not play instead of stopping the queue; the cap stops a dead connection from skipping
+     * through everything. Reset once anything plays.
+     */
+    private var unavailableSkips = 0
 
     private fun startReporting(videoId: String) {
         playbackReporter.start(
@@ -1098,7 +1111,7 @@ class JvmMediaPlayerHandlerImpl(
                 data =
                     it.data.copy(
                         listTracks = temp,
-                    ),
+                    ).afterRemove(playerIndex),
             )
         }
         _currentSongIndex.value = player.currentMediaItemIndex
@@ -1439,7 +1452,7 @@ class JvmMediaPlayerHandlerImpl(
                                             data =
                                                 it.data.copy(
                                                     playlistId = radioId,
-                                                ),
+                                                ).withAutoplayStart(),
                                             queueState = QueueData.StateSource.STATE_INITIALIZED,
                                         )
                                     }
@@ -1459,7 +1472,10 @@ class JvmMediaPlayerHandlerImpl(
             _queueData.update {
                 it.copy(
                     queueState = QueueData.StateSource.STATE_INITIALIZED,
-                    data = it.data.copy(playlistId = "RDAMVM${lastTrack.videoId}"),
+                    data =
+                        it.data.copy(
+                            playlistId = "RDAMVM${lastTrack.videoId}",
+                        ).withAutoplayStart(),
                 )
             }
             reorderShuffledQueue(player.getCurrentMediaTimeLine())
@@ -1730,6 +1746,7 @@ class JvmMediaPlayerHandlerImpl(
                 data =
                     it.data.copy(
                         listTracks = arrayListOf(),
+                        autoplayStartIndex = null,
                     ),
             )
         }
@@ -1950,124 +1967,108 @@ class JvmMediaPlayerHandlerImpl(
     }
 
     override suspend fun playNext(track: Track) {
-        _queueData.update {
-            it.copy(
-                queueState = QueueData.StateSource.STATE_INITIALIZING,
-            )
+        insertTracksAt(listOf(track), forQueue = false) { current -> current + 1 }
+    }
+
+    override suspend fun addToQueue(tracks: List<Track>) {
+        if (tracks.isEmpty()) return
+        // While shuffling, list positions are the shuffle order and there is no fixed place to keep
+        // apart; it appends, as before.
+        if (player.shuffleModeEnabled) {
+            loadMoreCatalog(ArrayList(tracks), isAddToQueue = true)
+            return
         }
-        val catalogMetadata: ArrayList<Track> =
-            queueData.value.data.listTracks
-                .toCollection(arrayListOf())
-        var thumbUrl =
-            track.thumbnails?.lastOrNull()?.url
-                ?: "https://i.ytimg.com/vi/${track.videoId}/maxresdefault.jpg"
-        thumbUrl = Regex("=w\\d+-h\\d+").replace(thumbUrl, "=w544-h544")
-        val artistName: String = track.artists.toListName().connectArtists()
-        val isSong =
-            (
-                track.thumbnails?.lastOrNull()?.height != 0 &&
-                    track.thumbnails?.lastOrNull()?.height == track.thumbnails?.lastOrNull()?.width &&
-                    track.thumbnails?.lastOrNull()?.height != null
-            ) &&
-                (
-                    !thumbUrl
-                        .contains("hq720") &&
-                        !thumbUrl
-                            .contains("maxresdefault") &&
-                        !thumbUrl.contains("sddefault")
-                )
-        if ((player.currentMediaItemIndex + 1 in 0..queueData.value.data.listTracks.size)) {
-            if (track.artists.isNullOrEmpty()) {
-                songRepository.getSongInfo(track.videoId).cancellable().lastOrNull().let { songInfo ->
-                    if (songInfo != null) {
-                        catalogMetadata.add(
-                            player.currentMediaItemIndex + 1,
-                            track.copy(
-                                artists =
-                                    listOf(
-                                        Artist(
-                                            songInfo.authorId,
-                                            songInfo.author ?: "",
-                                        ),
-                                    ),
-                            ),
-                        )
-                        addMediaItemNotSet(
-                            GenericMediaItem(
-                                mediaId = track.videoId,
-                                uri = track.videoId,
-                                metadata =
-                                    GenericMediaMetadata(
-                                        title = track.title,
-                                        artist = songInfo.author ?: "",
-                                        albumTitle = track.album?.name,
-                                        artworkUri = thumbUrl,
-                                        description = MERGING_DATA_TYPE.SONG,
-                                    ),
-                                customCacheKey = track.videoId,
-                            ),
-                            player.currentMediaItemIndex + 1,
-                        )
-                    } else {
-                        val mediaItem =
-                            GenericMediaItem(
-                                mediaId = track.videoId,
-                                uri = track.videoId,
-                                metadata =
-                                    GenericMediaMetadata(
-                                        title = track.title,
-                                        artist = "Various Artists",
-                                        albumTitle = track.album?.name,
-                                        artworkUri = thumbUrl,
-                                        description = MERGING_DATA_TYPE.SONG,
-                                    ),
-                                customCacheKey = track.videoId,
-                            )
-                        addMediaItemNotSet(mediaItem, player.currentMediaItemIndex + 1)
-                        catalogMetadata.add(
-                            player.currentMediaItemIndex + 1,
-                            track.copy(
-                                artists = listOf(Artist("", "Various Artists")),
-                            ),
-                        )
-                    }
-                }
-            } else {
-                addMediaItemNotSet(
-                    GenericMediaItem(
-                        mediaId = track.videoId,
-                        uri = track.videoId,
-                        metadata =
-                            GenericMediaMetadata(
-                                title = track.title,
-                                artist = artistName,
-                                albumTitle = track.album?.name,
-                                artworkUri = thumbUrl,
-                                description = MERGING_DATA_TYPE.SONG,
-                            ),
-                        customCacheKey = track.videoId,
-                    ),
-                    player.currentMediaItemIndex + 1,
-                )
-                catalogMetadata.add(player.currentMediaItemIndex + 1, track)
+        insertTracksAt(tracks, forQueue = true) { current -> queueData.value.data.addToQueueIndex(current) }
+    }
+
+    /**
+     * The one insert path for "Play next" and "Add to queue". Missing artists are looked up first;
+     * the position is worked out only afterwards, from the queue as it is then (the song may have
+     * changed during the lookups), and the queue is updated from its fresh state in one step, so
+     * songs another load appended meanwhile are kept. A null position appends.
+     */
+    private suspend fun insertTracksAt(
+        tracks: List<Track>,
+        forQueue: Boolean,
+        positionFor: (current: Int) -> Int?,
+    ) {
+        _queueData.update { it.copy(queueState = QueueData.StateSource.STATE_INITIALIZING) }
+        val resolved =
+            tracks.map { track ->
+                if (!track.artists.isNullOrEmpty()) return@map track
+                val info = songRepository.getSongInfo(track.videoId).cancellable().lastOrNull()
+                track.copy(artists = listOf(if (info != null) Artist(info.authorId, info.author ?: "") else Artist("", "Various Artists")))
             }
-            Logger.d(
-                "MusicSource",
-                "updateCatalog: ${track.title}, ${catalogMetadata.size}",
-            )
-            Logger.d("MusicSource", "updateCatalog: ${track.title}")
+        val position = positionFor(player.currentMediaItemIndex)
+        if (position == null || position !in 0..queueData.value.data.listTracks.size) {
+            loadMoreCatalog(ArrayList(resolved), isAddToQueue = true)
+            return
         }
+        resolved.forEachIndexed { offset, track -> addMediaItemNotSet(track.toQueueMediaItem(), position + offset) }
         _queueData.update {
-            it
-                .copy(
-                    data =
-                        it.data.copy(
-                            listTracks = catalogMetadata,
-                        ),
-                    queueState = QueueData.StateSource.STATE_INITIALIZED,
-                )
+            val list = it.data.listTracks.toMutableList()
+            list.addAll(position.coerceAtMost(list.size), resolved)
+            val data = it.data.copy(listTracks = list)
+            it.copy(
+                data = if (forQueue) data.afterQueueAdd(position, resolved.size) else data.afterInsert(position, resolved.size),
+                queueState = QueueData.StateSource.STATE_INITIALIZED,
+            )
         }
         reorderShuffledQueue(player.getCurrentMediaTimeLine())
+    }
+
+    private fun Track.toQueueMediaItem(): GenericMediaItem {
+        val thumbUrl =
+            Regex("=w\\d+-h\\d+").replace(
+                thumbnails?.lastOrNull()?.url ?: "https://i.ytimg.com/vi/$videoId/maxresdefault.jpg",
+                "=w544-h544",
+            )
+        return GenericMediaItem(
+            mediaId = videoId,
+            uri = videoId,
+            metadata =
+                GenericMediaMetadata(
+                    title = title,
+                    artist = artists.toListName().connectArtists(),
+                    albumTitle = album?.name,
+                    artworkUri = thumbUrl,
+                    description = MERGING_DATA_TYPE.SONG,
+                ),
+            customCacheKey = videoId,
+        )
+    }
+
+    override suspend fun replaceUpcomingRadio(endpoint: YouTubeWatchEndpoint): Boolean =
+        // In the handler's own scope: closing Up next cancels only the wait, never a half-done edit.
+        coroutineScope.async { retuneRadio(endpoint) }.await()
+
+    private suspend fun retuneRadio(endpoint: YouTubeWatchEndpoint): Boolean {
+        if (player.shuffleModeEnabled) return false
+        // Checked before claiming the queue, or it could never pass.
+        if (queueData.value.queueState != QueueData.StateSource.STATE_INITIALIZED) return false
+        // Claimed for the whole fetch, so a loadMore set off meanwhile backs off instead of
+        // appending the old radio's next page and overwriting the continuation.
+        _queueData.update { it.copy(queueState = QueueData.StateSource.STATE_INITIALIZING) }
+        try {
+            val response = songRepository.getRadioFromEndpoint(endpoint).lastOrNull()
+            val (tracks, continuation) = (response as? Resource.Success)?.data ?: return false
+            val data = queueData.value.data
+            val current = player.currentMediaItemIndex
+            // The radio part starts after the current song, or after the songs you queued.
+            val from = maxOf(current + 1, data.autoplayStartIndex ?: (current + 1))
+            val kept = data.listTracks.take(from).map { it.videoId }.toSet()
+            // A radio starts with its seed, usually a song that is already kept.
+            val radio = tracks.filter { it.videoId !in kept }
+            if (radio.isEmpty()) return false
+            for (index in data.listTracks.size - 1 downTo from) removeMediaItem(index)
+            _queueData.update {
+                it.copy(data = it.data.copy(playlistId = endpoint.playlistId ?: it.data.playlistId, continuation = continuation))
+            }
+            loadMoreCatalog(ArrayList(radio), isAddToQueue = true)
+            return true
+        } finally {
+            _queueData.update { it.copy(queueState = QueueData.StateSource.STATE_INITIALIZED) }
+        }
     }
 
     override suspend fun <T> loadMediaItem(
@@ -2399,6 +2400,7 @@ class JvmMediaPlayerHandlerImpl(
     override fun onIsPlayingChanged(isPlaying: Boolean) {
         _controlState.value = _controlState.value.copy(isPlaying = isPlaying)
         if (isPlaying) {
+            unavailableSkips = 0
             startProgressUpdate()
         } else {
             stopProgressUpdate()
@@ -2506,25 +2508,22 @@ class JvmMediaPlayerHandlerImpl(
     }
 
     override fun onPlayerError(error: PlayerError) {
-        when (error.errorCode) {
-            PlayerConstants.ERROR_CODE_TIMEOUT -> {
-                Logger.e("Player Error", "onPlayerError (${error.errorCode}): ${error.message}")
-//                if (isAppInForeground()) {
-                showToast(ToastType.PlayerError(error.errorCodeName))
-//                } else {
-//                    Logger.w("Player Error", "App is not in foreground, skipping toast")
-//                }
-                player.pause()
+        Logger.e("Player Error", "onPlayerError (${error.errorCode}): ${error.message}")
+        // Timeouts and Wi-Fi-only refusals are expected, not faults worth reporting.
+        if (error.errorCode != PlayerConstants.ERROR_CODE_TIMEOUT && error.errorCodeName != WIFI_ONLY_ERROR_CODE_NAME) {
+            pushPlayerError(error)
+        }
+        when (val action = playerErrorAction(error, hasValidatedInternet(), player.hasNextMediaItem(), unavailableSkips)) {
+            PlayerErrorAction.Skip -> {
+                unavailableSkips++
+                showToast(ToastType.TrackSkipped)
+                // seekTo already loads and plays; prepare() here reloaded the failed track first.
+                player.seekToNext()
+                player.play()
             }
 
-            else -> {
-                Logger.e("Player Error", "onPlayerError (${error.errorCode}): ${error.message}")
-                pushPlayerError(error)
-//                if (isAppInForeground()) {
-                showToast(ToastType.PlayerError(error.errorCodeName))
-//                } else {
-//                    Logger.w("Player Error", "App is not in foreground, skipping toast")
-//                }
+            is PlayerErrorAction.Pause -> {
+                showToast(action.toast)
                 player.pause()
             }
         }

@@ -297,7 +297,6 @@
     <string name="play_video_instead_of_audio_warning">Ця дія видалить кеш плеєра. Продовжити?</string>
     <string name="quality_video">Якість відео</string>
     <string name="add_to_queue">Додати до черги</string>
-    <string name="added_to_queue">Додано до черги</string>
     <string name="new_release">Новинки</string>
     <string name="music_video">Музичне відео</string>
     <string name="your_music_is_always_up_to_date">ВАША МУЗИКА ЗАВЖДИ АКТУАЛЬНА</string>
@@ -335,8 +334,6 @@
     <string name="delete">Видалити</string>
     <string name="top_videos">Топ відео</string>
     <string name="trending">Популярне</string>
-    <string name="new_singles">Нові сингли</string>
-    <string name="new_albums">Нові альбоми</string>
     <string name="notification">Сповіщення</string>
     <string name="month_s_ago">%1$d міс. тому</string>
     <string name="day_s_ago">%1$d дн. тому</string>

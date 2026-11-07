@@ -288,7 +288,6 @@
     <string name="play_video_instead_of_audio_warning">Bu eylem oynatıcı önbelleğini silecektir. Devam edilsin mi?</string>
     <string name="quality_video">Video Kalitesi</string>
     <string name="add_to_queue">Kuyruğa ekle</string>
-    <string name="added_to_queue">Kuyruğa eklendi</string>
     <string name="new_release">Yeni çıkanlar</string>
     <string name="music_video">Video Klip</string>
     <string name="your_music_is_always_up_to_date">MÜZİĞİNİZ HER ZAMAN GÜNCEL</string>
@@ -326,8 +325,6 @@
     <string name="delete">Sil</string>
     <string name="top_videos">En İyi Videolar</string>
     <string name="trending">Öne Çıkanlar</string>
-    <string name="new_singles">Yeni singlelar</string>
-    <string name="new_albums">Yeni albümler</string>
     <string name="notification">Bildirim</string>
     <string name="month_s_ago">%1$d ay önce</string>
     <string name="day_s_ago">%1$d gün önce</string>

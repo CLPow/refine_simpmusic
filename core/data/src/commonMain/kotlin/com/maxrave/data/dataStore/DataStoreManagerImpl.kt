@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.maxrave.common.SELECTED_LANGUAGE
@@ -1175,6 +1176,60 @@ internal class DataStoreManagerImpl(
         }
     }
 
+    override val qualityMobile: Flow<String> =
+        settingsDataStore.data.map { preferences ->
+            // Unset means the Wi-Fi choice, so nothing changes for anyone until they pick one.
+            preferences[QUALITY_MOBILE] ?: quality.first()
+        }
+
+    override suspend fun setQualityMobile(quality: String) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { it[QUALITY_MOBILE] = quality }
+        }
+    }
+
+    override val streamOverWifiOnly: Flow<Boolean> =
+        settingsDataStore.data.map { preferences -> preferences[STREAM_OVER_WIFI_ONLY] == TRUE }
+
+    override suspend fun setStreamOverWifiOnly(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { it[STREAM_OVER_WIFI_ONLY] = if (enabled) TRUE else FALSE }
+        }
+    }
+
+    override val doubleTapSeekSeconds: Flow<Int> =
+        settingsDataStore.data.map { preferences -> preferences[DOUBLE_TAP_SEEK_SECONDS] ?: 10 }
+
+    override suspend fun setDoubleTapSeekSeconds(seconds: Int) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { it[DOUBLE_TAP_SEEK_SECONDS] = seconds }
+        }
+    }
+
+    override val allowExternalStartPlayback: Flow<Boolean> =
+        settingsDataStore.data.map { preferences -> preferences[ALLOW_EXTERNAL_START_PLAYBACK] != FALSE }
+
+    override suspend fun setAllowExternalStartPlayback(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { it[ALLOW_EXTERNAL_START_PLAYBACK] = if (enabled) TRUE else FALSE }
+        }
+    }
+
+    override val pinnedLibraryKeys: Flow<Set<String>> =
+        settingsDataStore.data.map { preferences -> preferences[PINNED_LIBRARY_KEYS].orEmpty() }
+
+    override suspend fun setLibraryPinned(
+        key: String,
+        pinned: Boolean,
+    ) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { settings ->
+                val current = settings[PINNED_LIBRARY_KEYS].orEmpty()
+                settings[PINNED_LIBRARY_KEYS] = if (pinned) current + key else current - key
+            }
+        }
+    }
+
     override val keepYouTubePlaylistOffline: Flow<String> =
         settingsDataStore.data.map { preferences ->
             preferences[KEEP_YOUTUBE_PLAYLIST_OFFLINE] ?: FALSE
@@ -1874,6 +1929,11 @@ internal class DataStoreManagerImpl(
         val PROXY_USERNAME = stringPreferencesKey("proxy_username")
         val PROXY_PASSWORD = stringPreferencesKey("proxy_password")
         val ENDLESS_QUEUE = stringPreferencesKey("endless_queue")
+        val QUALITY_MOBILE = stringPreferencesKey("quality_mobile")
+        val STREAM_OVER_WIFI_ONLY = stringPreferencesKey("stream_over_wifi_only")
+        val DOUBLE_TAP_SEEK_SECONDS = intPreferencesKey("double_tap_seek_seconds")
+        val ALLOW_EXTERNAL_START_PLAYBACK = stringPreferencesKey("allow_external_start_playback")
+        val PINNED_LIBRARY_KEYS = stringSetPreferencesKey("pinned_library_keys")
         val KEEP_YOUTUBE_PLAYLIST_OFFLINE = stringPreferencesKey("keep_youtube_playlist_offline")
         val COMBINE_LOCAL_AND_YOUTUBE_LIKED = stringPreferencesKey("combine_local_and_youtube_liked")
         val SHOULD_SHOW_LOG_IN_REQUIRED_ALERT = stringPreferencesKey("should_show_log_in_required_alert")

@@ -1,5 +1,6 @@
 package com.maxrave.domain.mediaservice.handler
 
+import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
 import com.maxrave.domain.data.entities.NewFormatEntity
 import com.maxrave.domain.data.entities.SongEntity
 import com.maxrave.domain.data.model.browse.album.Track
@@ -125,6 +126,19 @@ interface MediaPlayerHandler {
     fun setCurrentSongIndex(index: Int)
 
     suspend fun playNext(track: Track)
+
+    /**
+     * YouTube Music's "Add to queue": after the songs already queued, ahead of anything Autoplay
+     * added (see [QueueData.Data.autoplayStartIndex]); at the end when there is no Autoplay part.
+     */
+    suspend fun addToQueue(tracks: List<Track>)
+
+    /**
+     * Re-tunes the radio from one of Up next's chips (Familiar, Discover, …): keeps what has
+     * played, the current song and the songs you queued, and replaces only the radio part with
+     * [endpoint]'s. False when nothing changed.
+     */
+    suspend fun replaceUpcomingRadio(endpoint: YouTubeWatchEndpoint): Boolean
 
     suspend fun <T> loadMediaItem(
         anyTrack: T,
@@ -283,7 +297,45 @@ data class QueueData(
         val playlistName: String? = null,
         val playlistType: PlaylistType? = null,
         val continuation: String? = null,
-    )
+        /**
+         * Where Autoplay's songs begin in [listTracks], or null before Autoplay has added any.
+         * YouTube Music keeps the songs you queued apart from what Autoplay adds after them:
+         * "Add to queue" lands before this point, and Up next draws an Autoplay header here.
+         */
+        val autoplayStartIndex: Int? = null,
+    ) {
+        /** Started as a radio (a song's mix, a station): already endless, with no Autoplay part. */
+        val isRadio: Boolean get() = playlistType == PlaylistType.RADIO
+
+        /**
+         * Where "Add to queue" puts songs while the song at [current] plays: after the songs already
+         * queued and ahead of the radio or Autoplay part, never behind the playing song. Null means
+         * there is no such part yet (an album or playlist still playing): append at the end.
+         */
+        fun addToQueueIndex(current: Int): Int? =
+            autoplayStartIndex?.let { maxOf(it, current + 1) } ?: if (isRadio) current + 1 else null
+
+        /**
+         * After "Add to queue" put [count] songs at [position]: the queued part now ends after them,
+         * so the next song added lands behind these. Only when there is a part to keep apart.
+         */
+        fun afterQueueAdd(
+            position: Int,
+            count: Int,
+        ): Data = if (autoplayStartIndex != null || isRadio) copy(autoplayStartIndex = position + count) else this
+
+        /** After [count] songs were inserted at [position] by anything else ("Play next"). */
+        fun afterInsert(
+            position: Int,
+            count: Int,
+        ): Data = copy(autoplayStartIndex = autoplayStartIndex?.let { if (position <= it) it + count else it })
+
+        /** After the song at [position] was removed. */
+        fun afterRemove(position: Int): Data = copy(autoplayStartIndex = autoplayStartIndex?.let { if (position < it) it - 1 else it })
+
+        /** Autoplay is about to append its first songs: they start at the current end, unless it already began. */
+        fun withAutoplayStart(): Data = copy(autoplayStartIndex = autoplayStartIndex ?: listTracks.size)
+    }
 
     enum class StateSource {
         STATE_CREATED,
@@ -336,7 +388,7 @@ data class QueueData(
             data =
                 this.data.copy(
                     listTracks = temp,
-                ),
+                ).afterRemove(index),
         )
     }
 
@@ -375,6 +427,12 @@ sealed class ToastType(
     extra: String? = null,
 ) {
     data object ExplicitContent : ToastType()
+
+    /** YouTube Music's "Track is unavailable. Skipping to the next one." */
+    data object TrackSkipped : ToastType()
+
+    /** Streaming refused on a metered network under "Stream via Wi-Fi only". */
+    data object WifiOnly : ToastType()
 
     data class PlayerError(
         val error: String,

@@ -285,7 +285,6 @@
     <string name="play_video_instead_of_audio_warning">سيؤدي هذا الإجراء إلى حذف ذاكرة التخزين المؤقت للمشغل. هل تريد المتابعة؟</string>
     <string name="quality_video">جودة الفيديو</string>
     <string name="add_to_queue">إضافة إلى قائمة الانتظار</string>
-    <string name="added_to_queue">تمت الإضافة إلى قائمة الانتظار</string>
     <string name="new_release">إصدار جديد</string>
     <string name="music_video">فيديو موسيقي</string>
     <string name="your_music_is_always_up_to_date">الموسيقى الخاصة بك محدثة دائمًا</string>
@@ -322,8 +321,6 @@
     <string name="delete">حذف</string>
     <string name="top_videos">أعلى الفيديوهات</string>
     <string name="trending">الشائع</string>
-    <string name="new_singles">الفردي الجديد</string>
-    <string name="new_albums">ألبوم جديد</string>
     <string name="notification">إشعار</string>
     <string name="month_s_ago">منذ %1$d اشهر</string>
     <string name="day_s_ago">منذ %1$d يوم</string>

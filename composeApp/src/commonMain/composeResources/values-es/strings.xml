@@ -295,7 +295,6 @@
     <string name="play_video_instead_of_audio_warning">Esta acción eliminará la caché del reproductor. ¿Continuar?</string>
     <string name="quality_video">Calidad de vídeo</string>
     <string name="add_to_queue">Añadir a la cola</string>
-    <string name="added_to_queue">Añadido a la cola</string>
     <string name="new_release">Nuevo lanzamiento</string>
     <string name="music_video">Video musical</string>
     <string name="your_music_is_always_up_to_date">TU MÚSICA SIEMPRE ESTÁ ACTUALIZADA</string>
@@ -333,8 +332,6 @@
     <string name="delete">Eliminar</string>
     <string name="top_videos">Mejores videos</string>
     <string name="trending">Tendencias</string>
-    <string name="new_singles">Nuevos sencillos</string>
-    <string name="new_albums">Nuevos álbumes</string>
     <string name="notification">Notificación</string>
     <string name="month_s_ago">Hace %1$d mese(s)</string>
     <string name="day_s_ago">Hace %1$d día(s)</string>

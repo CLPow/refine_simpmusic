@@ -271,7 +271,6 @@
     <string name="play_video_instead_of_audio_warning">Bu fəaliyyət oynadıcı keşkəsin siləcək. Davam edilsin?</string>
     <string name="quality_video">Video Keyfiyyəti</string>
     <string name="add_to_queue">Növbəyə əlavə et</string>
-    <string name="added_to_queue">Növbəyə əlavə edildi</string>
     <string name="new_release">Yeni buraxılış</string>
     <string name="music_video">Video Musiqi</string>
     <string name="your_music_is_always_up_to_date">MUSİQİNİZ HƏMİŞƏ QABAQCILDIR</string>
@@ -308,8 +307,6 @@
     <string name="delete">Sil</string>
     <string name="top_videos">Ən yaxşı videolar</string>
     <string name="trending">Trendlər</string>
-    <string name="new_singles">Yeni seçmələr</string>
-    <string name="new_albums">Yeni albomlar</string>
     <string name="notification">Bildiriş</string>
     <string name="month_s_ago">%1$d ay əvvəl</string>
     <string name="day_s_ago">%1$d gün əvvəl</string>

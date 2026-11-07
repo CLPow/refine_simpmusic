@@ -17,6 +17,7 @@ import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.theme.typo
 import org.jetbrains.compose.resources.stringResource
 import simpmusic.composeapp.generated.resources.Res
+import simpmusic.composeapp.generated.resources.more
 import simpmusic.composeapp.generated.resources.exit_selection
 import simpmusic.composeapp.generated.resources.n_selected
 import simpmusic.composeapp.generated.resources.select_all
@@ -79,7 +80,7 @@ fun SongSelectionTopAppBar(
                 IconButton(onClick = onOpenActions) {
                     Icon(
                         imageVector = SimpIcons.MoreVert,
-                        contentDescription = null,
+                        contentDescription = stringResource(Res.string.more),
                     )
                 }
             }

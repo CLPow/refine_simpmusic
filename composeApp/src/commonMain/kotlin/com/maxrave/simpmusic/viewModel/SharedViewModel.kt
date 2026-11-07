@@ -100,11 +100,13 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.getString
 import simpmusic.composeapp.generated.resources.Res
-import simpmusic.composeapp.generated.resources.added_to_queue
+import simpmusic.composeapp.generated.resources.ytm_album_added_to_queue
+import simpmusic.composeapp.generated.resources.ytm_playlist_added_to_queue
+import simpmusic.composeapp.generated.resources.ytm_song_added_to_queue
+import simpmusic.composeapp.generated.resources.ytm_songs_added_to_queue
 import simpmusic.composeapp.generated.resources.added_to_youtube_liked
 import simpmusic.composeapp.generated.resources.error
 import simpmusic.composeapp.generated.resources.login_success
-import simpmusic.composeapp.generated.resources.play_next
 import simpmusic.composeapp.generated.resources.removed_from_youtube_liked
 import simpmusic.composeapp.generated.resources.shared
 import simpmusic.composeapp.generated.resources.updated
@@ -736,16 +738,19 @@ class SharedViewModel(
             updateLyrics(
                 videoId = videoId,
                 duration = 0,
-                inputLyrics = lyrics,
+                foundLyrics = lyrics,
                 isTranslatedLyrics = false,
-                lyricsProvider = LyricsProvider.OFFLINE,
+                foundProvider = LyricsProvider.OFFLINE,
             )
         }
     }
 
-    private fun getSavedLyrics(track: Track) {
-        viewModelScope.launch {
-            lyricsCanvasRepository.getSavedLyrics(track.videoId).cancellable().collectLatest { lyrics ->
+    // A single read, inside the lyrics job: a collector of its own outlived the song and wrote a
+    // later database change for it over the next song's lyrics.
+    private suspend fun getSavedLyrics(track: Track) {
+        run {
+            val lyrics = lyricsCanvasRepository.getSavedLyrics(track.videoId).firstOrNull()
+            run {
                 if (lyrics != null) {
                     val lyricsData = lyrics.toLyrics()
                     Logger.d(tag, "Saved Lyrics $lyricsData")
@@ -766,6 +771,11 @@ class SharedViewModel(
                     // Previously this branch did not exist, so a track with no lyrics anywhere left
                     // the screen in whatever state it was already in, with no indication that the
                     // search had finished.
+                    val plain = youTubePlainLyrics?.takeIf { it.first == track.videoId }?.second
+                    if (plain != null) {
+                        updateLyrics(track.videoId, track.durationSeconds ?: 0, plain, false, LyricsProvider.YOUTUBE_MUSIC)
+                        return
+                    }
                     Logger.d(tag, "No lyrics from any source for ${track.videoId}")
                     updateLyrics(
                         track.videoId,
@@ -1114,10 +1124,21 @@ class SharedViewModel(
     private suspend fun updateLyrics(
         videoId: String,
         duration: Int, // 0 if translated lyrics
-        inputLyrics: Lyrics?,
+        foundLyrics: Lyrics?,
         isTranslatedLyrics: Boolean,
-        lyricsProvider: LyricsProvider = LyricsProvider.SIMPMUSIC,
+        foundProvider: LyricsProvider = LyricsProvider.SIMPMUSIC,
     ) {
+        if (lyricsVideoId != null && videoId != lyricsVideoId) {
+            Logger.d(tag, "Dropping lyrics for $videoId: now showing $lyricsVideoId")
+            return
+        }
+        // YouTube Music's own text beats an untimed match from elsewhere (matched by title and
+        // length, possibly another song): only a timed source may replace it.
+        val youTubePlain = youTubePlainLyrics?.takeIf { it.first == videoId }?.second
+        val untimed = foundLyrics?.syncType == null || foundLyrics.syncType == "UNSYNCED"
+        val useYouTubePlain = !isTranslatedLyrics && youTubePlain != null && foundProvider != LyricsProvider.YOUTUBE_MUSIC && foundLyrics != null && untimed
+        val inputLyrics = if (useYouTubePlain) youTubePlain else foundLyrics
+        val lyricsProvider = if (useYouTubePlain) LyricsProvider.YOUTUBE_MUSIC else foundProvider
         if (inputLyrics == null) {
             _nowPlayingScreenData.update {
                 it.copy(
@@ -1304,6 +1325,7 @@ class SharedViewModel(
                                 NowPlayingScreenData.LyricsData(
                                     lyrics = lyrics,
                                     lyricsProvider = lyricsProvider,
+                                    sourceText = youTubeMusicLyricsSource.takeIf { lyricsProvider == LyricsProvider.YOUTUBE_MUSIC },
                                 ),
                         )
                     }
@@ -1349,7 +1371,12 @@ class SharedViewModel(
         song: SongEntity,
         duration: Int,
     ) {
-        viewModelScope.launch {
+        // One search at a time: the previous song's is cancelled, so its late answers (or its
+        // final "none found") cannot land on this one. updateLyrics also drops anything not for
+        // this song, for the paths that run outside the job.
+        lyricsJob?.cancel()
+        lyricsVideoId = song.videoId
+        lyricsJob = viewModelScope.launch {
             val videoId = song.videoId
             log("Get Lyrics From Format for $videoId", LogLevel.WARN)
             val artistName = song.artistName
@@ -1370,6 +1397,8 @@ class SharedViewModel(
             resetLyricsVoteState()
             // A fresh attempt: every source is eligible again for this track.
             triedLyricsSources.clear()
+            youTubePlainLyrics = null
+            youTubeMusicLyricsSource = null
             // No per-user provider any more (the setting went with the other non-YouTube-Music
             // options): every track takes the same best-timed-first order.
             tryLyricsSource(
@@ -1389,6 +1418,12 @@ class SharedViewModel(
      * at the start of each attempt.
      */
     private val triedLyricsSources = mutableSetOf<String>()
+
+    /** The running lyrics search; cancelled when the next song's starts. */
+    private var lyricsJob: Job? = null
+
+    /** The song whose lyrics are being searched for; results for any other are dropped. */
+    private var lyricsVideoId: String? = null
 
     /**
      * Order the sources are consulted in once the user's choice has been tried.
@@ -1427,6 +1462,7 @@ class SharedViewModel(
         triedLyricsSources += next
 
         when (next) {
+            LyricsSourceOrder.YOUTUBE_MUSIC -> getYouTubeMusicLyrics(videoId, song, artist, duration)
             DataStoreManager.SIMPMUSIC -> getSimpMusicLyrics(videoId, song, artist, duration)
             LyricsSourceOrder.SPOTIFY ->
                 getSpotifyLyrics(
@@ -1441,6 +1477,44 @@ class SharedViewModel(
             // An unrecognised stored value used to fall through the `when` and quietly load nothing.
             else -> tryLyricsSource(null, videoId, song, artist, duration)
         }
+    }
+
+    /**
+     * YouTube Music's plain-text lyrics for the track being loaded, held back while the other
+     * sources are asked for timed ones; shown only if none has any. Confined to the lyrics
+     * coroutine like [triedLyricsSources].
+     */
+    private var youTubePlainLyrics: Pair<String, Lyrics>? = null
+
+    /** The credit line for the YouTube Music lyrics being shown. */
+    private var youTubeMusicLyricsSource: String? = null
+
+    /**
+     * YouTube Music's own lyrics: timed for this recording when YouTube has timing, which ends the
+     * search. Plain text only is kept for the end of the chain, since a later source may still
+     * have timing for it.
+     */
+    private suspend fun getYouTubeMusicLyrics(
+        videoId: String,
+        song: SongEntity,
+        artist: String,
+        duration: Int,
+    ) {
+        val response = lyricsCanvasRepository.getYouTubeMusicLyrics(videoId).lastOrNull()
+        val data = response?.data
+        if (response is Resource.Success && data != null) {
+            val (lyrics, source) = data
+            if (lyrics.syncType == "LINE_SYNCED") {
+                Logger.d(tag, "YouTube Music timed lyrics for $videoId (${lyrics.lines?.size} lines, $source)")
+                youTubeMusicLyricsSource = source
+                updateLyrics(videoId, duration, lyrics, false, LyricsProvider.YOUTUBE_MUSIC)
+                getSimpMusicTranslatedLyrics(videoId, lyrics)
+                return
+            }
+            youTubePlainLyrics = videoId to lyrics
+            youTubeMusicLyricsSource = source
+        }
+        tryLyricsSource(null, videoId, song, artist, duration)
     }
 
     private suspend fun getSimpMusicLyrics(
@@ -1523,12 +1597,12 @@ class SharedViewModel(
             }
     }
 
-    private fun getLrclibLyrics(
+    private suspend fun getLrclibLyrics(
         song: SongEntity,
         artist: String,
         duration: Int,
     ) {
-        viewModelScope.launch {
+        run {
             lyricsCanvasRepository
                 .getLrclibLyricsData(
                     artist,
@@ -1565,12 +1639,12 @@ class SharedViewModel(
         }
     }
 
-    private fun getBetterLyrics(
+    private suspend fun getBetterLyrics(
         song: SongEntity,
         artist: String,
         duration: Int,
     ) {
-        viewModelScope.launch {
+        run {
             lyricsCanvasRepository
                 .getBetterLyrics(
                     artist,
@@ -1731,13 +1805,13 @@ class SharedViewModel(
         }
     }
 
-    private fun getSpotifyLyrics(
+    private suspend fun getSpotifyLyrics(
         track: Track,
         title: String,
         artist: String,
         duration: Int? = null,
     ) {
-        viewModelScope.launch {
+        run {
             Logger.d("Check SpotifyLyrics", "SpotifyLyrics $title $artist")
             lyricsCanvasRepository.getSpotifyLyrics(dataStoreManager, title, artist, duration).cancellable().collect { response ->
                 Logger.d("Check SpotifyLyrics", response.toString())
@@ -1797,17 +1871,31 @@ class SharedViewModel(
         _recreateActivity.value = false
     }
 
-    fun addListToQueue(listTrack: ArrayList<Track>) {
+    /**
+     * YouTube Music's "Add to queue" for a song, album or playlist ([kind] picks its wording).
+     * A single song used to be turned into "play next" while Autoplay was on, because the queue
+     * end was behind every Autoplay song; it now goes ahead of them, as in YouTube Music.
+     */
+    fun addListToQueue(
+        listTrack: ArrayList<Track>,
+        kind: QueueItemKind = QueueItemKind.SONGS,
+    ) {
         viewModelScope.launch {
-            if (listTrack.size == 1 && dataStoreManager.endlessQueue.first() == TRUE) {
-                mediaPlayerHandler.playNext(listTrack.first())
-                makeToast(getString(Res.string.play_next))
-            } else {
-                mediaPlayerHandler.loadMoreCatalog(listTrack)
-                makeToast(getString(Res.string.added_to_queue))
-            }
+            if (listTrack.isEmpty()) return@launch
+            mediaPlayerHandler.addToQueue(listTrack)
+            makeToast(
+                when {
+                    kind == QueueItemKind.ALBUM -> getString(Res.string.ytm_album_added_to_queue)
+                    kind == QueueItemKind.PLAYLIST -> getString(Res.string.ytm_playlist_added_to_queue)
+                    listTrack.size == 1 -> getString(Res.string.ytm_song_added_to_queue)
+                    else -> getString(Res.string.ytm_songs_added_to_queue, listTrack.size)
+                },
+            )
         }
     }
+
+    /** Swiping a song row: one song to the queue, with YouTube Music's confirmation. */
+    fun addSongToQueue(track: Track) = addListToQueue(arrayListOf(track))
 
     fun addToYouTubeLiked() {
         viewModelScope.launch {
@@ -2189,6 +2277,7 @@ sealed class UIEvent {
 }
 
 enum class LyricsProvider {
+    YOUTUBE_MUSIC,
     SIMPMUSIC,
     YOUTUBE,
     SPOTIFY,
@@ -2219,6 +2308,8 @@ data class NowPlayingScreenData(
         val lyrics: Lyrics,
         val translatedLyrics: Pair<Lyrics, LyricsProvider>? = null,
         val lyricsProvider: LyricsProvider,
+        /** YouTube's own credit line ("Source: Musixmatch"), shown as is when present. */
+        val sourceText: String? = null,
     )
 
     companion object {
@@ -2255,3 +2346,6 @@ sealed class VoteState {
         val message: String,
     ) : VoteState()
 }
+
+/** What "Add to queue" was used on, for YouTube Music's wording of the confirmation. */
+enum class QueueItemKind { SONGS, ALBUM, PLAYLIST }

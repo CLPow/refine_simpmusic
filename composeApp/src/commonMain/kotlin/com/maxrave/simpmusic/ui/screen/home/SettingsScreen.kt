@@ -86,6 +86,14 @@ import simpmusic.composeapp.generated.resources.ytm_app_language
 import simpmusic.composeapp.generated.resources.ytm_app_version
 import simpmusic.composeapp.generated.resources.ytm_autoplay
 import simpmusic.composeapp.generated.resources.ytm_autoplay_summary
+import simpmusic.composeapp.generated.resources.ytm_audio_quality_wifi
+import simpmusic.composeapp.generated.resources.ytm_audio_quality_mobile
+import simpmusic.composeapp.generated.resources.ytm_double_tap_seek
+import simpmusic.composeapp.generated.resources.ytm_n_seconds
+import simpmusic.composeapp.generated.resources.ytm_allow_external_start
+import simpmusic.composeapp.generated.resources.ytm_allow_external_start_summary
+import simpmusic.composeapp.generated.resources.ytm_stream_wifi_only
+import simpmusic.composeapp.generated.resources.ytm_stream_wifi_only_summary
 import simpmusic.composeapp.generated.resources.ytm_translate_lyrics
 import simpmusic.composeapp.generated.resources.ytm_translate_lyrics_summary
 import simpmusic.composeapp.generated.resources.ytm_translation_language
@@ -205,6 +213,10 @@ fun SettingScreen(
     val downloadedSize by viewModel.downloadedCacheSize.collectAsStateWithLifecycle()
     val autoplay by dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }.collectAsStateWithLifecycle(false)
     val translateLyrics by viewModel.useTranslation.collectAsStateWithLifecycle()
+    val qualityMobile by dataStoreManager.qualityMobile.collectAsStateWithLifecycle(null)
+    val streamOverWifiOnly by dataStoreManager.streamOverWifiOnly.collectAsStateWithLifecycle(false)
+    val doubleTapSeekSeconds by dataStoreManager.doubleTapSeekSeconds.collectAsStateWithLifecycle(10)
+    val allowExternalStart by dataStoreManager.allowExternalStartPlayback.collectAsStateWithLifecycle(true)
     val translationLanguage by viewModel.translationLanguage.collectAsStateWithLifecycle()
     val signInExpired by accountRepository.signInExpired.collectAsStateWithLifecycle()
     var choice by remember { mutableStateOf<ChoiceDialog?>(null) }
@@ -214,6 +226,9 @@ fun SettingScreen(
     val appLanguage = stringResource(Res.string.ytm_app_language)
     val locationTitle = stringResource(Res.string.ytm_location)
     val audioQuality = stringResource(Res.string.audio_quality)
+    val audioQualityWifi = stringResource(Res.string.ytm_audio_quality_wifi)
+    val audioQualityMobile = stringResource(Res.string.ytm_audio_quality_mobile)
+    val doubleTapSeekTitle = stringResource(Res.string.ytm_double_tap_seek)
     val downloadAudioQuality = stringResource(Res.string.ytm_download_audio_quality)
     val noEqualizer = stringResource(Res.string.ytm_no_equalizer)
     val clearDownloadsConfirm = stringResource(Res.string.ytm_clear_downloads_confirm)
@@ -302,6 +317,21 @@ fun SettingScreen(
                         summary = stringResource(Res.string.ytm_autoplay_summary),
                         checked = autoplay,
                     ) { enabled -> scope.launch { dataStoreManager.setEndlessQueue(enabled) } }
+                    val seekSteps = listOf(5, 10, 15, 20, 30, 60)
+                    val seekLabels = seekSteps.map { secondsLabel(it) }
+                    SettingRow(title = doubleTapSeekTitle, summary = secondsLabel(doubleTapSeekSeconds)) {
+                        choice =
+                            ChoiceDialog(doubleTapSeekTitle, seekLabels, seekSteps.indexOf(doubleTapSeekSeconds)) { index ->
+                                scope.launch { dataStoreManager.setDoubleTapSeekSeconds(seekSteps[index]) }
+                            }
+                    }
+                    if (getPlatform() != Platform.Desktop) {
+                        SwitchRow(
+                            title = stringResource(Res.string.ytm_allow_external_start),
+                            summary = stringResource(Res.string.ytm_allow_external_start_summary),
+                            checked = allowExternalStart,
+                        ) { enabled -> scope.launch { dataStoreManager.setAllowExternalStartPlayback(enabled) } }
+                    }
                     SwitchRow(
                         title = stringResource(Res.string.ytm_translate_lyrics),
                         summary = stringResource(Res.string.ytm_translate_lyrics_summary),
@@ -324,9 +354,25 @@ fun SettingScreen(
                     }
                 }
                 SettingsCategory.DataSaving -> {
-                    SettingRow(title = audioQuality, summary = quality.orEmpty()) {
+                    val isPhone = getPlatform() != Platform.Desktop
+                    val wifiTitle = if (isPhone) audioQualityWifi else audioQuality
+                    SettingRow(title = wifiTitle, summary = quality.orEmpty()) {
                         val options = QUALITY.items.map { it.toString() }
-                        choice = ChoiceDialog(audioQuality, options, options.indexOf(quality)) { viewModel.changeQuality(options[it]) }
+                        choice = ChoiceDialog(wifiTitle, options, options.indexOf(quality)) { viewModel.changeQuality(options[it]) }
+                    }
+                    if (isPhone) {
+                        SettingRow(title = audioQualityMobile, summary = qualityMobile.orEmpty()) {
+                            val options = QUALITY.items.map { it.toString() }
+                            choice =
+                                ChoiceDialog(audioQualityMobile, options, options.indexOf(qualityMobile)) {
+                                    scope.launch { dataStoreManager.setQualityMobile(options[it]) }
+                                }
+                        }
+                        SwitchRow(
+                            title = stringResource(Res.string.ytm_stream_wifi_only),
+                            summary = stringResource(Res.string.ytm_stream_wifi_only_summary),
+                            checked = streamOverWifiOnly,
+                        ) { enabled -> scope.launch { dataStoreManager.setStreamOverWifiOnly(enabled) } }
                     }
                 }
                 SettingsCategory.Downloads -> {
@@ -552,3 +598,6 @@ private fun formatBytes(bytes: Long?): String {
     val mb = b / (1024.0 * 1024.0)
     return if (mb >= 1024) "${(mb / 1024 * 10).toLong() / 10.0} GB" else "${mb.toLong()} MB"
 }
+
+@Composable
+private fun secondsLabel(seconds: Int): String = stringResource(Res.string.ytm_n_seconds, seconds)

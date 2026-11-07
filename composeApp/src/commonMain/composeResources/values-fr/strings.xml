@@ -295,7 +295,6 @@
     <string name="play_video_instead_of_audio_warning">Cette action supprimera le cache du lecteur. Souhaitez-vous continuer ?</string>
     <string name="quality_video">Qualité de la vidéo</string>
     <string name="add_to_queue">Ajouter à la file d'attente</string>
-    <string name="added_to_queue">Ajouté à la file d'attente</string>
     <string name="new_release">Nouveautés</string>
     <string name="music_video">Clips</string>
     <string name="your_music_is_always_up_to_date">VOTRE MUSIQUE EST TOUJOURS À JOUR</string>
@@ -333,8 +332,6 @@
     <string name="delete">Supprimer</string>
     <string name="top_videos">Vidéos Populaires</string>
     <string name="trending">Tendance</string>
-    <string name="new_singles">Nouveaux Singles</string>
-    <string name="new_albums">Nouveaux Albums</string>
     <string name="notification">Notification</string>
     <string name="month_s_ago">Il y a %1$d mois</string>
     <string name="day_s_ago">Il y a %1$d jour(s)</string>
