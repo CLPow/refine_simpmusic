@@ -161,7 +161,6 @@
     <string name="playlist">Playlist</string>
     <string name="restart_app">Reinicie o aplicativo para aplicar as alterações</string>
     <string name="balance_media_loudness">Equilibrar som da música</string>
-    <string name="normalize_volume">Normalizar Volume</string>
     <string name="audio">Áudio</string>
     <string name="streaming_data_provider_piped">Transmitindo provedor de dados (Piped)</string>
     <string name="itag">Itag</string>

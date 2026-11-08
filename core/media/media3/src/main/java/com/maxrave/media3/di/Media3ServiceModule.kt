@@ -1,5 +1,6 @@
 package com.maxrave.media3.di
 
+import com.maxrave.media3.audio.OutputRouteMonitor
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import com.maxrave.domain.repository.AlbumRepository
@@ -15,7 +16,6 @@ import androidx.core.net.toUri
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
-import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.DatabaseProvider
 import androidx.media3.database.StandaloneDatabaseProvider
@@ -31,11 +31,7 @@ import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultLoadControl.DEFAULT_MAX_BUFFER_MS
 import androidx.media3.exoplayer.DefaultLoadControl.DEFAULT_MIN_BUFFER_MS
-import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.LoadControl
-import androidx.media3.exoplayer.audio.AudioSink
-import androidx.media3.exoplayer.audio.DefaultAudioSink
-import androidx.media3.exoplayer.audio.SilenceSkippingAudioProcessor
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.flac.FlacExtractor
@@ -170,8 +166,8 @@ private val mediaServiceModule =
             )
         }
 
-        single<DefaultRenderersFactory>(createdAtStart = true) {
-            provideRendererFactory(androidContext())
+        single<OutputRouteMonitor>(createdAtStart = true) {
+            OutputRouteMonitor(androidContext())
         }
 
         // Player exposed for MediaSession + UI (video rendering via PlayerView/PlayerSurface).
@@ -197,6 +193,7 @@ private val mediaServiceModule =
                 mediaSourceFactory = get(),
                 audioAttributes = get(),
                 streamRepository = get(),
+                routeMonitor = get(),
             )
         }
 
@@ -226,6 +223,7 @@ private val mediaServiceModule =
                 get<StreamRepository>(),
                 get<AlbumRepository>(),
                 get<DataStoreManager>(),
+                get<OutputRouteMonitor>(),
             )
         }
 
@@ -422,33 +420,6 @@ private fun provideMergingMediaSource(
             coroutineScope,
         ),
     )
-
-@UnstableApi
-private fun provideRendererFactory(context: Context): DefaultRenderersFactory =
-    object : DefaultRenderersFactory(context) {
-        override fun buildAudioSink(
-            context: Context,
-            enableFloatOutput: Boolean,
-            enableAudioTrackPlaybackParams: Boolean,
-        ): AudioSink =
-            DefaultAudioSink
-                .Builder(context)
-                .setEnableFloatOutput(enableFloatOutput)
-                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                .setAudioProcessorChain(
-                    DefaultAudioSink.DefaultAudioProcessorChain(
-                        emptyArray(),
-                        SilenceSkippingAudioProcessor(
-                            2_000_000,
-                            (20_000 / 2_000_000).toFloat(),
-                            2_000_000,
-                            0,
-                            256,
-                        ),
-                        SonicAudioProcessor(),
-                    ),
-                ).build()
-    }
 
 @UnstableApi
 private fun provideCacheDataSource(

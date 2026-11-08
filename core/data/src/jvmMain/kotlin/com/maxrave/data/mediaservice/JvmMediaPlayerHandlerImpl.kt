@@ -1,5 +1,6 @@
 package com.maxrave.data.mediaservice
 
+import com.maxrave.domain.audio.TrackInfo
 import com.maxrave.domain.mediaservice.handler.playerErrorAction
 import com.maxrave.domain.mediaservice.handler.WIFI_ONLY_ERROR_CODE_NAME
 import com.maxrave.domain.mediaservice.handler.PlayerErrorAction
@@ -239,7 +240,6 @@ class JvmMediaPlayerHandlerImpl(
 
     private var skipSilent = false
 
-    private var normalizeVolume = false
 
     private val playbackReporter = PlaybackReporter(streamRepository, dataStoreManager, coroutineScope)
 
@@ -338,29 +338,10 @@ class JvmMediaPlayerHandlerImpl(
         getSkipSegmentsJob = Job()
         getFormatJob = Job()
         skipSilent = runBlocking { dataStoreManager.skipSilent.first() == TRUE }
-        // Collected rather than read once like the settings around it: the equalizer is adjusted
-        // while music is playing, and a curve that only takes effect after a restart is useless
-        // for judging what you just changed.
+        // Collected, not read once: the Sound page changes these while music plays.
         backgroundScope.launch {
-            combine(
-                dataStoreManager.equalizerEnabled,
-                dataStoreManager.equalizerBands,
-                dataStoreManager.equalizerPreamp,
-            ) { enabled, bands, preamp -> Triple(enabled == TRUE, bands, preamp) }
-                .distinctUntilChanged()
-                .collect { (enabled, bands, preamp) ->
-                    // Switched off sends a flat curve rather than skipping the call: the filter
-                    // chain has to actually come out of mpv, and the stored bands are left alone
-                    // so switching back on returns to the user's own shape.
-                    player.setEqualizer(
-                        bandsDb =
-                            if (enabled) bands.split(",").mapNotNull { it.trim().toFloatOrNull() } else emptyList(),
-                        preampDb = if (enabled) preamp else 0f,
-                    )
-                }
+            dataStoreManager.enhanceSettings.distinctUntilChanged().collect { player.setEnhance(it) }
         }
-        normalizeVolume =
-            runBlocking { dataStoreManager.normalizeVolume.first() == TRUE }
         _nowPlaying.value = player.currentMediaItem
         if (runBlocking { dataStoreManager.saveStateOfPlayback.first() } == TRUE) {
             Logger.d(TAG, "SaveStateOfPlayback TRUE")
@@ -2160,33 +2141,37 @@ class JvmMediaPlayerHandlerImpl(
         }
     }
 
-    override fun mayBeNormalizeVolume() {
-        // Desktop: static per-track gain from the format's loudnessDb, matching Android's
-        // LoudnessEnhancer. dynaudnorm made music pump; a fixed gain does not.
-        runBlocking {
-            normalizeVolume = dataStoreManager.normalizeVolume.first() == TRUE
-        }
-        val adapter = player as? com.simpmusic.media_jvm.mpv.MpvPlayerAdapter ?: return
-        adapter.setNormalizeVolume(normalizeVolume)
-        if (!normalizeVolume) {
-            adapter.setLoudnessGainDbForTrack(null)
-            return
-        }
+    /**
+     * Publishes YouTube's loudness and format for the track now playing *and* the next one, so the
+     * engine's normalization has the incoming track's gain before a crossfade or gapless change
+     * reaches it. Whether loudness is used is the engine's business ("Enhance audio" › Normalize
+     * volume), so this runs on every track whatever the settings.
+     */
+    override fun publishTrackInfo() {
+        val current = player.currentMediaItem?.mediaId ?: return
+        val next =
+            if (player.shuffleModeEnabled) null else player.getMediaItemAt(player.currentMediaItemIndex + 1)?.mediaId
         volumeNormalizationJob?.cancel()
         volumeNormalizationJob =
-            coroutineScope.launch(Dispatchers.Main) {
-                val videoId =
-                    player.currentMediaItem
-                        ?.mediaId
-                        ?.substringAfter("Video")
-                        ?: return@launch
-                streamRepository
-                    .getFormatFlow(videoId)
-                    .cancellable()
-                    .distinctUntilChanged()
-                    .collectLatest { format ->
-                        adapter.setLoudnessGainDbForTrack(format?.loudnessDb?.toFloat())
+            coroutineScope.launch {
+                listOfNotNull(current, next).distinct().forEach { mediaId ->
+                    launch {
+                        streamRepository
+                            .getFormatFlow(mediaId.removePrefix("Video"))
+                            .cancellable()
+                            .distinctUntilChanged()
+                            .collectLatest { format ->
+                                player.setTrackInfo(
+                                    mediaId,
+                                    TrackInfo(
+                                        loudnessDb = format?.loudnessDb?.toFloat(),
+                                        itag = format?.itag,
+                                        bitrateKbps = format?.bitrate?.takeIf { it > 0 }?.let { it / 1000 },
+                                    ),
+                                )
+                            }
                     }
+                }
             }
     }
 
@@ -2297,19 +2282,6 @@ class JvmMediaPlayerHandlerImpl(
 
             // Stop and release player
             player.removeListener(this)
-
-            // Release audio effects
-//            try {
-//                loudnessEnhancer?.enabled = false
-//                loudnessEnhancer?.release()
-//                loudnessEnhancer = null
-//
-//                secondLoudnessEnhancer?.enabled = false
-//                secondLoudnessEnhancer?.release()
-//                secondLoudnessEnhancer = null
-//            } catch (e: Exception) {
-//                Logger.e("ServiceHandler", "Error releasing audio effects ${e.message}")
-//            }
 
             // Cancel all jobs
             progressJob?.cancel()
@@ -2430,7 +2402,7 @@ class JvmMediaPlayerHandlerImpl(
             mayBeTrackingListeningLocal(lastPlayed, currentState.progress)
         }
         Logger.w(TAG, "Smooth Switching Transition Current Position: ${player.currentPosition}")
-        mayBeNormalizeVolume()
+        publishTrackInfo()
         Logger.w(TAG, "REASON onMediaItemTransition: $reason")
         Logger.d(TAG, "Media Item Transition Media Item: ${mediaItem?.metadata?.title}")
         if (mediaItem?.mediaId != _nowPlaying.value?.mediaId) {

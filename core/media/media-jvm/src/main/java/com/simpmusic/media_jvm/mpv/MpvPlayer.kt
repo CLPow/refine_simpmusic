@@ -115,16 +115,10 @@ class MpvPlayer private constructor(
         private const val PITCH_LABEL = "simpDjPitch"
 
         /**
-         * `@label:` of the equalizer entry, kept apart from the crossfade labels because the two
-         * tiers are installed and removed independently — see [applyAudioFilters].
+         * `@label:` of the "Enhance audio" entry, kept apart from the crossfade labels because the
+         * two tiers are installed and removed independently — see [applyAudioFilters].
          */
-        private const val EQ_LABEL = "simpEq"
-
-        /** `@label:` of the loudness-normalization entry (`dynaudnorm`). */
-        private const val LOUDNORM_LABEL = "simpLoudnorm"
-
-        /** ISO octave centres for a ten-band equalizer, the spacing AutoEq profiles assume. */
-        val EQ_BANDS_HZ = listOf(31, 62, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000)
+        const val ENHANCE_LABEL = "simpEnhance"
 
         /**
          * Create and initialize a libmpv handle.
@@ -755,83 +749,46 @@ class MpvPlayer private constructor(
     }
 
     /**
-     * The equalizer entry, or null while the equalizer is off or flat.
+     * The "Enhance audio" entry, or null while it is off — and off means no entry at all, so the
+     * chain is exactly what 2.3.8 played.
      *
      * Held here because `af` is one property: writing it replaces the entire chain, so every write
-     * has to carry both tiers. Crossfade used to write the property directly, which is why
-     * anything else placed in `af` vanished the moment a transition started or ended.
+     * has to carry both tiers.
      */
     @Volatile
-    private var eqEntry: String? = null
+    private var enhanceEntry: String? = null
 
-    /**
-     * Loudness-normalization entry (`dynaudnorm`), or null when the user has volume
-     * normalization off. Lives in `af` beside the equalizer so a fresh handle re-asserts both.
-     */
-    @Volatile
-    private var loudnormEntry: String? = null
-
-    /** Crossfade entries currently installed, so an equalizer change can rewrite around them. */
+    /** Crossfade entries currently installed, so an Enhance audio change can rewrite around them. */
     @Volatile
     private var crossfadeEntries: List<String> = emptyList()
 
     /**
      * Write `af` from both tiers at once.
      *
-     * The equalizer goes first so the crossfade sweep acts on the signal the listener actually
-     * hears, rather than on one that is about to be re-shaped behind it. Loudness sits with EQ
-     * (before the crossfade chain) so normalization is applied to the source, not the fade.
+     * Enhance goes first so the crossfade sweep acts on the signal the listener actually hears;
+     * the crossfade stages only attenuate, so the limiter's ceiling still holds at the output.
      */
     private fun applyAudioFilters(): Boolean {
-        val entries = listOfNotNull(eqEntry, loudnormEntry) + crossfadeEntries
+        val entries = listOfNotNull(enhanceEntry) + crossfadeEntries
         return setPropertyString("af", entries.joinToString(","))
     }
 
     /**
-     * Per-track loudness gain in dB (from the stream's `loudnessDb`), or 0 to disable.
+     * Installs the "Enhance audio" entry built by [mpvEnhanceEntry], or removes it with null.
      *
-     * Matches Android's LoudnessEnhancer target-gain path: a static gain for the whole track,
-     * not a compressor. `dynaudnorm` was rejected — aggressive frame/gain settings made music
-     * pump audibly. Positive [db] boosts a quiet master; negative attenuates a loud one.
+     * `af` is one property, so a rejected entry would take the crossfade entries down with it. If
+     * mpv refuses the chain (a libmpv built without one of the filters), the entry is dropped
+     * again and the rest of the chain re-applied; returns false so the caller can report it.
      */
-    fun setLoudnessGainDb(db: Float): Boolean {
-        if (isReleased) return false
-        loudnormEntry =
-            if (db == 0f || db.isNaN()) {
-                null
-            } else {
-                "@$LOUDNORM_LABEL:volume=${mpvNumber(db)}dB"
-            }
-        return applyAudioFilters()
-    }
-
-    /**
-     * Install a ten-band equalizer, or remove it when every band and the preamp are at zero.
-     *
-     * Each band is a peaking filter on its ISO centre at Q 1.41 — the width at which ten
-     * octave-spaced bands overlap without leaving gaps or stacking into ripple. [preampDb] is a
-     * plain gain in front: boosting bands without pulling the level down first is what clips.
-     */
-    fun setEqualizer(
-        bandsDb: List<Float>,
-        preampDb: Float,
-    ): Boolean {
-        if (isReleased) return false
-        val flat = preampDb == 0f && bandsDb.all { it == 0f }
-        eqEntry =
-            if (flat) {
-                null
-            } else {
-                val stages =
-                    EQ_BANDS_HZ.mapIndexed { index, hz ->
-                        val gain = bandsDb.getOrElse(index) { 0f }
-                        "equalizer=f=$hz:width_type=q:width=1.41:g=${mpvNumber(gain)}"
-                    }
-                // Wrapped in [ ] for the same reason the crossfade sweep is: the graph contains
-                // `,` and `=`, which mpv's own filter-list parser would otherwise consume.
-                "@$EQ_LABEL:lavfi=[volume=${mpvNumber(preampDb)}dB,${stages.joinToString(",")}]"
-            }
-        return applyAudioFilters()
+    fun setEnhanceEntry(entry: String?): Boolean {
+        if (isReleased) return true
+        if (entry == enhanceEntry) return true
+        enhanceEntry = entry
+        if (applyAudioFilters()) return true
+        Logger.w(TAG, "mpv rejected the Enhance audio chain; playing without it")
+        enhanceEntry = null
+        applyAudioFilters()
+        return entry == null
     }
 
     private fun applyCrossfadeChain(
@@ -911,7 +868,7 @@ class MpvPlayer private constructor(
     fun clearAudioFilters() {
         if (isReleased) return
         // Drops the crossfade tier only. This used to blank the whole property, which took the
-        // equalizer down with it at the end of every transition.
+        // Enhance audio entry down with it at the end of every transition.
         crossfadeEntries = emptyList()
         applyAudioFilters()
     }
@@ -1060,6 +1017,29 @@ class MpvPlayer private constructor(
             Logger.e(TAG, "set $name threw: ${e.message}")
             -1
         }
+
+    /** @return the property as text, or null when unavailable. The buffer is mpv's and is freed here. */
+    private fun getPropertyString(name: String): String? =
+        try {
+            lib.mpv_get_property_string(ctx, name)?.let { ptr ->
+                try {
+                    ptr.getString(0)
+                } finally {
+                    lib.mpv_free(ptr)
+                }
+            }
+        } catch (e: Throwable) {
+            Logger.e(TAG, "get $name threw: ${e.message}")
+            null
+        }
+
+    /** Codec, bitrate (kbps) and sample rate of the audio now decoding, for Stats for nerds. */
+    fun audioInfo(): Triple<String?, Int?, Int?> {
+        if (isReleased) return Triple(null, null, null)
+        val bitrate = getPropertyDouble("audio-bitrate").takeIf { it > 0 }?.let { (it / 1000).toInt() }
+        val rate = getPropertyDouble("audio-params/samplerate").takeIf { it > 0 }?.toInt()
+        return Triple(getPropertyString("audio-codec-name"), bitrate, rate)
+    }
 
     /** @return the property value, or 0.0 when unavailable (e.g. nothing loaded yet). */
     private fun getPropertyDouble(name: String): Double =

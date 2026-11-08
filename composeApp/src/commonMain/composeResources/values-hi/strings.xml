@@ -156,7 +156,6 @@
     <string name="playlist">प्लेलिस्ट</string>
     <string name="restart_app">परिवर्तन लागू करने के लिए ऐप को पुनः प्रारंभ करें</string>
     <string name="balance_media_loudness">मीडिया की आवाज संतुलित करें</string>
-    <string name="normalize_volume">वॉल्यूम सामान्य करें</string>
     <string name="audio">ऑडियो</string>
     <string name="streaming_data_provider_piped">स्ट्रीमिंग डेटा प्रोवाइडर (पाइप्ड)</string>
     <string name="itag">आईटैग</string>

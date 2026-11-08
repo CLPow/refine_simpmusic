@@ -1,5 +1,8 @@
 package com.maxrave.domain.mediaservice.player
 
+import com.maxrave.domain.audio.EnhanceSettings
+import com.maxrave.domain.audio.EnhanceStatus
+import com.maxrave.domain.audio.TrackInfo
 import com.maxrave.domain.data.player.GenericMediaItem
 import com.maxrave.domain.data.player.GenericPlaybackParameters
 
@@ -132,21 +135,28 @@ interface MediaPlayerInterface {
     var skipSilenceEnabled: Boolean
 
     /**
-     * Apply a ten-band equalizer, in dB per band plus a preamp.
+     * The "Enhance audio" settings. Off (the default) must leave the audio bit-exact.
      *
-     * Bands are the ISO octave centres 31 Hz to 16 kHz, the spacing AutoEq profiles are published
-     * at. A shorter list leaves the remaining bands flat; a longer one is truncated.
-     *
-     * [preampDb] is normally negative and is what keeps a boosted curve from clipping — the sum of
-     * several boosted bands can exceed full scale long before any single band looks extreme.
-     *
-     * Default no-op so a backend without an equalizer simply ignores it rather than every
-     * implementation having to carry an empty override.
+     * Default no-op so a backend without the engine simply plays the source untouched.
      */
-    fun setEqualizer(
-        bandsDb: List<Float>,
-        preampDb: Float,
+    fun setEnhance(settings: EnhanceSettings) = Unit
+
+    /**
+     * What YouTube said about [mediaId]'s stream: its loudness (dB relative to YouTube's reference,
+     * for the engine's turn-down-only normalization) and its format. Keyed by media id because
+     * during a crossfade two tracks play at once and each needs its own gain; published for the
+     * next track too, so a crossfade starts at the incoming track's own level.
+     */
+    fun setTrackInfo(
+        mediaId: String,
+        info: TrackInfo,
     ) = Unit
+
+    /** Hold-to-compare: while true, play the original at the engine's matched level. */
+    fun setEnhanceCompare(compare: Boolean) = Unit
+
+    /** What the engine is doing now, for Stats for nerds; null where there is no engine. */
+    fun enhanceStatus(): EnhanceStatus? = null
 
     // Listener management
     fun addListener(listener: MediaPlayerListener)

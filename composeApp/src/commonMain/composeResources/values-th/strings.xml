@@ -163,7 +163,6 @@
     <string name="playlist">เพลย์ลิสต์</string>
     <string name="restart_app">รีสตาร์ทแอปเพื่อใช้การเปลี่ยนแปลง</string>
     <string name="balance_media_loudness">ปรับสมดุลความดังของสื่อ</string>
-    <string name="normalize_volume">ปรับระดับเสียงให้เท่ากัน</string>
     <string name="audio">เสียง</string>
     <string name="streaming_data_provider_piped">ผู้ให้บริการข้อมูลแบบสตรีมมิ่ง (Piped)</string>
     <string name="itag">Itag</string>

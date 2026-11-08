@@ -1,5 +1,6 @@
 package com.maxrave.data.mediaservice
 
+import com.maxrave.domain.audio.TrackInfo
 import com.maxrave.domain.mediaservice.handler.playerErrorAction
 import com.maxrave.domain.mediaservice.handler.WIFI_ONLY_ERROR_CODE_NAME
 import com.maxrave.domain.mediaservice.handler.PlayerErrorAction
@@ -9,7 +10,6 @@ import android.annotation.SuppressLint
 import android.app.ActivityManager
 import android.app.ActivityManager.RunningAppProcessInfo
 import android.content.Context
-import android.media.audiofx.LoudnessEnhancer
 import com.maxrave.common.ASC
 import com.maxrave.common.CUSTOM_ORDER
 import com.maxrave.common.Config.ALBUM_CLICK
@@ -202,12 +202,9 @@ internal class MediaServiceHandlerImpl(
 
     // List of Specific variables
 
-    private var loudnessEnhancer: LoudnessEnhancer? = null
-    private var secondLoudnessEnhancer: LoudnessEnhancer? = null
 
     private var skipSilent = false
 
-    private var normalizeVolume = false
 
     private val playbackReporter = PlaybackReporter(streamRepository, dataStoreManager, coroutineScope)
 
@@ -321,29 +318,10 @@ internal class MediaServiceHandlerImpl(
         getSkipSegmentsJob = Job()
         getFormatJob = Job()
         skipSilent = runBlocking { dataStoreManager.skipSilent.first() == TRUE }
-        // Collected rather than read once like the settings around it: the equalizer is adjusted
-        // while music is playing, and a curve that only takes effect after a restart is useless
-        // for judging what you just changed.
+        // Collected, not read once: the Sound page changes these while music plays.
         backgroundScope.launch {
-            combine(
-                dataStoreManager.equalizerEnabled,
-                dataStoreManager.equalizerBands,
-                dataStoreManager.equalizerPreamp,
-            ) { enabled, bands, preamp -> Triple(enabled == TRUE, bands, preamp) }
-                .distinctUntilChanged()
-                .collect { (enabled, bands, preamp) ->
-                    // Switched off sends a flat curve rather than skipping the call: the filter
-                    // has to actually come out of the audio chain, and the stored bands are left
-                    // alone so switching back on returns to the user's own shape.
-                    player.setEqualizer(
-                        bandsDb =
-                            if (enabled) bands.split(",").mapNotNull { it.trim().toFloatOrNull() } else emptyList(),
-                        preampDb = if (enabled) preamp else 0f,
-                    )
-                }
+            dataStoreManager.enhanceSettings.distinctUntilChanged().collect { player.setEnhance(it) }
         }
-        normalizeVolume =
-            runBlocking { dataStoreManager.normalizeVolume.first() == TRUE }
         _nowPlaying.value = player.currentMediaItem
         if (runBlocking { dataStoreManager.saveStateOfPlayback.first() } == TRUE) {
             Logger.d(TAG, "SaveStateOfPlayback TRUE")
@@ -2091,89 +2069,40 @@ internal class MediaServiceHandlerImpl(
         }
     }
 
-    override fun mayBeNormalizeVolume() {
-        runBlocking {
-            normalizeVolume = dataStoreManager.normalizeVolume.first() == TRUE
-        }
-        if (!normalizeVolume) {
-            loudnessEnhancer?.enabled = false
-            loudnessEnhancer?.release()
-            loudnessEnhancer = null
-            volumeNormalizationJob?.cancel()
-            player.volume = 1f
-            return
-        }
-
-        // Always recreate LoudnessEnhancer because CrossfadeExoPlayerAdapter creates new
-        // ExoPlayer instances per track, each with a different audio session ID.
-        // The old LoudnessEnhancer becomes attached to a released session and has no effect.
-        // Skip entirely while casting: a Cast session has no local audio session, and
-        // constructing a LoudnessEnhancer with session id 0 (AUDIO_SESSION_ID_UNSET) throws.
-        if (!_castState.value.isRemote && player.audioSessionId != PlayerConstants.AUDIO_SESSION_ID_UNSET) {
-            try {
-                loudnessEnhancer?.release()
-            } catch (_: Exception) {
-            }
-            try {
-                loudnessEnhancer = LoudnessEnhancer(player.audioSessionId)
-            } catch (e: Exception) {
-                Logger.e(TAG, "mayBeNormalizeVolume: ${e.message}")
-                e.printStackTrace()
-            }
-        }
-
-        player.currentMediaItem?.mediaId?.let { songId ->
-            val videoId =
-                if (songId.contains("Video")) {
-                    songId.removePrefix("Video")
-                } else {
-                    songId
-                }
-            volumeNormalizationJob?.cancel()
-            volumeNormalizationJob =
-                coroutineScope.launch(Dispatchers.Main) {
-                    fun Float?.toMb() = ((this ?: 0f) * 100).toInt()
-                    streamRepository
-                        .getFormatFlow(videoId)
-                        .cancellable()
-                        .distinctUntilChanged()
-                        .collectLatest { format ->
-                            if (format != null) {
-                                val loudnessMb =
-                                    format.loudnessDb.toMb().let {
-                                        if (it !in -2000..2000) {
-                                            0
-                                        } else {
-                                            it
-                                        }
-                                    }
-                                Logger.d(TAG, "Loudness: ${format.loudnessDb} db, $loudnessMb")
-                                try {
-                                    loudnessEnhancer?.setTargetGain(0f.toMb() - loudnessMb)
-                                    loudnessEnhancer?.enabled = true
-                                    Logger.w(
-                                        TAG,
-                                        "mayBeNormalizeVolume: ${loudnessEnhancer?.targetGain}",
-                                    )
-                                } catch (e: Exception) {
-                                    Logger.e(TAG, "mayBeNormalizeVolume: ${e.message}")
-                                    e.printStackTrace()
-                                }
-                                try {
-                                    secondLoudnessEnhancer?.setTargetGain(0f.toMb() - loudnessMb)
-                                    secondLoudnessEnhancer?.enabled = true
-                                    Logger.w(
-                                        TAG,
-                                        "mayBeNormalizeVolume: ${secondLoudnessEnhancer?.targetGain}",
-                                    )
-                                } catch (e: Exception) {
-                                    Logger.e(TAG, "mayBeNormalizeVolume: ${e.message}")
-                                    e.printStackTrace()
-                                }
+    /**
+     * Publishes YouTube's loudness and format for the track now playing *and* the next one, so the
+     * engine's normalization has the incoming track's gain before a crossfade or gapless change
+     * reaches it. Whether loudness is used is the engine's business ("Enhance audio" › Normalize
+     * volume), so this runs on every track whatever the settings.
+     */
+    override fun publishTrackInfo() {
+        // 2.3.8 reset the volume line here on every track; kept so nothing else changes.
+        player.volume = 1f
+        val current = player.currentMediaItem?.mediaId ?: return
+        val next =
+            if (player.shuffleModeEnabled) null else player.getMediaItemAt(player.currentMediaItemIndex + 1)?.mediaId
+        volumeNormalizationJob?.cancel()
+        volumeNormalizationJob =
+            coroutineScope.launch {
+                listOfNotNull(current, next).distinct().forEach { mediaId ->
+                    launch {
+                        streamRepository
+                            .getFormatFlow(mediaId.removePrefix("Video"))
+                            .cancellable()
+                            .distinctUntilChanged()
+                            .collectLatest { format ->
+                                player.setTrackInfo(
+                                    mediaId,
+                                    TrackInfo(
+                                        loudnessDb = format?.loudnessDb?.toFloat(),
+                                        itag = format?.itag,
+                                        bitrateKbps = format?.bitrate?.takeIf { it > 0 }?.let { it / 1000 },
+                                    ),
+                                )
                             }
-                        }
+                    }
                 }
-        }
+            }
     }
 
     override fun mayBeSavePlaybackState() {
@@ -2349,19 +2278,6 @@ internal class MediaServiceHandlerImpl(
             // Stop and release player
             player.removeListener(this)
 
-            // Release audio effects
-            try {
-                loudnessEnhancer?.enabled = false
-                loudnessEnhancer?.release()
-                loudnessEnhancer = null
-
-                secondLoudnessEnhancer?.enabled = false
-                secondLoudnessEnhancer?.release()
-                secondLoudnessEnhancer = null
-            } catch (e: Exception) {
-                Logger.e("ServiceHandler", "Error releasing audio effects ${e.message}")
-            }
-
             // Cancel all jobs
             progressJob?.cancel()
             progressJob = null
@@ -2472,7 +2388,7 @@ internal class MediaServiceHandlerImpl(
             mayBeTrackingListeningLocal(lastPlayed, currentState.progress)
         }
         Logger.w(TAG, "Smooth Switching Transition Current Position: ${player.currentPosition}")
-        mayBeNormalizeVolume()
+        publishTrackInfo()
         Logger.w(TAG, "REASON onMediaItemTransition: $reason")
         Logger.d(TAG, "Media Item Transition Media Item: ${mediaItem?.metadata?.title}")
         if (mediaItem?.mediaId != _nowPlaying.value?.mediaId) {

@@ -1,5 +1,9 @@
 package com.maxrave.media3.audio
 
+// The 2.3.8 equalizer processor, verbatim except for renames (git show 5185721e:…/EqualizerAudioProcessor.kt).
+// It is what sat in the processor slot in 2.3.8, where the equalizer was pinned off (flat), so its
+// output at FLAT is what 2.3.8 played. The null test compares "Enhance audio" off against it.
+
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.BaseAudioProcessor
@@ -20,7 +24,7 @@ import kotlin.math.tanh
  * fixed-band output at, so one stored curve means the same thing on both platforms and an imported
  * profile lands on the bands it was computed for.
  */
-val EQUALIZER_BANDS_HZ: IntArray = intArrayOf(31, 62, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000)
+private val LEGACY_BANDS_HZ: IntArray = intArrayOf(31, 62, 125, 250, 500, 1_000, 2_000, 4_000, 8_000, 16_000)
 
 /**
  * Q per band, matching the `width=1.41` desktop passes to ffmpeg's `equalizer` filter — and the
@@ -74,7 +78,7 @@ private fun softLimit(sample: Double): Double {
  * one reference comparison per buffer instead of comparing eleven floats — and so a curve and the
  * preamp meant to make room for it can never be read half-updated.
  */
-data class EqualizerCurve(
+data class LegacyEqualizerCurve(
     val bandsDb: List<Float>,
     val preampDb: Float,
 ) {
@@ -82,7 +86,7 @@ data class EqualizerCurve(
     val isFlat: Boolean = preampDb == 0f && bandsDb.all { it == 0f }
 
     companion object {
-        val FLAT = EqualizerCurve(emptyList(), 0f)
+        val FLAT = LegacyEqualizerCurve(emptyList(), 0f)
     }
 }
 
@@ -104,14 +108,14 @@ data class EqualizerCurve(
  * - PCM 16-bit only, matching the rest of the chain and what the YouTube sources decode to.
  */
 @UnstableApi
-class EqualizerAudioProcessor(
-    private val curve: () -> EqualizerCurve,
+class Legacy238EqualizerProcessor(
+    private val curve: () -> LegacyEqualizerCurve,
 ) : BaseAudioProcessor() {
     private var sampleRate = 0
     private var channelCount = 0
 
     /** The curve the coefficients below were built from; compared by identity, never by value. */
-    private var appliedCurve: EqualizerCurve? = null
+    private var appliedCurve: LegacyEqualizerCurve? = null
 
     /** Flat b0, b1, b2, a1, a2 per band, already normalised by a0. */
     private var coefficients = DoubleArray(0)
@@ -133,7 +137,7 @@ class EqualizerAudioProcessor(
         // Sized here and never again: every band keeps a stage whatever its gain, so the array only
         // depends on the format. That is what lets the curve change mid-track without dropping the
         // filter history, which would be an audible click on every adjustment.
-        state = DoubleArray(EQUALIZER_BANDS_HZ.size * STATE_PER_BAND * channelCount)
+        state = DoubleArray(LEGACY_BANDS_HZ.size * STATE_PER_BAND * channelCount)
         // Forces a rebuild against the new sample rate on the first buffer.
         appliedCurve = null
         return inputAudioFormat
@@ -208,7 +212,7 @@ class EqualizerAudioProcessor(
         rebuild(next)
     }
 
-    private fun rebuild(next: EqualizerCurve) {
+    private fun rebuild(next: LegacyEqualizerCurve) {
         val usable = channelCount > 0 && sampleRate > 0
         if (!usable || next.isFlat) {
             // Entering bypass clears the history rather than freezing it: the samples in there were
@@ -220,12 +224,12 @@ class EqualizerAudioProcessor(
         }
 
         preampGain = 10.0.pow(next.preampDb / 20.0)
-        if (coefficients.size != EQUALIZER_BANDS_HZ.size * COEFFS_PER_BAND) {
-            coefficients = DoubleArray(EQUALIZER_BANDS_HZ.size * COEFFS_PER_BAND)
+        if (coefficients.size != LEGACY_BANDS_HZ.size * COEFFS_PER_BAND) {
+            coefficients = DoubleArray(LEGACY_BANDS_HZ.size * COEFFS_PER_BAND)
         }
 
         val nyquist = sampleRate / 2.0
-        EQUALIZER_BANDS_HZ.forEachIndexed { index, centreHz ->
+        LEGACY_BANDS_HZ.forEachIndexed { index, centreHz ->
             // A band above Nyquist has no meaning at this sample rate — 16 kHz is already past it
             // at 22.05 kHz, which some radio streams still use. Writing the identity stage rather
             // than skipping it keeps the array layout fixed.
@@ -281,7 +285,7 @@ class EqualizerAudioProcessor(
     ): Double {
         var sample = input * preampGain
         var c = 0
-        var s = channel * EQUALIZER_BANDS_HZ.size * STATE_PER_BAND
+        var s = channel * LEGACY_BANDS_HZ.size * STATE_PER_BAND
         while (c < coefficients.size) {
             val x1 = state[s]
             val x2 = state[s + 1]

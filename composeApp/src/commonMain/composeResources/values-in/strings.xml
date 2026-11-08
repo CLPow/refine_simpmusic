@@ -149,7 +149,6 @@
     <string name="playlist">Playlist</string>
     <string name="restart_app">Mulai ulang aplikasi untuk menerapkan perubahan</string>
     <string name="balance_media_loudness">Menyeimbangkan suara bising media</string>
-    <string name="normalize_volume">Volume Dinormalkan</string>
     <string name="audio">Suara</string>
     <string name="streaming_data_provider_piped">Penyedia data streaming (Piped)</string>
     <string name="itag">Itag</string>

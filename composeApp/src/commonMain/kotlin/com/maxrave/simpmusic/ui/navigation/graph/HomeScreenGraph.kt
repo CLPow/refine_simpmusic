@@ -8,10 +8,12 @@ import androidx.navigation.toRoute
 import com.maxrave.simpmusic.ui.navigation.destination.home.RecentlySongsDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsCategoryDestination
 import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsDestination
+import com.maxrave.simpmusic.ui.navigation.destination.home.SoundSettingsDestination
 import com.maxrave.simpmusic.ui.screen.home.RecentlySongsScreen
 import com.maxrave.simpmusic.ui.screen.home.SettingScreen
 import com.maxrave.simpmusic.ui.screen.home.SettingsCategory
 import com.maxrave.simpmusic.ui.screen.home.SettingsHomeScreen
+import com.maxrave.simpmusic.ui.screen.home.SoundSettingsScreen
 
 fun NavGraphBuilder.homeScreenGraph(
     innerPadding: PaddingValues,
@@ -28,6 +30,9 @@ fun NavGraphBuilder.homeScreenGraph(
             navController = navController,
             innerPadding = innerPadding,
         )
+    }
+    composable<SoundSettingsDestination> {
+        SoundSettingsScreen(navController = navController, innerPadding = innerPadding)
     }
     composable<SettingsCategoryDestination> { entry ->
         SettingScreen(

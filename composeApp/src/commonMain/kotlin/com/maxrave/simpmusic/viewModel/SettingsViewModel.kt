@@ -1,5 +1,8 @@
 package com.maxrave.simpmusic.viewModel
 
+import com.maxrave.domain.audio.EnhanceSettings
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import androidx.lifecycle.viewModelScope
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
@@ -94,8 +97,6 @@ class SettingsViewModel(
     val language: StateFlow<String?> = _language
     private var _loggedIn: MutableStateFlow<String?> = MutableStateFlow(null)
     val loggedIn: StateFlow<String?> = _loggedIn
-    private var _normalizeVolume: MutableStateFlow<String?> = MutableStateFlow(null)
-    val normalizeVolume: StateFlow<String?> = _normalizeVolume
     private var _skipSilent: MutableStateFlow<String?> = MutableStateFlow(null)
     val skipSilent: StateFlow<String?> = _skipSilent
     private var _savedPlaybackState: MutableStateFlow<String?> = MutableStateFlow(null)
@@ -274,7 +275,6 @@ class SettingsViewModel(
         getDownloadedCacheSize()
         getPlayerCacheLimit()
         getLoggedIn()
-        getNormalizeVolume()
         getSkipSilent()
         getSavedPlaybackState()
         getSendBackToGoogle()
@@ -293,7 +293,6 @@ class SettingsViewModel(
         getSpotifyLogIn()
         getSpotifyLyrics()
         getSyncFollowToYouTube()
-        getEqualizer()
         getSpotifyCanvas()
         getUsingProxy()
         getCanvasCache()
@@ -1413,21 +1412,6 @@ class SettingsViewModel(
         }
     }
 
-    fun getNormalizeVolume() {
-        viewModelScope.launch {
-            dataStoreManager.normalizeVolume.collect { normalizeVolume ->
-                _normalizeVolume.emit(normalizeVolume)
-            }
-        }
-    }
-
-    fun setNormalizeVolume(normalizeVolume: Boolean) {
-        viewModelScope.launch {
-            dataStoreManager.setNormalizeVolume(normalizeVolume)
-            getNormalizeVolume()
-        }
-    }
-
     fun getSendBackToGoogle() {
         viewModelScope.launch {
             dataStoreManager.sendBackToGoogle.collect { sendBackToGoogle ->
@@ -1768,108 +1752,13 @@ class SettingsViewModel(
         }
     }
 
-    private var _equalizerEnabled: MutableStateFlow<Boolean> = MutableStateFlow(false)
-    val equalizerEnabled: StateFlow<Boolean> = _equalizerEnabled
+    /** "Enhance audio": collected for the Sound page; one stored value, so edits never interleave. */
+    val enhanceSettings: StateFlow<EnhanceSettings> =
+        dataStoreManager.enhanceSettings.stateIn(viewModelScope, SharingStarted.Eagerly, EnhanceSettings.OFF)
 
-    fun setEqualizerEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            dataStoreManager.setEqualizerEnabled(enabled)
-        }
-    }
-
-    private var _equalizerBands: MutableStateFlow<List<Float>> = MutableStateFlow(List(EQUALIZER_BAND_COUNT) { 0f })
-    val equalizerBands: StateFlow<List<Float>> = _equalizerBands
-
-    private var _equalizerPreamp: MutableStateFlow<Float> = MutableStateFlow(0f)
-    val equalizerPreamp: StateFlow<Float> = _equalizerPreamp
-
-    /** Raw `"<label>\n<gains>"` of the last imported AutoEq profile; the UI decides if it still applies. */
-    private var _equalizerAutoEqProfile: MutableStateFlow<String> = MutableStateFlow("")
-    val equalizerAutoEqProfile: StateFlow<String> = _equalizerAutoEqProfile
-
-    /**
-     * Guards the collectors below against being started twice.
-     *
-     * Two callers ask for them: [getData], which every visit to the settings screen runs, and the
-     * equalizer block itself, which asks on its own so it keeps working if it is ever hosted
-     * anywhere else. Both land on this same view model, and the collectors live in
-     * [viewModelScope] rather than in a composition — so without this, toggling the switch off and
-     * on left another four behind every time, each re-reading the preference file for a value
-     * three others were already publishing.
-     */
-    private var equalizerCollectorsStarted = false
-
-    fun getEqualizer() {
-        if (equalizerCollectorsStarted) return
-        equalizerCollectorsStarted = true
-        viewModelScope.launch {
-            launch {
-                dataStoreManager.equalizerEnabled.collect {
-                    _equalizerEnabled.emit(it == DataStoreManager.TRUE)
-                }
-            }
-            launch {
-                dataStoreManager.equalizerBands.collect { stored ->
-                    // Stored blank means flat. Short or malformed input is padded rather than
-                    // rejected, so a curve saved by a future build with more bands still loads.
-                    val parsed = stored.split(",").mapNotNull { it.trim().toFloatOrNull() }
-                    _equalizerBands.emit(
-                        List(EQUALIZER_BAND_COUNT) { parsed.getOrElse(it) { 0f } },
-                    )
-                }
-            }
-            launch {
-                dataStoreManager.equalizerPreamp.collect { _equalizerPreamp.emit(it) }
-            }
-            launch {
-                dataStoreManager.equalizerAutoEqProfile.collect { _equalizerAutoEqProfile.emit(it) }
-            }
-        }
-    }
-
-    /**
-     * Store a whole curve at once.
-     *
-     * The whole list rather than one band at a time because a single drag sweeps across several
-     * bands, and because the per-band version had to read [_equalizerBands] to rebuild the list —
-     * a value that only updates once the write has been through storage, so two edits in quick
-     * succession could reinstate the first band's old gain.
-     */
-    fun setEqualizerBands(bandsDb: List<Float>) {
-        viewModelScope.launch {
-            dataStoreManager.setEqualizerBands(bandsDb)
-        }
-    }
-
-    /**
-     * Move the curve and its preamp together.
-     *
-     * These are two separate preference keys, so the player does briefly see one of them applied
-     * against the other's old value. The preamp goes first deliberately: that way the moment in
-     * between is the new headroom under the old curve — quieter — rather than a freshly boosted
-     * curve still running on the previous preset's headroom, which is the direction that clips.
-     */
-    fun applyEqualizerPreset(
-        bandsDb: List<Float>,
-        preampDb: Float,
-    ) {
-        viewModelScope.launch {
-            dataStoreManager.setEqualizerPreamp(preampDb)
-            dataStoreManager.setEqualizerBands(bandsDb)
-        }
-    }
-
-    fun setEqualizerPreamp(preampDb: Float) {
-        viewModelScope.launch {
-            dataStoreManager.setEqualizerPreamp(preampDb)
-        }
-    }
-
-    fun resetEqualizer() {
-        viewModelScope.launch {
-            dataStoreManager.setEqualizerBands(List(EQUALIZER_BAND_COUNT) { 0f })
-            dataStoreManager.setEqualizerPreamp(0f)
-        }
+    /** Applies [change] to the latest stored settings, so two quick edits never undo each other. */
+    fun updateEnhance(change: (EnhanceSettings) -> EnhanceSettings) {
+        viewModelScope.launch { dataStoreManager.updateEnhanceSettings(change) }
     }
 
     private var _syncFollowToYouTube: MutableStateFlow<Boolean> = MutableStateFlow(false)
@@ -2093,7 +1982,4 @@ expect fun getFileDir(): String
 expect fun changeLanguageNative(code: String)
 
 /** Number of equalizer bands, matching the ISO centres the desktop backend installs. */
-const val EQUALIZER_BAND_COUNT = 10
 
-/** Band centre labels, for display only — the backend owns the actual frequencies. */
-val EQUALIZER_BAND_LABELS = listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k")

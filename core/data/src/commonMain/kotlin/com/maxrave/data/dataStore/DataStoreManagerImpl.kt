@@ -1,5 +1,6 @@
 package com.maxrave.data.dataStore
 
+import com.maxrave.domain.audio.EnhanceSettings
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -258,23 +259,6 @@ internal class DataStoreManagerImpl(
             } else {
                 settingsDataStore.edit { settings ->
                     settings[LOGGED_IN] = FALSE
-                }
-            }
-        }
-    }
-
-    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
-    override val normalizeVolume: Flow<String> = flowOf(FALSE)
-
-    override suspend fun setNormalizeVolume(normalize: Boolean) {
-        withContext(Dispatchers.IO) {
-            if (normalize) {
-                settingsDataStore.edit { settings ->
-                    settings[NORMALIZE_VOLUME] = TRUE
-                }
-            } else {
-                settingsDataStore.edit { settings ->
-                    settings[NORMALIZE_VOLUME] = FALSE
                 }
             }
         }
@@ -736,60 +720,14 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
-    override val equalizerEnabled: Flow<String> = flowOf(FALSE)
+    // A new key rather than the old equalizer/normalization ones: values those stored before 2.2.0
+    // must not switch processing back on after an upgrade.
+    override val enhanceSettings: Flow<EnhanceSettings> =
+        settingsDataStore.data.map { preferences -> EnhanceSettings.decode(preferences[ENHANCE_SETTINGS]) }
 
-    override suspend fun setEqualizerEnabled(enabled: Boolean) {
+    override suspend fun updateEnhanceSettings(transform: (EnhanceSettings) -> EnhanceSettings) {
         withContext(Dispatchers.IO) {
-            settingsDataStore.edit { settings ->
-                settings[EQUALIZER_ENABLED] = if (enabled) TRUE else FALSE
-            }
-        }
-    }
-
-    override val equalizerBands: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[EQUALIZER_BANDS] ?: ""
-        }
-
-    override suspend fun setEqualizerBands(bandsDb: List<Float>) {
-        withContext(Dispatchers.IO) {
-            settingsDataStore.edit { settings ->
-                // Blank when flat, so "no equalizer" and "an equalizer set to zero" are the same
-                // stored state and neither installs a filter chain.
-                settings[EQUALIZER_BANDS] =
-                    if (bandsDb.all { it == 0f }) "" else bandsDb.joinToString(",")
-            }
-        }
-    }
-
-    override val equalizerPreamp: Flow<Float> =
-        settingsDataStore.data.map { preferences ->
-            preferences[EQUALIZER_PREAMP]?.toFloatOrNull() ?: 0f
-        }
-
-    override suspend fun setEqualizerPreamp(preampDb: Float) {
-        withContext(Dispatchers.IO) {
-            settingsDataStore.edit { settings ->
-                settings[EQUALIZER_PREAMP] = preampDb.toString()
-            }
-        }
-    }
-
-    override val equalizerAutoEqProfile: Flow<String> =
-        settingsDataStore.data.map { preferences ->
-            preferences[EQUALIZER_AUTOEQ_PROFILE] ?: ""
-        }
-
-    override suspend fun setEqualizerAutoEqProfile(
-        label: String,
-        bandsDb: List<Float>,
-    ) {
-        withContext(Dispatchers.IO) {
-            settingsDataStore.edit { settings ->
-                settings[EQUALIZER_AUTOEQ_PROFILE] =
-                    if (label.isBlank()) "" else label + "\n" + bandsDb.joinToString(",")
-            }
+            settingsDataStore.edit { it[ENHANCE_SETTINGS] = transform(EnhanceSettings.decode(it[ENHANCE_SETTINGS])).encode() }
         }
     }
 
@@ -1860,7 +1798,6 @@ internal class DataStoreManagerImpl(
         val QUALITY = stringPreferencesKey("quality")
         val DOWNLOAD_QUALITY = stringPreferencesKey("download_quality")
         val VIDEO_DOWNLOAD_QUALITY = stringPreferencesKey("video_download_quality")
-        val NORMALIZE_VOLUME = stringPreferencesKey("normalize_volume")
         val SKIP_SILENT = stringPreferencesKey("skip_silent")
         val SAVE_STATE_OF_PLAYBACK = stringPreferencesKey("save_state_of_playback")
         val SAVE_RECENT_SONG = stringPreferencesKey("save_recent_song")
@@ -1902,10 +1839,6 @@ internal class DataStoreManagerImpl(
         val SPDC = stringPreferencesKey("sp_dc")
         val SPOTIFY_LYRICS = stringPreferencesKey("spotify_lyrics")
         val SYNC_FOLLOW_TO_YOUTUBE = stringPreferencesKey("sync_follow_to_youtube")
-        val EQUALIZER_AUTOEQ_PROFILE = stringPreferencesKey("equalizer_autoeq_profile")
-        val EQUALIZER_BANDS = stringPreferencesKey("equalizer_bands")
-        val EQUALIZER_ENABLED = stringPreferencesKey("equalizer_enabled")
-        val EQUALIZER_PREAMP = stringPreferencesKey("equalizer_preamp")
         val SPOTIFY_CANVAS = stringPreferencesKey("spotify_canvas")
         val SPOTIFY_CLIENT_TOKEN = stringPreferencesKey("spotify_client_token")
         val SPOTIFY_CLIENT_TOKEN_EXPIRES = longPreferencesKey("spotify_client_token_expires")
@@ -1932,6 +1865,7 @@ internal class DataStoreManagerImpl(
         val QUALITY_MOBILE = stringPreferencesKey("quality_mobile")
         val STREAM_OVER_WIFI_ONLY = stringPreferencesKey("stream_over_wifi_only")
         val DOUBLE_TAP_SEEK_SECONDS = intPreferencesKey("double_tap_seek_seconds")
+        val ENHANCE_SETTINGS = stringPreferencesKey("enhance_settings")
         val ALLOW_EXTERNAL_START_PLAYBACK = stringPreferencesKey("allow_external_start_playback")
         val PINNED_LIBRARY_KEYS = stringSetPreferencesKey("pinned_library_keys")
         val KEEP_YOUTUBE_PLAYLIST_OFFLINE = stringPreferencesKey("keep_youtube_playlist_offline")

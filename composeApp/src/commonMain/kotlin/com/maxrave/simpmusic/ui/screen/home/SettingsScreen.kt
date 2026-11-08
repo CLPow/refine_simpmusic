@@ -55,8 +55,6 @@ import com.maxrave.simpmusic.desktop.DesktopSettings
 import com.maxrave.simpmusic.desktop.isStartOnBootEnabled
 import com.maxrave.simpmusic.desktop.isStartOnBootSupported
 import com.maxrave.simpmusic.desktop.setStartOnBoot
-import com.maxrave.simpmusic.expect.hasSystemEqualizer
-import com.maxrave.simpmusic.expect.openSystemEqualizer
 import com.maxrave.simpmusic.expect.openUrl
 import com.maxrave.simpmusic.expect.readCrashLog
 import com.maxrave.simpmusic.expect.shareUrl
@@ -64,6 +62,7 @@ import com.maxrave.simpmusic.getPlatform
 import com.maxrave.simpmusic.ui.component.ytm.Ytm
 import com.maxrave.simpmusic.ui.component.ytm.YtmTopBar
 import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsCategoryDestination
+import com.maxrave.simpmusic.ui.navigation.destination.home.SoundSettingsDestination
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.SettingsViewModel
@@ -117,8 +116,6 @@ import simpmusic.composeapp.generated.resources.ytm_data_saving
 import simpmusic.composeapp.generated.resources.ytm_download_audio_quality
 import simpmusic.composeapp.generated.resources.ytm_downloads
 import simpmusic.composeapp.generated.resources.ytm_downloads_storage
-import simpmusic.composeapp.generated.resources.ytm_equalizer
-import simpmusic.composeapp.generated.resources.ytm_equalizer_summary
 import simpmusic.composeapp.generated.resources.ytm_general
 import simpmusic.composeapp.generated.resources.ytm_licenses
 import simpmusic.composeapp.generated.resources.ytm_licenses_summary
@@ -127,7 +124,6 @@ import simpmusic.composeapp.generated.resources.ytm_manage_history
 import simpmusic.composeapp.generated.resources.ytm_manage_history_summary
 import simpmusic.composeapp.generated.resources.ytm_minutes_ago
 import simpmusic.composeapp.generated.resources.ytm_hours_ago
-import simpmusic.composeapp.generated.resources.ytm_no_equalizer
 import simpmusic.composeapp.generated.resources.ytm_pause_history
 import simpmusic.composeapp.generated.resources.ytm_pause_history_summary
 import simpmusic.composeapp.generated.resources.ytm_ping_accepted
@@ -142,6 +138,8 @@ import simpmusic.composeapp.generated.resources.ytm_privacy
 import simpmusic.composeapp.generated.resources.ytm_restricted_mode
 import simpmusic.composeapp.generated.resources.ytm_restricted_mode_summary
 import simpmusic.composeapp.generated.resources.ytm_settings
+import simpmusic.composeapp.generated.resources.ytm_sound
+import simpmusic.composeapp.generated.resources.ytm_sound_summary
 import simpmusic.composeapp.generated.resources.ytm_share_crash_log
 import simpmusic.composeapp.generated.resources.ytm_share_crash_log_summary
 import simpmusic.composeapp.generated.resources.ytm_source_code
@@ -230,7 +228,6 @@ fun SettingScreen(
     val audioQualityMobile = stringResource(Res.string.ytm_audio_quality_mobile)
     val doubleTapSeekTitle = stringResource(Res.string.ytm_double_tap_seek)
     val downloadAudioQuality = stringResource(Res.string.ytm_download_audio_quality)
-    val noEqualizer = stringResource(Res.string.ytm_no_equalizer)
     val clearDownloadsConfirm = stringResource(Res.string.ytm_clear_downloads_confirm)
     val clearDownloadsConfirmBody = stringResource(Res.string.ytm_clear_downloads_confirm_body)
     val clearCacheConfirm = stringResource(Res.string.ytm_clear_cache_confirm)
@@ -307,10 +304,8 @@ fun SettingScreen(
                     }
                 }
                 SettingsCategory.Playback -> {
-                    if (hasSystemEqualizer()) {
-                        SettingRow(title = stringResource(Res.string.ytm_equalizer), summary = stringResource(Res.string.ytm_equalizer_summary)) {
-                            if (!openSystemEqualizer()) viewModel.makeToast(noEqualizer)
-                        }
+                    SettingRow(title = stringResource(Res.string.ytm_sound), summary = stringResource(Res.string.ytm_sound_summary)) {
+                        navController.navigate(SoundSettingsDestination) { launchSingleTop = true }
                     }
                     SwitchRow(
                         title = stringResource(Res.string.ytm_autoplay),
@@ -537,18 +532,19 @@ private class ConfirmDialog(
 
 /** A YouTube Music settings row: title, grey summary, the whole row tappable. */
 @Composable
-private fun SettingRow(
+internal fun SettingRow(
     title: String,
     summary: String? = null,
+    enabled: Boolean = true,
     onClick: (() -> Unit)? = null,
 ) {
     Column(
         Modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
+            .then(if (onClick != null) Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
-        Text(title, style = typo().bodyLarge.copy(fontSize = 16.sp), color = Color.White)
+        Text(title, style = typo().bodyLarge.copy(fontSize = 16.sp), color = if (enabled) Color.White else Ytm.TextSecondary)
         if (!summary.isNullOrBlank()) {
             Text(summary, style = typo().bodyMedium, color = Ytm.TextSecondary)
         }
@@ -557,7 +553,7 @@ private fun SettingRow(
 
 /** A settings row with a switch on the right; the row is the one switch for accessibility. */
 @Composable
-private fun SwitchRow(
+internal fun SwitchRow(
     title: String,
     summary: String?,
     checked: Boolean,

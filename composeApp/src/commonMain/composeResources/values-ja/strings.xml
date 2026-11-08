@@ -153,7 +153,6 @@
     <string name="playlist">再生リスト</string>
     <string name="restart_app">アプリを再起動して変更を適用します</string>
     <string name="balance_media_loudness">メディアの音の大きさの均衡をとる</string>
-    <string name="normalize_volume">音量を均一化</string>
     <string name="audio">音声</string>
     <string name="streaming_data_provider_piped">ストリーミングデータの提供元 (Piped)</string>
     <string name="itag">iタグ</string>

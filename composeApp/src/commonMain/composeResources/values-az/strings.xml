@@ -149,7 +149,6 @@
     <string name="playlist">Səsləndirmə siyahısı</string>
     <string name="restart_app">Dəyişikliyi tətbiq etmək üçün tətbiqi təkrar başlat</string>
     <string name="balance_media_loudness">Media səs ucalığın yaxşılaşdır</string>
-    <string name="normalize_volume">Səs səviyyəsini normallaşdır</string>
     <string name="audio">Səs</string>
     <string name="streaming_data_provider_piped">Yayım məlumatı təminatçısı (Piped)</string>
     <string name="itag">Itag</string>

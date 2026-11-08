@@ -1,5 +1,6 @@
 package com.maxrave.media3.service
 
+import com.maxrave.media3.audio.OutputRouteMonitor
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.ActivityManager.RunningAppProcessInfo
@@ -60,6 +61,7 @@ internal class SimpleMediaService :
 
     private val simpleMediaServiceHandler: MediaPlayerHandler by inject<MediaPlayerHandler>()
     private val dataStoreManager: DataStoreManager by inject<DataStoreManager>()
+    private val routeMonitor: OutputRouteMonitor by inject<OutputRouteMonitor>()
 
     private val binder = MusicBinder()
 
@@ -233,6 +235,8 @@ internal class SimpleMediaService :
         playerNotificationManager = null
         mediaSession?.release()
         mediaSession = null
+        // A released session reports no disconnects; the car route must not outlive it.
+        routeMonitor.onSessionReleased()
     }
 
     /**

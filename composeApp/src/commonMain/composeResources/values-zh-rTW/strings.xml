@@ -161,7 +161,6 @@
     <string name="playlist">播放清單</string>
     <string name="restart_app">請重啟應用程式以套用變更</string>
     <string name="balance_media_loudness">平衡媒體音量</string>
-    <string name="normalize_volume">音量平衡</string>
     <string name="audio">音訊</string>
     <string name="streaming_data_provider_piped">串流資料提供者</string>
     <string name="itag">標籤</string>

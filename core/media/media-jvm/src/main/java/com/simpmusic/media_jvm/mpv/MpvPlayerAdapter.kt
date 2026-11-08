@@ -1,5 +1,11 @@
 package com.simpmusic.media_jvm.mpv
 
+import com.maxrave.domain.audio.EnhanceSettings
+import com.maxrave.domain.audio.EnhanceStatus
+import com.maxrave.domain.audio.TrackInfo
+import com.maxrave.domain.audio.TrackInfoCache
+import com.maxrave.domain.audio.OutputRoute
+import com.maxrave.domain.audio.enhanceChain
 import com.maxrave.common.MERGING_DATA_TYPE
 import com.maxrave.domain.data.player.GenericMediaItem
 import com.maxrave.domain.data.player.GenericPlaybackParameters
@@ -31,6 +37,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Collections
+import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.abs
 import kotlin.math.exp
@@ -1040,13 +1048,10 @@ class MpvPlayerAdapter(
         )
         setRate(internalPlaybackSpeed)
         applyPitch()
-        // A fresh handle starts with an empty filter chain, so the curve has to be re-applied or
-        // the equalizer silently stops working at the next track — including on secondaryPlayer,
-        // which belongs to neither collection while it is being promoted.
-        if (internalEqualizerBands.isNotEmpty() || internalEqualizerPreamp != 0f) {
-            setEqualizer(internalEqualizerBands, internalEqualizerPreamp)
-        }
-        setLoudnessGainDb(internalLoudnessGainDb)
+        // A fresh handle starts with an empty filter chain, so "Enhance audio" has to be put on it
+        // here — including on secondaryPlayer, which belongs to neither collection while it is
+        // being promoted. Its own track's entry, so it starts at its own loudness.
+        applyEnhanceEntry(this)
     }
 
     /**
@@ -1076,56 +1081,74 @@ class MpvPlayerAdapter(
 
     override var skipSilenceEnabled: Boolean = false
 
-    /** Current curve, so a handle created later can be brought up to the same setting. */
-    @Volatile
-    private var internalEqualizerBands: List<Float> = emptyList()
+    // ========== Enhance audio ==========
 
     @Volatile
-    private var internalEqualizerPreamp: Float = 0f
+    private var enhanceSettings: EnhanceSettings = EnhanceSettings.OFF
 
-    private var internalNormalizeVolume: Boolean = false
+    /** YouTube's loudness and format per media id. */
+    private val trackInfo = TrackInfoCache()
 
-    /** Last applied per-track loudness gain in dB (from stream `loudnessDb`). */
-    private var internalLoudnessGainDb: Float = 0f
+    /** Which track each live handle is playing, so each carries its own track's loudness. */
+    private val handleMedia: MutableMap<MpvPlayer, String> = Collections.synchronizedMap(WeakHashMap())
 
-    /**
-     * Volume normalization on/off. When on, [setLoudnessGainDbForTrack] supplies a static gain
-     * from the stream's loudness metadata (same model as Android's LoudnessEnhancer).
-     */
-    fun setNormalizeVolume(enabled: Boolean) {
-        internalNormalizeVolume = enabled
-        coroutineScope.launch {
-            forEachLiveHandle { it.setLoudnessGainDb(if (enabled) internalLoudnessGainDb else 0f) }
-        }
+    /** A handle rejected the chain (e.g. a libmpv built without the filters): reported in Stats. */
+    @Volatile
+    private var enhanceUnavailable = false
+
+    /** Read by the UI thread; written on the player thread, where the mpv calls happen. */
+    @Volatile
+    private var cachedStatus = EnhanceStatus()
+
+    /** The entry for one handle: its own track's chain. Desktop cannot tell headphones from speakers, so it uses the headphone route and crossfeed follows the listener's switch. */
+    private fun entryFor(handle: MpvPlayer): String? =
+        mpvEnhanceEntry(enhanceChain(enhanceSettings, OutputRoute.HEADPHONES, trackInfo[handleMedia[handle]]?.loudnessDb))
+
+    /** Must run on the player thread. A handle whose entry did not change is not touched, so a track fading out is never rewritten. */
+    private fun applyEnhanceEntry(handle: MpvPlayer) {
+        if (!handle.setEnhanceEntry(entryFor(handle))) enhanceUnavailable = true
     }
 
-    /**
-     * Applies the stream's loudness as a fixed gain for the whole track.
-     */
-    fun setLoudnessGainDbForTrack(loudnessDb: Float?) {
-        val gain =
-            if (!internalNormalizeVolume || loudnessDb == null) {
-                0f
-            } else {
-                loudnessDb.coerceIn(-20f, 20f)
-            }
-        internalLoudnessGainDb = gain
-        coroutineScope.launch {
-            forEachLiveHandle { it.setLoudnessGainDb(gain) }
-        }
+    private fun refreshEnhance() {
+        coroutineScope.launch { forEachLiveHandle { applyEnhanceEntry(it) } }
     }
 
-    override fun setEqualizer(
-        bandsDb: List<Float>,
-        preampDb: Float,
+    override fun setEnhance(settings: EnhanceSettings) {
+        enhanceSettings = settings
+        enhanceUnavailable = false
+        refreshEnhance()
+    }
+
+    override fun setTrackInfo(
+        mediaId: String,
+        info: TrackInfo,
     ) {
-        internalEqualizerBands = bandsDb
-        internalEqualizerPreamp = preampDb
-        // Same hop as volume and sleepFadeFactor: mpv properties are written on the player thread,
-        // because a handle released between the isReleased check and the write is a use-after-free.
+        trackInfo.put(mediaId, info)
+        refreshEnhance()
+    }
+
+    // Hold-to-compare is not offered on desktop yet: every press would rewrite mpv's filter chain,
+    // which drops out. It returns once entries are changed in place with `af-command`.
+
+    override fun enhanceStatus(): EnhanceStatus {
         coroutineScope.launch {
-            forEachLiveHandle { it.setEqualizer(bandsDb, preampDb) }
+            val handle = currentPlayer
+            val (codec, bitrate, rate) = handle?.audioInfo() ?: Triple(null, null, null)
+            val info = trackInfo[handle?.let { handleMedia[it] }]
+            val chain = enhanceChain(enhanceSettings, OutputRoute.HEADPHONES, info?.loudnessDb)
+            cachedStatus =
+                EnhanceStatus(
+                    sourceCodec = codec,
+                    sourceItag = info?.itag,
+                    sourceBitrateKbps = bitrate ?: info?.bitrateKbps,
+                    sourceSampleRateHz = rate,
+                    route = OutputRoute.HEADPHONES,
+                    active = chain.active && !enhanceUnavailable,
+                    normalizationDb = chain.normalizationDb.toFloat(),
+                    unavailable = chain.active && enhanceUnavailable,
+                )
         }
+        return cachedStatus
     }
 
     // ========== Listener Management ==========
@@ -1330,7 +1353,7 @@ class MpvPlayerAdapter(
                                 return@launch
                             }
                             resolvedSource = source
-                            createMediaPlayerInternal(source)
+                            createMediaPlayerInternal(source, mediaItem.mediaId)
                         }
 
                     if (player == null) {
@@ -1428,7 +1451,10 @@ class MpvPlayerAdapter(
      * [MpvVideoFrameSource], the successor of `VlcVideoSurfacePanel`. Audio sources get a
      * headless handle with `vid=no`/`vo=null`, so no video stream is ever decoded or fetched.
      */
-    private fun createMediaPlayerInternal(source: PlayableSource): MpvPlayer? {
+    private fun createMediaPlayerInternal(
+        source: PlayableSource,
+        mediaId: String,
+    ): MpvPlayer? {
         // VLC used --network-caching=10000 globally and :network-caching=15000 for video.
         val cacheSeconds = if (source.isVideo) 15 else 10
         val player =
@@ -1448,6 +1474,7 @@ class MpvPlayerAdapter(
         // AUDIO_RECONFIG re-applies is already the right one, whether or not the
         // audio output exists yet.
         player?.setMasterVolume((internalVolume * 100).toInt())
+        if (player != null) handleMedia[player] = mediaId
         return player
     }
 
@@ -1793,7 +1820,7 @@ class MpvPlayerAdapter(
                                 Logger.e(TAG, "Failed to extract URL for crossfade")
                                 null
                             } else {
-                                createMediaPlayerInternal(nextSource)?.also { newPlayer ->
+                                createMediaPlayerInternal(nextSource, nextMediaItem.mediaId)?.also { newPlayer ->
                                     newPlayer.loadFile(buildPlaybackUrl(nextSource), startPaused = true)
                                 }
                             }
@@ -2702,7 +2729,7 @@ class MpvPlayerAdapter(
                                 // mpv has no separate "parse without playing" call like vlcj's
                                 // media().prepare(); loading held at pause=yes is the equivalent,
                                 // and additionally warms the demuxer cache.
-                                val player = createMediaPlayerInternal(source)
+                                val player = createMediaPlayerInternal(source, mediaItem.mediaId)
                                 if (player == null) {
                                     Logger.w(TAG, "Precaching skipped for $idx: could not create mpv player")
                                 } else {

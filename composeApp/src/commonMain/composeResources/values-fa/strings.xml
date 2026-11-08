@@ -158,7 +158,6 @@
     <string name="playlist">فهرست پخش</string>
     <string name="restart_app">برای به‌کارگیری تغییرات، برنامه را دوباره راه‌اندازی کنید</string>
     <string name="balance_media_loudness">تعادل بلندی صدا</string>
-    <string name="normalize_volume">نرمال‌سازی صدا</string>
     <string name="audio">صدا</string>
     <string name="streaming_data_provider_piped">تأمین‌کننده داده‌های استریم (Piped)</string>
     <string name="itag">آی‌تگ</string>

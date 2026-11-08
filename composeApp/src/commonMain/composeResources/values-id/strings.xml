@@ -161,7 +161,6 @@
     <string name="playlist">Daftar putar</string>
     <string name="restart_app">Mulai ulang aplikasi untuk menerapkan perubahan</string>
     <string name="balance_media_loudness">Seimbangkan kenyaringan media</string>
-    <string name="normalize_volume">Normalisasi Volume</string>
     <string name="audio">Audio</string>
     <string name="streaming_data_provider_piped">Penyedia data streaming (Piped)</string>
     <string name="itag">Itag</string>

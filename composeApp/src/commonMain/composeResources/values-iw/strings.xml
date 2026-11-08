@@ -149,7 +149,6 @@
     <string name="playlist">רשימת השמעה</string>
     <string name="restart_app">הפעל מחדש את האפליקציה כדי להחיל את השינוי</string>
     <string name="balance_media_loudness">איזון עוצמת מדיה</string>
-    <string name="normalize_volume">נרמל את עוצמת הקול</string>
     <string name="audio">אודיו</string>
     <string name="streaming_data_provider_piped">ספק נתונים בסטרימינג (Piped)</string>
     <string name="itag">יציב</string>

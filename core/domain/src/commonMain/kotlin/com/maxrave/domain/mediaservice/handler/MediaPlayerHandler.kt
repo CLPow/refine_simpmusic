@@ -160,7 +160,7 @@ interface MediaPlayerHandler {
     fun stopBufferedUpdate()
 
     // Settings
-    fun mayBeNormalizeVolume()
+    fun publishTrackInfo()
 
     fun mayBeSaveRecentSong(runBlocking: Boolean = false)
 

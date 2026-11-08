@@ -1,5 +1,6 @@
 package com.maxrave.media3.service.callback
 
+import com.maxrave.media3.audio.OutputRouteMonitor
 import android.content.BroadcastReceiver
 import android.content.IntentFilter
 import android.media.AudioManager
@@ -92,6 +93,7 @@ internal class SimpleMediaSessionCallback(
     private val streamRepository: StreamRepository,
     private val albumRepository: AlbumRepository,
     dataStoreManager: DataStoreManager,
+    private val routeMonitor: OutputRouteMonitor,
 ) : MediaLibrarySession.Callback {
     /** Read on every media key, so kept warm instead of read from disk on the main thread. */
     private val externalStartAllowed =
@@ -152,6 +154,8 @@ internal class SimpleMediaSessionCallback(
         controller: MediaSession.ControllerInfo,
     ): MediaSession.ConnectionResult {
         Logger.w(TAG, "onConnect: ${controller.packageName}")
+        // The connecting controller is not in the session's list yet.
+        routeMonitor.onControllersChanged(session.connectedControllers.map { it.packageName } + controller.packageName)
         val sessionCommands =
             MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                 .buildUpon()
@@ -179,6 +183,8 @@ internal class SimpleMediaSessionCallback(
         controller: MediaSession.ControllerInfo,
     ) {
         Logger.w(TAG, "onDisconnected: ${controller.packageName}")
+        // The leaving controller may still be listed.
+        routeMonitor.onControllersChanged(session.connectedControllers.filter { it != controller }.map { it.packageName })
         super.onDisconnected(session, controller)
     }
 

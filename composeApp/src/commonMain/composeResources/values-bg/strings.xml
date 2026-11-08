@@ -156,7 +156,6 @@
     <string name="playlist">Плейлист</string>
     <string name="restart_app">Рестартирай приложението за да се приложи промяната</string>
     <string name="balance_media_loudness">Балансиране на звука на медията</string>
-    <string name="normalize_volume">Нормализиране на звукът</string>
     <string name="audio">Звук</string>
     <string name="streaming_data_provider_piped">Доставчик на данни за поточно предаване (Piped)</string>
     <string name="itag">Itag</string>

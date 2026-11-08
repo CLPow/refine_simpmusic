@@ -14,8 +14,6 @@ plugins {
 }
 
 android {
-    val abis = arrayOf("armeabi-v7a", "arm64-v8a", "x86_64")
-
     namespace = "com.maxrave.simpmusic"
     compileSdk = 37
 
@@ -68,11 +66,13 @@ android {
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
+        // arm64 only, for every build type and the AAB: the one device it is installed on is a
+        // 64-bit phone, and Android Auto runs on the phone. (The x86_64 emulator is no longer a
+        // target.) The release is one APK: androidApp-release-unsigned.apk.
         ndk {
-            abiFilters.add("x86_64")
-            abiFilters.add("armeabi-v7a")
             abiFilters.add("arm64-v8a")
         }
+
     }
 
     bundle {
@@ -89,14 +89,6 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            splits {
-                abi {
-                    isEnable = true
-                    reset()
-                    isUniversalApk = true
-                    include(*abis)
-                }
-            }
         }
         debug {
             isMinifyEnabled = false

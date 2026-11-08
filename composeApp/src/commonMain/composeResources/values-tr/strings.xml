@@ -156,7 +156,6 @@
     <string name="playlist">Oynatma listesi</string>
     <string name="restart_app">Değişiklikleri uygulamak için uygulamayı yeniden başlatın</string>
     <string name="balance_media_loudness">Medya ses yüksekliğini dengeleyin</string>
-    <string name="normalize_volume">Sesi Normalleştir</string>
     <string name="audio">Ses</string>
     <string name="streaming_data_provider_piped">Veri akışı sağlayıcısı (Piped)</string>
     <string name="itag">Itag</string>

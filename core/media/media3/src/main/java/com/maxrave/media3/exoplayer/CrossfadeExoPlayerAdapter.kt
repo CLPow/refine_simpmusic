@@ -1,5 +1,8 @@
 package com.maxrave.media3.exoplayer
 
+import android.content.Intent
+import android.media.audiofx.AudioEffect
+import androidx.media3.exoplayer.analytics.AnalyticsListener
 import com.maxrave.media3.di.WifiOnlyException
 import com.maxrave.domain.mediaservice.handler.WIFI_ONLY_ERROR_CODE_NAME
 import android.annotation.SuppressLint
@@ -34,8 +37,14 @@ import com.maxrave.domain.repository.StreamRepository
 import com.maxrave.logger.Logger
 import com.maxrave.media3.audio.BiquadFilter
 import com.maxrave.media3.audio.CrossfadeFilterAudioProcessor
-import com.maxrave.media3.audio.EqualizerAudioProcessor
-import com.maxrave.media3.audio.EqualizerCurve
+import com.maxrave.domain.audio.EnhanceSettings
+import com.maxrave.domain.audio.EnhanceStatus
+import com.maxrave.domain.audio.TrackInfo
+import com.maxrave.domain.audio.TrackInfoCache
+import com.maxrave.media3.audio.EnhanceAudioProcessor
+import com.maxrave.media3.audio.EnhanceConfig
+import com.maxrave.media3.audio.EnhanceMeter
+import com.maxrave.media3.audio.OutputRouteMonitor
 import com.maxrave.media3.audio.SleepFadeAudioProcessor
 import com.maxrave.media3.exoplayer.CrossfadeExoPlayerAdapter.Companion.SPEED_PITCH_STEP
 import com.maxrave.media3.service.mediasourcefactory.MergingMediaSourceFactory
@@ -82,6 +91,7 @@ internal class CrossfadeExoPlayerAdapter(
     private val mediaSourceFactory: MergingMediaSourceFactory,
     private val audioAttributes: AudioAttributes,
     private val streamRepository: StreamRepository,
+    private val routeMonitor: OutputRouteMonitor,
 ) : MediaPlayerInterface {
     // ========== Internal State Enum (same as GstreamerPlayerAdapter) ==========
 
@@ -156,13 +166,51 @@ internal class CrossfadeExoPlayerAdapter(
     @Volatile
     private var internalSleepFadeFactor = 1.0f
 
-    /**
-     * The equalizer curve in force. Read the same way as [internalSleepFadeFactor]: every player's
-     * [EqualizerAudioProcessor] samples it on every buffer, so one write covers both players of a
-     * crossfade and every precached one without any of them having to be found first.
-     */
+    // ========== Enhance audio ==========
+    //
+    // Read the same way as [internalSleepFadeFactor]: every player's [EnhanceAudioProcessor]
+    // samples [enhanceConfig] per buffer and compares it by identity, so one write covers both
+    // players of a crossfade and every precached one without any of them having to be found.
+
     @Volatile
-    private var internalEqualizerCurve: EqualizerCurve = EqualizerCurve.FLAT
+    private var enhanceSettings: EnhanceSettings = EnhanceSettings.OFF
+
+    @Volatile
+    private var enhanceCompare = false
+
+    @Volatile
+    private var enhanceConfig = EnhanceConfig()
+
+    /** YouTube's loudness and format per media id; each player looks up the track it is playing. */
+    private val trackInfo = TrackInfoCache()
+
+    /** Audio sessions of the players alive now, announced to the phone's equalizer once it is linked. */
+    private val liveSessions = ConcurrentHashMap.newKeySet<Int>()
+
+    private val enhanceMeter = EnhanceMeter()
+
+    /** The media id a player is on, written on the player's thread and read on its audio thread. */
+    private class MediaIdSlot {
+        @Volatile var mediaId: String? = null
+    }
+
+    private fun rebuildEnhanceConfig() {
+        val settings = enhanceSettings
+        val next =
+            EnhanceConfig(
+                settings = settings,
+                route = routeMonitor.route.value,
+                // Only carried while compensation is on, so volume changes do not churn the chain.
+                volumeFraction = if (settings.lowVolumeCompensation) routeMonitor.volumeFraction.value else null,
+                compare = enhanceCompare,
+            )
+        if (next != enhanceConfig) enhanceConfig = next
+    }
+
+    init {
+        coroutineScope.launch { routeMonitor.route.collect { rebuildEnhanceConfig() } }
+        coroutineScope.launch { routeMonitor.volumeFraction.collect { rebuildEnhanceConfig() } }
+    }
 
     @Volatile
     private var internalRepeatMode = PlayerConstants.REPEAT_MODE_OFF
@@ -515,7 +563,13 @@ internal class CrossfadeExoPlayerAdapter(
     private fun createExoPlayerInstance(): PlayerWithFilter {
         val crossfadeFilter = CrossfadeFilterAudioProcessor()
         val sleepFade = SleepFadeAudioProcessor { internalSleepFadeFactor }
-        val equalizer = EqualizerAudioProcessor { internalEqualizerCurve }
+        val slot = MediaIdSlot()
+        val enhance =
+            EnhanceAudioProcessor(
+                config = { enhanceConfig },
+                loudness = { trackInfo[slot.mediaId]?.loudnessDb },
+                meter = enhanceMeter,
+            )
 
         val perPlayerRenderers =
             object : DefaultRenderersFactory(context) {
@@ -530,15 +584,17 @@ internal class CrossfadeExoPlayerAdapter(
                         .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
                         .setAudioProcessorChain(
                             DefaultAudioSink.DefaultAudioProcessorChain(
-                                // Equalizer first, matching the desktop graph, where the ten
-                                // `equalizer` entries sit ahead of the crossfade ones in mpv's
-                                // `af` list. All three are linear, so the order does not change
-                                // the response — it decides which stage a boost can clip in, and
-                                // the preamp that makes room for the boost belongs with it.
-                                arrayOf(equalizer, crossfadeFilter, sleepFade),
+                                // Enhance first, matching the desktop graph, where its entry sits
+                                // ahead of the crossfade ones in mpv's `af` list: the crossfade
+                                // and sleep fades only ever attenuate, so the limiter's ceiling
+                                // still holds at the output.
+                                arrayOf(enhance, crossfadeFilter, sleepFade),
                                 SilenceSkippingAudioProcessor(
                                     2_000_000,
-                                    (20_000 / 2_000_000).toFloat(),
+                                    // Retain 1 % of each silence (20 ms of a 2 s gap). This was
+                                    // written `(20_000 / 2_000_000).toFloat()`, integer division
+                                    // that always passed 0.
+                                    0.01f,
                                     2_000_000,
                                     0,
                                     256,
@@ -568,8 +624,55 @@ internal class CrossfadeExoPlayerAdapter(
                 .setMediaSourceFactory(mediaSourceFactory)
                 .setRenderersFactory(perPlayerRenderers)
                 .build()
+        // Each player gets its own audio session id up front. Media3 1.11 generates one lazily on a
+        // background thread, so reading `audioSessionId` right after build() gives 0 — which is
+        // why the announcement below never went out before.
+        val sessionId = audioManager?.generateAudioSessionId()?.takeIf { it > 0 } ?: C.AUDIO_SESSION_ID_UNSET
+        if (sessionId != C.AUDIO_SESSION_ID_UNSET) {
+            player.setAudioSessionId(sessionId)
+            liveSessions += sessionId
+        }
+        // Announce it to the phone's equalizer apps only once the listener has opened the phone's
+        // equalizer from the Sound page: before that, an equalizer app attaching would change the
+        // sound with "Enhance audio" off.
+        if (enhanceSettings.phoneEqualizerLinked) sendAudioEffectSession(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION, sessionId)
+        player.addAnalyticsListener(
+            object : AnalyticsListener {
+                override fun onPlayerReleased(eventTime: AnalyticsListener.EventTime) {
+                    liveSessions -= sessionId
+                    if (enhanceSettings.phoneEqualizerLinked) {
+                        sendAudioEffectSession(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION, sessionId)
+                    }
+                }
+            },
+        )
+        player.addListener(
+            object : Player.Listener {
+                override fun onMediaItemTransition(
+                    mediaItem: MediaItem?,
+                    reason: Int,
+                ) {
+                    slot.mediaId = mediaItem?.mediaId
+                }
+            },
+        )
 
         return PlayerWithFilter(player, crossfadeFilter)
+    }
+
+    private fun sendAudioEffectSession(
+        action: String,
+        sessionId: Int,
+    ) {
+        if (sessionId == C.AUDIO_SESSION_ID_UNSET) return
+        runCatching {
+            context.sendBroadcast(
+                Intent(action)
+                    .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, sessionId)
+                    .putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
+                    .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC),
+            )
+        }
     }
 
     // ========== Playback Control ==========
@@ -1295,22 +1398,52 @@ internal class CrossfadeExoPlayerAdapter(
         }
 
     /**
-     * Hand the equalizer a new curve.
-     *
-     * Nothing is pushed anywhere, for the same reason the sleep fade pushes nothing: the value is
-     * sampled per buffer. A fresh [EqualizerCurve] is allocated on every call precisely so each
-     * processor can decide whether to rebuild its coefficients with one reference comparison,
-     * rather than diffing eleven floats on every buffer for the whole of playback.
-     *
-     * Not forwarded to `castRemotePlayer`: while casting, the audio is decoded on the receiver and
-     * never passes through this pipeline at all, which is why the settings screen greys the
-     * equalizer out for the duration.
+     * New "Enhance audio" settings. Nothing is pushed: every processor samples [enhanceConfig].
+     * Not forwarded to `castRemotePlayer`: while casting the audio is decoded on the receiver and
+     * never passes through this pipeline.
      */
-    override fun setEqualizer(
-        bandsDb: List<Float>,
-        preampDb: Float,
+    override fun setEnhance(settings: EnhanceSettings) {
+        val linkedNow = settings.phoneEqualizerLinked && !enhanceSettings.phoneEqualizerLinked
+        enhanceSettings = settings
+        rebuildEnhanceConfig()
+        // Just linked: announce the sessions already playing, not only future ones.
+        if (linkedNow) liveSessions.forEach { sendAudioEffectSession(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION, it) }
+    }
+
+    override fun setTrackInfo(
+        mediaId: String,
+        info: TrackInfo,
     ) {
-        internalEqualizerCurve = EqualizerCurve(bandsDb, preampDb)
+        trackInfo.put(mediaId, info)
+    }
+
+    override fun setEnhanceCompare(compare: Boolean) {
+        enhanceCompare = compare
+        rebuildEnhanceConfig()
+    }
+
+    override fun enhanceStatus(): EnhanceStatus {
+        val player = currentPlayer
+        val format = player?.audioFormat
+        val info = trackInfo[player?.currentMediaItem?.mediaId]
+        // The decoder's own figure when the container carries one; otherwise YouTube's for the format.
+        val bitrate =
+            listOf(format?.averageBitrate, format?.bitrate, format?.peakBitrate)
+                .firstOrNull { it != null && it > 0 }
+                ?.let { it / 1000 } ?: info?.bitrateKbps
+        return EnhanceStatus(
+            sourceCodec = format?.sampleMimeType?.removePrefix("audio/"),
+            sourceItag = info?.itag,
+            sourceBitrateKbps = bitrate,
+            sourceSampleRateHz = format?.sampleRate?.takeIf { it > 0 },
+            route = routeMonitor.route.value,
+            active = enhanceSettings.enabled && enhanceMeter.active,
+            normalizationDb = enhanceMeter.normalizationDb,
+            limiterReductionDb = enhanceMeter.limiterReductionDb,
+            levellerDb = enhanceMeter.levellerDb,
+            loadPercent = enhanceMeter.loadPercent,
+            lowVolumeDb = enhanceMeter.lowVolumeDb,
+        )
     }
 
     override var skipSilenceEnabled: Boolean
