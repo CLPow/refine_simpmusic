@@ -1,6 +1,5 @@
 package com.maxrave.media3.di
 
-import com.maxrave.media3.audio.OutputRouteMonitor
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import com.maxrave.domain.repository.AlbumRepository
@@ -28,10 +27,6 @@ import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.NoOpCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.DefaultLoadControl
-import androidx.media3.exoplayer.DefaultLoadControl.DEFAULT_MAX_BUFFER_MS
-import androidx.media3.exoplayer.DefaultLoadControl.DEFAULT_MIN_BUFFER_MS
-import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.extractor.flac.FlacExtractor
@@ -63,7 +58,7 @@ import com.maxrave.domain.repository.StreamRepository
 import com.maxrave.logger.Logger
 import com.maxrave.media3.cast.CastHandoffManager
 import com.maxrave.media3.cast.CastStreamResolver
-import com.maxrave.media3.exoplayer.CrossfadeExoPlayerAdapter
+import com.maxrave.media3.exoplayer.ExoPlayerAdapter
 import com.maxrave.media3.extension.isFullyCached
 import com.maxrave.media3.repository.CacheRepositoryImpl
 import com.maxrave.media3.service.SimpleMediaService
@@ -87,7 +82,6 @@ import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import org.simpmusic.cast.initCast
 import org.simpmusic.cast.wrapWithCastPlayer
-import java.net.Proxy
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -166,16 +160,12 @@ private val mediaServiceModule =
             )
         }
 
-        single<OutputRouteMonitor>(createdAtStart = true) {
-            OutputRouteMonitor(androidContext())
-        }
-
         // Player exposed for MediaSession + UI (video rendering via PlayerView/PlayerSurface).
         // The adapter's ForwardingPlayer (delegating to the active ExoPlayer) is wrapped with
         // Cast support in the full build; org.simpmusic.cast no-ops back to the same instance
         // in the FOSS build, so this stays the stable session-level player either way.
         single<Player>(qualifier = named(MAIN_PLAYER)) {
-            val adapter = get<MediaPlayerInterface>() as CrossfadeExoPlayerAdapter
+            val adapter = get<MediaPlayerInterface>() as ExoPlayerAdapter
             initCast(androidContext())
             wrapWithCastPlayer(androidContext(), adapter.forwardingPlayer)
         }
@@ -186,14 +176,13 @@ private val mediaServiceModule =
         }
 
         single<MediaPlayerInterface>(createdAtStart = true) {
-            CrossfadeExoPlayerAdapter(
+            ExoPlayerAdapter(
                 context = androidContext(),
                 coroutineScope = get(named(SERVICE_SCOPE)),
                 dataStoreManager = get(),
                 mediaSourceFactory = get(),
                 audioAttributes = get(),
                 streamRepository = get(),
-                routeMonitor = get(),
             )
         }
 
@@ -201,7 +190,7 @@ private val mediaServiceModule =
         // ForwardingPlayer (FOSS build or no GMS on the device).
         single<CastHandoffManager>(createdAtStart = true) {
             CastHandoffManager(
-                adapter = get<MediaPlayerInterface>() as CrossfadeExoPlayerAdapter,
+                adapter = get<MediaPlayerInterface>() as ExoPlayerAdapter,
                 sessionPlayer = get(qualifier = named(MAIN_PLAYER)),
                 resolver = CastStreamResolver(get(), get()),
                 coroutineScope = get(qualifier = named(SERVICE_SCOPE)),
@@ -223,7 +212,6 @@ private val mediaServiceModule =
                 get<StreamRepository>(),
                 get<AlbumRepository>(),
                 get<DataStoreManager>(),
-                get<OutputRouteMonitor>(),
             )
         }
 
@@ -278,7 +266,7 @@ private fun provideResolvingDataSourceFactory(
             // It is only safe for ONE chunk though. A bare id has no scheme, so
             // DefaultDataSource routes it to FileDataSource, not to OkHttp — the failure
             // is FileNotFoundException (ERROR_CODE_IO_FILE_NOT_FOUND), which Media3 lists
-            // as non-retriable and which CrossfadeExoPlayerAdapter does not recover from
+            // as non-retriable and which ExoPlayerAdapter does not recover from
             // either. Meanwhile CacheDataSource.read() walks span to span inside a single
             // open() without consulting this resolver again, so an unbounded DataSpec
             // would stake the whole remaining track on a snapshot taken here: one LRU
@@ -382,15 +370,6 @@ private fun provideMediaSourceFactory(
                 downloadCache,
                 playerCache,
                 context,
-                dataStoreManager.getJVMProxy()?.let {
-                    Proxy(
-                        when (it.type) {
-                            DataStoreManager.ProxyType.PROXY_TYPE_HTTP -> Proxy.Type.HTTP
-                            DataStoreManager.ProxyType.PROXY_TYPE_SOCKS -> Proxy.Type.SOCKS
-                        },
-                        java.net.InetSocketAddress(it.host, it.port),
-                    )
-                },
             ),
             downloadCache,
             playerCache,
@@ -426,7 +405,6 @@ private fun provideCacheDataSource(
     downloadCache: SimpleCache,
     playerCache: SimpleCache,
     context: Context,
-    proxy: Proxy? = null,
 ): CacheDataSource.Factory =
     CacheDataSource
         .Factory()
@@ -444,9 +422,7 @@ private fun provideCacheDataSource(
                                     .Builder()
                                     .connectTimeout(30.seconds)
                                     .readTimeout(30.seconds)
-                                    .proxy(
-                                        proxy,
-                                    ).build(),
+                                    .build(),
                             ),
                         ),
                 ),
@@ -455,19 +431,6 @@ private fun provideCacheDataSource(
 
 /** Cached stream URLs with more than this left before expiry skip the 403 probe. */
 private const val FRESH_URL_MARGIN_S = 3 * 3600L
-
-@UnstableApi
-private fun provideLoadControl(): LoadControl =
-    DefaultLoadControl
-        .Builder()
-        .setBufferDurationsMs(
-            DEFAULT_MIN_BUFFER_MS * 4,
-            DEFAULT_MAX_BUFFER_MS * 4,
-            // bufferForPlaybackMs=
-            0,
-            // bufferForPlaybackAfterRebufferMs=
-            0,
-        ).build()
 
 @UnstableApi
 private fun provideAudioAttributes(): AudioAttributes =

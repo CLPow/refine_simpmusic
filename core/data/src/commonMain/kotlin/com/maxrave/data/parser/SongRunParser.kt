@@ -234,25 +234,6 @@ internal fun parseSongAlbumAt(
 }
 
 /**
- * Finds the view count anywhere in the row, or null when the row shows none.
- *
- * The count is not in a column of its own — it is the trailing run of the subtitle column, after
- * the artists and the album ("Charli xcx • Brat • 8M views"). Scanning every column and asking
- * [classifySongRun] avoids caring which column that turned out to be.
- *
- * Returns just the number and its magnitude ("8M"), matching what the UI appends its own label to.
- */
-internal fun parseSongViews(data: MusicResponsiveListItemRenderer): String? {
-    for (column in data.flexColumns) {
-        val runs = column.musicResponsiveListItemFlexColumnRenderer.text?.runs ?: continue
-        for (i in runs.indices step 2) {
-            if (classifySongRun(runs[i]) == SongRunType.VIEWS) return parseViews(runs[i].text)
-        }
-    }
-    return null
-}
-
-/**
  * Reads the artists out of the column [findSongColumns] identified.
  *
  * Odd runs are separators (" • "), so only even ones carry values. Runs that turn out to be a

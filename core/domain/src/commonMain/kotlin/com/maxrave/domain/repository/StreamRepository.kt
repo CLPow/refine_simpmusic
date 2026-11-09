@@ -42,15 +42,6 @@ data class PlaybackTracking(
 
 interface StreamRepository {
     /**
-     * Milliseconds the account guard is holding back requests that carry the user's account, or 0
-     * when it is idle.
-     *
-     * Lives here because this repository already holds the YouTube client the guard belongs to;
-     * the app module has no business reaching into the scraper directly.
-     */
-    fun accountGuardCooldownMs(): Long
-
-    /**
      * How the last playback-tracking ping to YouTube was answered, or null if none has been sent
      * this session.
      *

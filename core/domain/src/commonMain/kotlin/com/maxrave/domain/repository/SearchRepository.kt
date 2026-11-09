@@ -24,8 +24,6 @@ interface SearchRepository {
 
     fun getSearchDataVideo(query: String): Flow<Resource<ArrayList<VideosResult>>>
 
-    fun getSearchDataPodcast(query: String): Flow<Resource<ArrayList<PlaylistsResult>>>
-
     fun getSearchDataFeaturedPlaylist(query: String): Flow<Resource<ArrayList<PlaylistsResult>>>
 
     fun getSearchDataArtist(query: String): Flow<Resource<ArrayList<ArtistsResult>>>

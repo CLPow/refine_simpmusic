@@ -16,7 +16,7 @@ private const val TAG = "DelegatingForwardingPlayer"
  * A [ForwardingPlayer] that allows runtime swapping of its underlying delegate.
  *
  * Used for MediaSession integration - provides a stable [Player] reference while
- * [CrossfadeExoPlayerAdapter] cycles through different ExoPlayer instances.
+ * [ExoPlayerAdapter] cycles through different ExoPlayer instances.
  *
  * Pattern: Track all externally added listeners, then during swap:
  * 1. Remove them via [ForwardingPlayer.removeListener] (cleans up ForwardingListener wrappers)
@@ -26,7 +26,7 @@ private const val TAG = "DelegatingForwardingPlayer"
  * Additionally, since each underlying ExoPlayer only has a single MediaItem,
  * playlist navigation methods (hasNext/hasPrevious, seek, mediaItemCount, etc.)
  * are overridden to delegate to [PlaylistNavigationProvider] — which is backed by
- * [CrossfadeExoPlayerAdapter]'s internal playlist. This ensures MediaSession reports
+ * [ExoPlayerAdapter]'s internal playlist. This ensures MediaSession reports
  * correct available commands (SEEK_TO_NEXT, SEEK_TO_PREVIOUS) and shows
  * next/previous buttons in the system notification.
  */
@@ -86,7 +86,7 @@ internal class DelegatingForwardingPlayer(
     }
 
     /**
-     * Set by [CrossfadeExoPlayerAdapter] to provide playlist navigation.
+     * Set by [ExoPlayerAdapter] to provide playlist navigation.
      * When null, all navigation methods fall back to the underlying ExoPlayer (single-item behavior).
      */
     var playlistNavigationProvider: PlaylistNavigationProvider? = null
@@ -100,7 +100,7 @@ internal class DelegatingForwardingPlayer(
      * foreground-service notification during the gap between one ExoPlayer finishing
      * and the next ExoPlayer being swapped in via [swapDelegate].
      *
-     * Set by [CrossfadeExoPlayerAdapter] before a track-end transition starts,
+     * Set by [ExoPlayerAdapter] before a track-end transition starts,
      * cleared after the next player is swapped in and playing.
      */
     @Volatile

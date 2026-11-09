@@ -76,11 +76,6 @@ internal class AlbumRepositoryImpl(
         )
     }
 
-    override suspend fun deleteFollowedArtistSingleAndAlbum(channelId: String) =
-        withContext(Dispatchers.IO) {
-            localDataSource.deleteFollowedArtistSingleAndAlbum(channelId)
-        }
-
     override fun getAlbumData(browseId: String): Flow<Resource<AlbumBrowse>> =
         flow {
             runCatching {

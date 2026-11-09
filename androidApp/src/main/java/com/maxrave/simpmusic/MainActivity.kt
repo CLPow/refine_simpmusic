@@ -22,9 +22,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.work.WorkManager
 import com.eygraber.uri.toKmpUriOrNull
 import com.maxrave.common.FIRST_TIME_MIGRATION
-import com.maxrave.common.SELECTED_LANGUAGE
 import com.maxrave.common.STATUS_DONE
-import com.maxrave.common.SUPPORTED_LANGUAGE
 import com.maxrave.common.SUPPORTED_LOCATION
 import com.maxrave.domain.data.model.intent.GenericIntent
 import com.maxrave.domain.manager.DataStoreManager
@@ -108,7 +106,6 @@ class MainActivity : AppCompatActivity() {
         unloadKoinModules(viewModelModule)
         loadKoinModules(viewModelModule)
         VersionManager.initialize()
-        checkForUpdate()
         if (viewModel.recreateActivity.value || viewModel.isServiceRunning) {
             viewModel.activityRecreateDone()
         } else {
@@ -125,50 +122,20 @@ class MainActivity : AppCompatActivity() {
                 ),
             )
         }
-        Logger.d("Italy", "Key: ${Locale.ITALY.toLanguageTag()}")
-
-        // Check if the migration has already been done or not
+        // First launch: take the region from the device. The app itself is English-only.
         if (getString(FIRST_TIME_MIGRATION) != STATUS_DONE) {
-            Logger.d("Locale Key", "onCreate: ${Locale.getDefault().toLanguageTag()}")
-            if (SUPPORTED_LANGUAGE.codes.contains(Locale.getDefault().toLanguageTag())) {
-                Logger.d(
-                    "Contains",
-                    "onCreate: ${
-                        SUPPORTED_LANGUAGE.codes.contains(
-                            Locale.getDefault().toLanguageTag(),
-                        )
-                    }",
-                )
-                putString(SELECTED_LANGUAGE, Locale.getDefault().toLanguageTag())
-                if (SUPPORTED_LOCATION.items.contains(Locale.getDefault().country)) {
-                    putString("location", Locale.getDefault().country)
-                } else {
-                    // Never default to IN: this fork opts out of India-region recommendations.
-                    putString("location", "US")
-                }
+            if (SUPPORTED_LOCATION.items.contains(Locale.getDefault().country)) {
+                putString("location", Locale.getDefault().country)
             } else {
-                putString(SELECTED_LANGUAGE, "en-US")
+                // Never default to IN: this fork opts out of India-region recommendations.
+                putString("location", "US")
             }
-            // Fetch the selected language from wherever it was stored. In this case its SharedPref
-            getString(SELECTED_LANGUAGE)?.let {
-                Logger.d("Locale Key", "getString: $it")
-                // Set this locale using the AndroidX library that will handle the storage itself
-                val localeList = LocaleListCompat.forLanguageTags(it)
-                AppCompatDelegate.setApplicationLocales(localeList)
-                // Set the migration flag to ensure that this is executed only once
-                putString(FIRST_TIME_MIGRATION, STATUS_DONE)
-            }
+            putString(FIRST_TIME_MIGRATION, STATUS_DONE)
         }
-        if (AppCompatDelegate.getApplicationLocales().toLanguageTags() !=
-            getString(
-                SELECTED_LANGUAGE,
-            )
-        ) {
-            Logger.d(
-                "Locale Key",
-                "onCreate: ${AppCompatDelegate.getApplicationLocales().toLanguageTags()}",
-            )
-            putString(SELECTED_LANGUAGE, AppCompatDelegate.getApplicationLocales().toLanguageTags())
+        // Before 2.3.10 the app could be switched to another language; drop a per-app language
+        // left from then so dates and numbers follow the device again.
+        if (!AppCompatDelegate.getApplicationLocales().isEmpty) {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
         }
 
         enableEdgeToEdge(
@@ -190,6 +157,8 @@ class MainActivity : AppCompatActivity() {
         // so an install that scheduled it before this build would keep waking every 24h for a feed
         // that no longer has a worker class to run. Cancel it once instead of orphaning the job.
         WorkManager.getInstance(this).cancelUniqueWork("Blog RSS Worker")
+        // Auto backup is gone too (2.3.10); it had no switch left, so only older installs scheduled it.
+        WorkManager.getInstance(this).cancelUniqueWork("AutoBackupWorker")
 
         if (!EasyPermissions.hasPermissions(this, Manifest.permission.POST_NOTIFICATIONS)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -267,12 +236,6 @@ class MainActivity : AppCompatActivity() {
         viewModel.isServiceRunning = true
         shouldUnbind = true
         Logger.d("Service", "Service started")
-    }
-
-    private fun checkForUpdate() {
-        if (viewModel.shouldCheckForUpdate()) {
-            viewModel.checkForUpdate()
-        }
     }
 
     private fun putString(

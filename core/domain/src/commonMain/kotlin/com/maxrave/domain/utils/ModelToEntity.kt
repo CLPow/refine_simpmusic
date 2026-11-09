@@ -6,14 +6,12 @@ import com.maxrave.domain.data.entities.LyricsEntity
 import com.maxrave.domain.data.entities.PlaylistEntity
 import com.maxrave.domain.data.entities.SearchHistory
 import com.maxrave.domain.data.entities.SongEntity
-import com.maxrave.domain.data.entities.TranslatedLyricsEntity
 import com.maxrave.domain.data.model.browse.album.AlbumBrowse
 import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.data.model.browse.artist.ResultSong
 import com.maxrave.domain.data.model.browse.artist.ResultVideo
 import com.maxrave.domain.data.model.browse.playlist.PlaylistBrowse
 import com.maxrave.domain.data.model.home.Content
-import com.maxrave.domain.data.model.metadata.Line
 import com.maxrave.domain.data.model.metadata.Lyrics
 import com.maxrave.domain.data.model.podcast.PodcastBrowse
 import com.maxrave.domain.data.model.searchResult.songs.Album
@@ -22,8 +20,6 @@ import com.maxrave.domain.data.model.searchResult.songs.SongsResult
 import com.maxrave.domain.data.model.searchResult.songs.Thumbnail
 import com.maxrave.domain.data.model.searchResult.videos.VideosResult
 import kotlin.jvm.JvmName
-
-fun SearchHistory.toQuery(): String = this.query
 
 fun List<SearchHistory>.toQueryList(): ArrayList<String> {
     val list = ArrayList<String>()
@@ -284,32 +280,6 @@ fun PlaylistBrowse.toPlaylistEntity(): PlaylistEntity =
         downloadState = DownloadState.STATE_NOT_DOWNLOADED,
     )
 
-fun Track.addThumbnails(): Track =
-    Track(
-        album = this.album,
-        artists = this.artists,
-        duration = this.duration,
-        durationSeconds = this.durationSeconds,
-        isAvailable = this.isAvailable,
-        isExplicit = this.isExplicit,
-        likeStatus = this.likeStatus,
-        thumbnails =
-            listOf(
-                Thumbnail(
-                    720,
-                    "https://i.ytimg.com/vi/${this.videoId}/maxresdefault.jpg",
-                    1280,
-                ),
-            ),
-        title = this.title,
-        videoId = this.videoId,
-        videoType = this.videoType,
-        category = this.category,
-        feedbackTokens = this.feedbackTokens,
-        resultType = this.resultType,
-        year = this.year,
-    )
-
 fun LyricsEntity.toLyrics(): Lyrics =
     Lyrics(
         error = this.error,
@@ -320,21 +290,6 @@ fun LyricsEntity.toLyrics(): Lyrics =
 fun Lyrics.toLyricsEntity(videoId: String): LyricsEntity =
     LyricsEntity(
         videoId = videoId,
-        error = this.error,
-        lines = this.lines,
-        syncType = this.syncType,
-    )
-
-fun Collection<SongEntity>.toVideoIdList(): List<String> {
-    val list = mutableListOf<String>()
-    for (item in this) {
-        list.add(item.videoId)
-    }
-    return list
-}
-
-fun TranslatedLyricsEntity.toLyrics(): Lyrics =
-    Lyrics(
         error = this.error,
         lines = this.lines,
         syncType = this.syncType,
@@ -368,85 +323,6 @@ fun List<PodcastBrowse.EpisodeItem>.toListTrack(): ArrayList<Track> {
         listTrack.add(item.toTrack())
     }
     return listTrack
-}
-
-fun Lyrics.toSyncedLrcString(): String? {
-    val lines = this.lines
-    if (lines.isNullOrEmpty() || this.syncType != "LINE_SYNCED") {
-        return null
-    }
-    return lines.joinToString("\n") { line ->
-        val startTimeMs = line.startTimeMs.toLong()
-        val minutes = (startTimeMs / 60000).toString().padStart(2, '0')
-        val seconds = ((startTimeMs % 60000) / 1000).toString().padStart(2, '0')
-        val milliseconds = ((startTimeMs % 1000) / 10).toString().padStart(2, '0')
-
-        // Add space before the content as it was removed in the parsing function
-        val content = if (line.words == "♫") " " else " ${line.words}"
-
-        "[$minutes:$seconds.$milliseconds]$content"
-    }
-}
-
-/**
- * Reverse of [parseRichSyncLyrics]: converts RICH_SYNCED Lyrics back to the rich sync LRC string format.
- *
- * Output format (one per line):
- * [MM:SS.mm] <MM:SS.mm>word <MM:SS.mm>word ...
- */
-fun Lyrics.toRichSyncLrcString(): String? {
-    val lines = this.lines
-    if (lines.isNullOrEmpty() || this.syncType != "RICH_SYNCED") {
-        return null
-    }
-    return lines.joinToString("\n") { line ->
-        val startTimeMs = line.startTimeMs.toLongOrNull() ?: 0L
-        val minutes = (startTimeMs / 60000).toString().padStart(2, '0')
-        val seconds = ((startTimeMs % 60000) / 1000).toString().padStart(2, '0')
-        val centiseconds = ((startTimeMs % 1000) / 10).toString().padStart(2, '0')
-
-        "[$minutes:$seconds.$centiseconds] ${line.words.replace("  ", " ")}"
-    }
-}
-
-/**
- * Converts RICH_SYNCED Lyrics to LINE_SYNCED Lyrics by stripping word-level <MM:SS.mm> timing
- * from each line's words, keeping only the plain text and line-level timing.
- */
-fun Lyrics.toSyncedLyrics(): Lyrics {
-    val lines = this.lines
-    if (lines.isNullOrEmpty() || this.syncType != "RICH_SYNCED") {
-        return this
-    }
-    val wordTimingRegex = Regex("""<\d{1,2}:\d{2}\.\d{2,3}>""")
-    val syncedLines =
-        lines.map { line ->
-            val plainWords =
-                line.words
-                    .replace(wordTimingRegex, "")
-                    .replace("  ", " ")
-                    .trim()
-            Line(
-                endTimeMs = line.endTimeMs,
-                startTimeMs = line.startTimeMs,
-                syllables = line.syllables,
-                words = plainWords.ifBlank { "♫" },
-            )
-        }
-    return Lyrics(
-        error = this.error,
-        lines = syncedLines,
-        syncType = "LINE_SYNCED",
-        simpMusicLyrics = this.simpMusicLyrics,
-    )
-}
-
-fun Lyrics.toPlainLrcString(): String? {
-    val lines = this.lines
-    if (lines.isNullOrEmpty()) {
-        return null
-    }
-    return lines.joinToString("\n") { it.words }
 }
 
 fun List<String>.connectArtists(): String {

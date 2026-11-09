@@ -4,19 +4,15 @@ import com.maxrave.domain.data.entities.SetVideoIdEntity
 import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.data.model.browse.playlist.Author
 import com.maxrave.domain.data.model.browse.playlist.PlaylistBrowse
-import com.maxrave.domain.data.model.podcast.PodcastBrowse
 import com.maxrave.domain.data.model.searchResult.playlists.PlaylistsResult
 import com.maxrave.domain.data.model.searchResult.songs.Album
-import com.maxrave.domain.data.model.searchResult.songs.Artist
 import com.maxrave.domain.data.model.searchResult.songs.Thumbnail
 import com.maxrave.domain.extension.now
 import com.maxrave.kotlinytmusicscraper.models.MusicShelfRenderer
 import com.maxrave.kotlinytmusicscraper.models.SectionListRenderer
 import com.maxrave.kotlinytmusicscraper.models.response.BrowseResponse
-import com.maxrave.kotlinytmusicscraper.models.response.SearchResponse
 import com.maxrave.kotlinytmusicscraper.pages.PodcastItem
 import com.maxrave.logger.Logger
-import kotlinx.datetime.LocalDateTime
 
 internal fun parsePlaylistData(
     header: Any?,
@@ -405,121 +401,3 @@ internal fun parsePodcast(list: List<PodcastItem>): ArrayList<PlaylistsResult> {
     return listPlaylist
 }
 
-internal fun parsePodcastData(
-    listContent: List<MusicShelfRenderer.Content>?,
-    author: Artist?,
-): List<PodcastBrowse.EpisodeItem> {
-    if (listContent == null || author == null) {
-        return emptyList()
-    } else {
-        val listEpisode: ArrayList<PodcastBrowse.EpisodeItem> = arrayListOf()
-        listContent.forEach { content ->
-            listEpisode.add(
-                PodcastBrowse.EpisodeItem(
-                    title =
-                        content.musicMultiRowListItemRenderer
-                            ?.title
-                            ?.runs
-                            ?.firstOrNull()
-                            ?.text
-                            ?: "",
-                    author = author,
-                    description =
-                        content.musicMultiRowListItemRenderer?.description?.runs?.joinToString(
-                            separator = "",
-                        ) { it.text } ?: "",
-                    thumbnail =
-                        content.musicMultiRowListItemRenderer
-                            ?.thumbnail
-                            ?.musicThumbnailRenderer
-                            ?.thumbnail
-                            ?.thumbnails
-                            ?.toListThumbnail()
-                            ?: emptyList<Thumbnail>(),
-                    createdDay =
-                        content.musicMultiRowListItemRenderer
-                            ?.subtitle
-                            ?.runs
-                            ?.firstOrNull()
-                            ?.text
-                            ?: "",
-                    durationString =
-                        content.musicMultiRowListItemRenderer
-                            ?.playbackProgress
-                            ?.musicPlaybackProgressRenderer
-                            ?.durationText
-                            ?.runs
-                            ?.lastOrNull()
-                            ?.text ?: "",
-                    videoId =
-                        content.musicMultiRowListItemRenderer
-                            ?.onTap
-                            ?.watchEndpoint
-                            ?.videoId
-                            ?: "",
-                ),
-            )
-        }
-
-        return listEpisode
-    }
-}
-
-internal fun parsePodcastContinueData(
-    listContent: List<SearchResponse.ContinuationContents.MusicShelfContinuation.Content>?,
-    author: Artist?,
-): List<PodcastBrowse.EpisodeItem> {
-    if (listContent == null || author == null) {
-        return emptyList()
-    } else {
-        val listEpisode: ArrayList<PodcastBrowse.EpisodeItem> = arrayListOf()
-        listContent.forEach { content ->
-            listEpisode.add(
-                PodcastBrowse.EpisodeItem(
-                    title =
-                        content.musicMultiRowListItemRenderer
-                            ?.title
-                            ?.runs
-                            ?.firstOrNull()
-                            ?.text
-                            ?: "",
-                    author = author,
-                    description =
-                        content.musicMultiRowListItemRenderer?.description?.runs?.joinToString(
-                            separator = "",
-                        ) { it.text } ?: "",
-                    thumbnail =
-                        content.musicMultiRowListItemRenderer
-                            ?.thumbnail
-                            ?.musicThumbnailRenderer
-                            ?.thumbnail
-                            ?.thumbnails
-                            ?.toListThumbnail()
-                            ?: emptyList<Thumbnail>(),
-                    createdDay =
-                        content.musicMultiRowListItemRenderer
-                            ?.subtitle
-                            ?.runs
-                            ?.firstOrNull()
-                            ?.text
-                            ?: "",
-                    durationString =
-                        content.musicMultiRowListItemRenderer
-                            ?.subtitle
-                            ?.runs
-                            ?.lastOrNull()
-                            ?.text
-                            ?: "",
-                    videoId =
-                        content.musicMultiRowListItemRenderer
-                            ?.onTap
-                            ?.watchEndpoint
-                            ?.videoId
-                            ?: "",
-                ),
-            )
-        }
-
-        return listEpisode
-    }
-}

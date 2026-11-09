@@ -88,8 +88,6 @@ class PlaylistViewModel(
 
     private var collectDownloadedJob: Job? = null
     private var _downloadedList = MutableStateFlow<List<String>>(emptyList())
-    val downloadedList: StateFlow<List<String>> = _downloadedList
-
     private var playlistEntityJob: Job? = null
     private var newUpdateJob: Job? = null
     private var checkDownloadedPlaylist: Job? = null

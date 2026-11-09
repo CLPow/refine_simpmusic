@@ -40,18 +40,7 @@ interface SongRepository {
 
     fun getPreparingSongs(): Flow<List<SongEntity>>
 
-    fun getDownloadedVideoIdListFromListVideoIdAsFlow(listVideoId: List<String>): Flow<List<String>>
-
     fun getLikedSongs(): Flow<List<SongEntity>>
-
-    /**
-     * Queue every liked song that is not already offline, and return how many were queued.
-     *
-     * Used when the user switches auto-download on: liking a song from then on downloads it, and
-     * this catches up on everything they liked before. Songs already downloaded are skipped, so
-     * turning the setting off and on again costs nothing.
-     */
-    suspend fun downloadAllLikedSongs(): Int
 
     /**
      * Erase the local listening history and drop every song row nothing refers to any more.
@@ -121,14 +110,10 @@ interface SongRepository {
 
     suspend fun insertSongInfo(songInfo: SongInfoEntity)
 
-    suspend fun getSongInfoEntity(videoId: String): Flow<SongInfoEntity?>
-
     suspend fun recoverQueue(
         temp: List<Track>,
         playlistType: String? = null,
     )
-
-    suspend fun removeQueue()
 
     suspend fun getSavedQueue(): Flow<List<QueueEntity>?>
 
@@ -141,9 +126,6 @@ interface SongRepository {
     fun getSongInfo(videoId: String): Flow<SongInfoEntity?>
 
     suspend fun getLikeStatus(videoId: String): Flow<Boolean>
-
-    /** The account's rating of [videoId] on YouTube: 1 liked, -1 disliked, 0 neither. */
-    suspend fun getYouTubeRating(videoId: String): Flow<Int>
 
     suspend fun dislikeOnYouTube(mediaId: String?): Flow<Int>
 

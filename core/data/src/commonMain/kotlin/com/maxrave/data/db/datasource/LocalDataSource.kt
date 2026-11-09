@@ -4,23 +4,17 @@ import DatabaseDao
 import com.maxrave.data.db.MusicDatabase
 import com.maxrave.domain.data.entities.AlbumEntity
 import com.maxrave.domain.data.entities.ArtistEntity
-import com.maxrave.domain.data.entities.AutoEqCurveEntity
-import com.maxrave.domain.data.entities.AutoEqEntryEntity
-import com.maxrave.domain.data.entities.AutoEqIndexMetaEntity
-import com.maxrave.domain.data.entities.EpisodeEntity
 import com.maxrave.domain.data.entities.GoogleAccountEntity
 import com.maxrave.domain.data.entities.LocalPlaylistEntity
 import com.maxrave.domain.data.entities.LyricsEntity
 import com.maxrave.domain.data.entities.NewFormatEntity
 import com.maxrave.domain.data.entities.PairSongLocalPlaylist
 import com.maxrave.domain.data.entities.PlaylistEntity
-import com.maxrave.domain.data.entities.PodcastsEntity
 import com.maxrave.domain.data.entities.QueueEntity
 import com.maxrave.domain.data.entities.SearchHistory
 import com.maxrave.domain.data.entities.SetVideoIdEntity
 import com.maxrave.domain.data.entities.SongEntity
 import com.maxrave.domain.data.entities.SongInfoEntity
-import com.maxrave.domain.data.entities.TranslatedLyricsEntity
 import com.maxrave.domain.data.entities.YourYouTubePlaylistList
 import com.maxrave.domain.extension.now
 import com.maxrave.domain.utils.FilterState
@@ -69,11 +63,6 @@ internal class LocalDataSource(
         offset: Int,
     ) = databaseDao.getRecentSongs(limit, offset)
 
-    suspend fun getSongByListVideoId(
-        primaryKeyList: List<String>,
-        offset: Int,
-    ) = databaseDao.getSongByListVideoId(primaryKeyList, offset)
-
     suspend fun getCanvasSong(max: Int) = databaseDao.getCanvasSong(max)
 
     suspend fun getSongByListVideoIdFull(primaryKeyList: List<String>) = databaseDao.getSongByListVideoIdFull(primaryKeyList)
@@ -86,8 +75,6 @@ internal class LocalDataSource(
         offset,
     )
 
-    fun getDownloadedVideoIdListFromListVideoIdAsFlow(listVideoId: List<String>) = databaseDao.getDownloadedVideoIdByListVideoId(listVideoId)
-
     suspend fun getDownloadingSongs(
         limit: Int,
         offset: Int,
@@ -98,15 +85,7 @@ internal class LocalDataSource(
 
     // ===== Clear listening history + drop orphaned songs =====
 
-    suspend fun deleteAllPlaybackEvents() = databaseDao.deleteAllPlaybackEvents()
-
     suspend fun deleteUnfollowedArtists() = databaseDao.deleteUnfollowedArtists()
-
-    suspend fun deleteNotificationsOfUnfollowedArtists() = databaseDao.deleteNotificationsOfUnfollowedArtists()
-
-    suspend fun deleteFollowedArtistReleasesOfUnfollowedArtists() = databaseDao.deleteFollowedArtistReleasesOfUnfollowedArtists()
-
-    suspend fun deleteUnfavoritedPodcasts() = databaseDao.deleteUnfavoritedPodcasts()
 
     suspend fun deleteUnreferencedAlbums() = databaseDao.deleteUnreferencedAlbums()
 
@@ -128,7 +107,6 @@ internal class LocalDataSource(
             // Songs first, so the follow-up deletes can tell which ids really went.
             val deleted = databaseDao.deleteSongsByIds(batch)
             databaseDao.deleteLyricsByIds(batch)
-            databaseDao.deleteTranslatedLyricsByIds(batch)
             databaseDao.deleteNewFormatsByIds(batch)
             databaseDao.deleteSongInfoByIds(batch)
             deleted
@@ -145,7 +123,6 @@ internal class LocalDataSource(
     suspend fun deleteStaleSongSatellites(): Int =
         databaseDao.deleteStaleNewFormats() +
             databaseDao.deleteStaleLyrics() +
-            databaseDao.deleteStaleTranslatedLyrics() +
             databaseDao.deleteStaleSongInfo()
 
     suspend fun getLikedSongs(
@@ -201,14 +178,6 @@ internal class LocalDataSource(
         return rowId
     }
 
-    /**
-     * Batch counterpart of [insertSong], used by the importer.
-     *
-     * The IGNORE-and-self-repair policy above lives inside the DAO method here, because the
-     * transaction has to wrap the whole batch and only a DAO method can be `@Transaction`.
-     */
-    suspend fun insertSongs(songs: List<SongEntity>) = databaseDao.insertSongs(songs)
-
     suspend fun updateThumbnailsSongEntity(
         thumbnail: String,
         videoId: String,
@@ -222,16 +191,6 @@ internal class LocalDataSource(
     suspend fun updateListenCount(videoId: String) = databaseDao.updateTotalPlayTime(videoId)
 
     suspend fun resetTotalPlayTime(videoId: String) = databaseDao.resetTotalPlayTime(videoId)
-
-    suspend fun updateCanvasUrl(
-        videoId: String,
-        canvasUrl: String,
-    ) = databaseDao.updateCanvasUrl(videoId, canvasUrl)
-
-    suspend fun updateCanvasThumbUrl(
-        videoId: String,
-        canvasThumbUrl: String,
-    ) = databaseDao.updateCanvasThumbUrl(videoId, canvasThumbUrl)
 
     suspend fun updateLiked(
         liked: Int,
@@ -374,34 +333,13 @@ internal class LocalDataSource(
 
     suspend fun insertLocalPlaylist(localPlaylist: LocalPlaylistEntity) = databaseDao.insertLocalPlaylist(localPlaylist)
 
-    /** The local playlist previously synced from [spotifyUri], if there is one. */
-    suspend fun getLocalPlaylistBySpotifyUri(spotifyUri: String) = databaseDao.getLocalPlaylistBySpotifyUri(spotifyUri)
-
-    /**
-     * Titles only.
-     *
-     * The uniqueness check during a sync needs nothing else, and loading every playlist in full --
-     * with its whole track list -- once per playlist created turned that check into a full table
-     * read per playlist.
-     */
-    suspend fun getAllLocalPlaylistTitles() = databaseDao.getAllLocalPlaylistTitles()
-
-    suspend fun insertLocalPlaylistWithTracks(
-        localPlaylist: LocalPlaylistEntity,
-        videoIds: List<String>,
-    ) = databaseDao.insertLocalPlaylistWithTracks(localPlaylist, videoIds)
-
     /**
      * Deletes a playlist and records the deletion, so a later sync does not bring it back.
      *
      * The untracked [databaseDao.deleteLocalPlaylist] is left in place for internal rewrites that
      * are not user intent; anything the user removes should go through here.
      */
-    suspend fun deleteLocalPlaylist(id: Long) = databaseDao.deleteLocalPlaylistTracked(id)
-
-    suspend fun getAllSyncTombstones() = databaseDao.getAllSyncTombstones()
-
-    suspend fun pruneSyncTombstones(cutoff: LocalDateTime) = databaseDao.pruneSyncTombstones(cutoff)
+    suspend fun deleteLocalPlaylist(id: Long) = databaseDao.deleteLocalPlaylist(id)
 
     suspend fun updateLocalPlaylistTitle(
         title: String,
@@ -418,23 +356,10 @@ internal class LocalDataSource(
         id: Long,
     ) = databaseDao.updateLocalPlaylistTracks(tracks, id)
 
-    suspend fun updateLocalPlaylistInLibrary(
-        inLibrary: LocalDateTime,
-        id: Long,
-    ) = databaseDao.updateLocalPlaylistInLibrary(inLibrary, id)
-
     suspend fun updateLocalPlaylistDownloadState(
         downloadState: Int,
         id: Long,
     ) = databaseDao.updateLocalPlaylistDownloadState(downloadState, id)
-
-    suspend fun getDownloadedLocalPlaylists(
-        limit: Int,
-        offset: Int,
-    ) = databaseDao.getDownloadedLocalPlaylists(
-        limit,
-        offset,
-    )
 
     suspend fun updateLocalPlaylistYouTubePlaylistId(
         id: Long,
@@ -446,15 +371,13 @@ internal class LocalDataSource(
         syncState: Int,
     ) = databaseDao.updateLocalPlaylistYouTubePlaylistSyncState(id, syncState)
 
-    fun getDownloadStateFlowOfLocalPlaylist(id: Long) = databaseDao.getDownloadStateFlowOfLocalPlaylist(id)
-
     fun getListTracksFlowOfLocalPlaylist(id: Long) = databaseDao.getListTracksFlowOfLocalPlaylist(id)
 
     suspend fun getSavedLyrics(videoId: String) = databaseDao.getLyrics(videoId)
 
     suspend fun insertLyrics(lyrics: LyricsEntity) = databaseDao.insertLyrics(lyrics)
 
-    suspend fun deleteAllLyrics(): Int = databaseDao.deleteAllLyrics() + databaseDao.deleteAllTranslatedLyrics()
+    suspend fun deleteAllLyrics(): Int = databaseDao.deleteAllLyrics()
 
     suspend fun getPreparingSongs(
         limit: Int,
@@ -480,8 +403,6 @@ internal class LocalDataSource(
 
     suspend fun getQueue() = databaseDao.getQueue()
 
-    suspend fun deleteQueue() = databaseDao.deleteQueue()
-
     suspend fun getLocalPlaylistByYoutubePlaylistId(playlistId: String) = databaseDao.getLocalPlaylistByYoutubePlaylistId(playlistId)
 
     suspend fun insertSetVideoId(setVideoIdEntity: SetVideoIdEntity) = databaseDao.insertSetVideoId(setVideoIdEntity)
@@ -505,16 +426,6 @@ internal class LocalDataSource(
         videoId: String,
         localPlaylistId: Long,
     ) = databaseDao.getPlaylistPairOfSong(videoId, localPlaylistId)
-
-    suspend fun getPlaylistPairSong(
-        playlistId: Long,
-        limit: Int,
-        offset: Int,
-    ) = databaseDao.getPlaylistPairSong(
-        playlistId,
-        limit,
-        offset,
-    )
 
     suspend fun getPlaylistPairSongByListPosition(
         playlistId: Long,
@@ -582,30 +493,8 @@ internal class LocalDataSource(
         toIndex: Int,
     ) = databaseDao.moveSongInPlaylist(playlistId, fromIndex, toIndex)
 
-    suspend fun editPositionOfSongInPlaylist(
-        playlistId: Long,
-        videoId: String,
-        newPosition: Int,
-    ) = databaseDao.editPositionOfSongInPlaylist(
-        playlistId,
-        videoId,
-        newPosition,
-    )
-
     suspend fun getAllPlaylistPairSongByPosition(playlistId: Long) =
         databaseDao.getAllPlaylistPairSongByPosition(playlistId)
-
-    suspend fun shiftPositionsForward(
-        playlistId: Long,
-        from: Int,
-        to: Int,
-    ) = databaseDao.shiftPositionsForward(playlistId, from, to)
-
-    suspend fun shiftPositionsBackward(
-        playlistId: Long,
-        from: Int,
-        to: Int,
-    ) = databaseDao.shiftPositionsBackward(playlistId, from, to)
 
     suspend fun deletePairSongLocalPlaylist(
         playlistId: Long,
@@ -630,83 +519,6 @@ internal class LocalDataSource(
         inLibrary: LocalDateTime,
     ) = databaseDao.setInLibrary(videoId, inLibrary)
 
-    suspend fun deleteFollowedArtistSingleAndAlbum(channelId: String) = databaseDao.deleteFollowedArtistSingleAndAlbum(channelId)
-
-    suspend fun deleteNotificationsByChannelId(channelId: String) = databaseDao.deleteNotificationsByChannelId(channelId)
-
-    suspend fun getTranslatedLyrics(
-        videoId: String,
-        language: String,
-    ) = databaseDao.getTranslatedLyrics(videoId, language)
-
-    suspend fun removeTranslatedLyrics(
-        videoId: String,
-        language: String,
-    ) = databaseDao.removeTranslatedLyrics(videoId, language)
-
-    suspend fun insertTranslatedLyrics(translatedLyricsEntity: TranslatedLyricsEntity) = databaseDao.insertTranslatedLyrics(translatedLyricsEntity)
-
-    suspend fun insertPodcast(podcastsEntity: PodcastsEntity) = databaseDao.insertPodcast(podcastsEntity)
-
-    suspend fun insertEpisodes(episodes: List<EpisodeEntity>) = databaseDao.insertEpisodes(episodes)
-
-    suspend fun getPodcastWithEpisodes(podcastId: String) = databaseDao.getPodcastWithEpisodes(podcastId)
-
-    suspend fun getAllPodcasts(limit: Int) = databaseDao.getAllPodcasts(limit)
-
-    suspend fun getAllPodcastWithEpisodes(
-        limit: Int,
-        offset: Int,
-    ) = databaseDao.getAllPodcastWithEpisodes(
-        limit,
-        offset,
-    )
-
-    suspend fun getPodcast(podcastId: String) = databaseDao.getPodcast(podcastId)
-
-    suspend fun getFavoritePodcasts(
-        limit: Int,
-        offset: Int,
-    ) = databaseDao.getFavoritePodcasts(
-        limit,
-        offset,
-    )
-
-    suspend fun getEpisode(videoId: String) = databaseDao.getEpisode(videoId)
-
-    suspend fun deletePodcast(podcastId: String) = databaseDao.deletePodcast(podcastId)
-
-    suspend fun favoritePodcast(
-        podcastId: String,
-        isFavorite: Boolean,
-    ): Boolean {
-        val podcast = databaseDao.getPodcast(podcastId)
-        if (podcast != null) {
-            val updatedPodcast =
-                podcast.copy(
-                    isFavorite = isFavorite,
-                    favoriteTime = if (isFavorite) now() else null,
-                )
-            return databaseDao.insertPodcast(updatedPodcast) > 0
-        } else {
-            return false
-        }
-    }
-
-    suspend fun getPodcastEpisodes(
-        podcastId: String,
-        limit: Int,
-        offset: Int,
-    ) = databaseDao.getPodcastEpisodes(
-        podcastId,
-        limit,
-        offset,
-    )
-
-    suspend fun updatePodcastInLibraryNow(id: String) = databaseDao.updatePodcastInLibrary(id,
-        now()
-    )
-
     suspend fun insertYourYouTubePlaylist(yourYouTubePlaylist: YourYouTubePlaylistList) =
         databaseDao.insertYourYouTubePlaylist(yourYouTubePlaylist)
 
@@ -718,35 +530,6 @@ internal class LocalDataSource(
     suspend fun deleteAllYourYouTubePlaylist() =
         databaseDao.deleteAllYourYouTubePlaylist()
 
-    // ========== AutoEq ==========
-
-    suspend fun getAutoEqEntryCount(): Int = databaseDao.getAutoEqEntryCount()
-
-    suspend fun searchAutoEqEntries(
-        query: String,
-        limit: Int,
-    ): List<AutoEqEntryEntity> =
-        if (query.isBlank()) {
-            databaseDao.getAutoEqEntries(limit)
-        } else {
-            databaseDao.searchAutoEqEntries(query.escapeForLike(), limit)
-        }
-
-    suspend fun getAutoEqCurve(path: String): AutoEqCurveEntity? = databaseDao.getAutoEqCurve(path)
-
-    suspend fun insertAutoEqCurve(curve: AutoEqCurveEntity) = databaseDao.insertAutoEqCurve(curve)
-
-    suspend fun getAutoEqCachedCurvePaths(): List<String> = databaseDao.getAutoEqCachedCurvePaths()
-
-    suspend fun getAutoEqIndexMeta(): AutoEqIndexMetaEntity? = databaseDao.getAutoEqIndexMeta()
-
-    /** Records that the cache was checked, without touching the rows it describes. */
-    suspend fun updateAutoEqIndexMeta(meta: AutoEqIndexMetaEntity) = databaseDao.upsertAutoEqIndexMeta(meta)
-
-    suspend fun replaceAutoEqIndex(
-        entries: List<AutoEqEntryEntity>,
-        meta: AutoEqIndexMetaEntity,
-    ) = databaseDao.replaceAutoEqIndex(entries, meta)
 }
 
 /**

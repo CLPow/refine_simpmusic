@@ -1,6 +1,5 @@
 package com.maxrave.simpmusic.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LocalContentColor
@@ -17,54 +16,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import com.materialkolor.PaletteStyle
-import com.materialkolor.rememberDynamicColorScheme
-import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.simpmusic.expect.ui.SystemBarAppearanceEffect
-import com.maxrave.simpmusic.expect.ui.platformDynamicColorScheme
-
-/**
- * Booming Music–influenced Material 3 dark scheme (tokens from mardous/BoomingMusic Color.kt).
- * Cool indigo primary on a blue-black surface — the look of their Expressive player screenshots.
- */
-private fun boomingColorScheme(): ColorScheme =
-    darkColorScheme(
-        primary = Color(0xFFB6C4FF),
-        onPrimary = Color(0xFF1D2D61),
-        primaryContainer = Color(0xFF354479),
-        onPrimaryContainer = Color(0xFFDCE1FF),
-        secondary = Color(0xFFC2C5DD),
-        onSecondary = Color(0xFF2B3042),
-        secondaryContainer = Color(0xFF424659),
-        onSecondaryContainer = Color(0xFFDEE1F9),
-        tertiary = Color(0xFFE3BADA),
-        onTertiary = Color(0xFF432740),
-        tertiaryContainer = Color(0xFF5B3D57),
-        onTertiaryContainer = Color(0xFFFFD7F5),
-        error = Color(0xFFFFB4AB),
-        onError = Color(0xFF690005),
-        errorContainer = Color(0xFF93000A),
-        onErrorContainer = Color(0xFFFFDAD6),
-        background = Color(0xFF121318),
-        onBackground = Color(0xFFE3E1E9),
-        surface = Color(0xFF121318),
-        onSurface = Color(0xFFE3E1E9),
-        surfaceVariant = Color(0xFF45464F),
-        onSurfaceVariant = Color(0xFFC6C5D0),
-        outline = Color(0xFF90909A),
-        outlineVariant = Color(0xFF45464F),
-        scrim = Color(0xFF000000),
-        inverseSurface = Color(0xFFE3E1E9),
-        inverseOnSurface = Color(0xFF2F3036),
-        inversePrimary = Color(0xFF4D5C92),
-        surfaceBright = Color(0xFF38393F),
-        surfaceDim = Color(0xFF121318),
-        surfaceContainerLowest = Color(0xFF0D0E13),
-        surfaceContainerLow = Color(0xFF1A1B21),
-        surfaceContainer = Color(0xFF1E1F25),
-        surfaceContainerHigh = Color(0xFF292A2F),
-        surfaceContainerHighest = Color(0xFF34343A),
-    )
 
 /**
  * YouTube Music's palette: near-black page (#030303), stepped greys for raised surfaces, white
@@ -137,32 +89,10 @@ private val DarkAppColors =
         overlayHeavy = blackMoreOverlay,
     )
 
-// Overlays stay dark in both themes: they cover artwork, where content is always light.
-private val LightAppColors =
-    DarkAppColors.copy(
-        shimmerBackground = shimmerBackgroundLight,
-        shimmerLine = shimmerLineLight,
-    )
-
 val LocalAppColors = staticCompositionLocalOf { DarkAppColors }
 
-/** True in dark theme. Provided by [AppTheme] so platform glass (blur/tint) can adapt reliably. */
+/** True in dark theme, which is the only theme. */
 val LocalIsDarkTheme = staticCompositionLocalOf { true }
-
-/** True when the Booming Music–influenced theme is active (fixed indigo scheme, no seed). */
-val LocalIsBoomingTheme = staticCompositionLocalOf { false }
-
-/** True when the YouTube Music theme is active; also switches the type to the system sans (Roboto). */
-val LocalIsYtmTheme = staticCompositionLocalOf { false }
-
-/**
- * Whether liquid-glass surfaces may actually draw glass.
- *
- * Provided by [AppTheme] from the user's setting; the default is true so previews and anything
- * composed outside [AppTheme] keep today's look. The setting row is Android-only, so Desktop always
- * provides true — its capsule player and detail-screen buttons are glass by design, with no switch.
- */
-val LocalLiquidGlassEnabled = staticCompositionLocalOf { true }
 
 /**
  * The dark scheme to use for immersive screens while the app itself is on the light theme.
@@ -170,122 +100,29 @@ val LocalLiquidGlassEnabled = staticCompositionLocalOf { true }
  */
 val LocalForcedDarkColorScheme = staticCompositionLocalOf<ColorScheme?> { null }
 
-/** Parses "RRGGBB" or "AARRGGBB" (optionally "#"-prefixed) into a [Color]; null if malformed. */
-fun parseThemeColorHex(hex: String): Color? {
-    val clean = hex.trim().removePrefix("#")
-    val argb =
-        when (clean.length) {
-            6 -> "FF$clean"
-            8 -> clean
-            else -> return null
-        }
-    return argb.toLongOrNull(16)?.let { Color(it) }
-}
-
-/**
- * Neutral surfaces for the light theme, on a pure neutral-grey ramp (R=G=B, no seed tint);
- * primary/secondary/tertiary stay seed-derived. The page background is #FAFAFA (neutral tone 98,
- * the Material 3 stance) rather than pure white: a full-bleed #FFFFFF expanse glares on a large
- * desktop window, and even Apple — who pins systemBackground to white — puts #F2F2F7 behind
- * list pages. Pure white is kept for surfaceBright/surfaceContainerLowest so cards and sheets
- * still have a brighter-than-page tier to lift onto. Dark stays pure-black AMOLED: black does
- * not glare and saves OLED.
- */
-private fun ColorScheme.withNeutralLightSurfaces(): ColorScheme =
-    copy(
-        background = Color(0xFFFAFAFA),
-        onBackground = Color(0xFF1B1B1B),
-        surface = Color(0xFFFAFAFA),
-        onSurface = Color(0xFF1B1B1B),
-        surfaceVariant = Color(0xFFE2E2E2),
-        onSurfaceVariant = Color(0xFF474747),
-        surfaceTint = primary,
-        surfaceBright = Color(0xFFFFFFFF),
-        surfaceDim = Color(0xFFDADADA),
-        surfaceContainerLowest = Color(0xFFFFFFFF),
-        surfaceContainerLow = Color(0xFFF7F7F7),
-        surfaceContainer = Color(0xFFF1F1F1),
-        surfaceContainerHigh = Color(0xFFECECEC),
-        surfaceContainerHighest = Color(0xFFE6E6E6),
-        outline = Color(0xFF777777),
-        outlineVariant = Color(0xFFC7C7C7),
-        inverseSurface = Color(0xFF303030),
-        inverseOnSurface = Color(0xFFF1F1F1),
-    )
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class)
+/** The app's only theme: YouTube Music's dark palette and type. */
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun AppTheme(
-    themeMode: String = DataStoreManager.THEME_MODE_DARK,
-    themeColorSource: String = DataStoreManager.THEME_COLOR_DEFAULT,
-    customThemeColor: Color? = null,
-    liquidGlassEnabled: Boolean = true,
     content:
         @Composable()
         () -> Unit,
 ) {
-    val isDark = isDarkTheme(themeMode)
-    val booming = themeMode == DataStoreManager.THEME_MODE_BOOMING
-    val ytm = themeMode == DataStoreManager.THEME_MODE_YTM
-    val wallpaperScheme =
-        if (themeColorSource == DataStoreManager.THEME_COLOR_WALLPAPER && !booming && !ytm) {
-            platformDynamicColorScheme(isDark)
-        } else {
-            null
-        }
-    val seedColor =
-        if (themeColorSource == DataStoreManager.THEME_COLOR_CUSTOM && !booming) {
-            customThemeColor ?: seed
-        } else {
-            seed
-        }
-    // Symmetric base: dark pins background/surface to pure black via isAmoled; light pins them to
-    // pure white with a neutral-grey ramp (the seed otherwise tints the light neutrals warm/cream).
-    // BOOMING ignores the seed and wallpaper: it is a fixed Material 3 look from Booming Music.
-    val colorScheme =
-        when {
-            ytm -> remember { ytmColorScheme() }
-            booming -> boomingColorScheme()
-            wallpaperScheme != null -> wallpaperScheme
-            else ->
-                rememberDynamicColorScheme(
-                    seedColor = seedColor,
-                    isDark = isDark,
-                    isAmoled = isDark,
-                    style = PaletteStyle.TonalSpot,
-                    modifyColorScheme = { cs -> if (isDark) cs else cs.withNeutralLightSurfaces() },
-                )
-        }
-    // Immersive screens stay dark even at light theme (see [ForceDarkContent]). Resolve their scheme
-    // once here instead of letting every such subtree build a palette of its own.
-    val forcedDarkScheme =
-        if (isDark || ytm) {
-            colorScheme
-        } else {
-            rememberDynamicColorScheme(
-                seedColor = seedColor,
-                isDark = true,
-                isAmoled = true,
-                style = PaletteStyle.TonalSpot,
-            )
-        }
-    SystemBarAppearanceEffect(isDark)
+    val colorScheme = remember { ytmColorScheme() }
+    SystemBarAppearanceEffect(isDark = true)
     MaterialExpressiveTheme(
         colorScheme = colorScheme,
         content = {
             CompositionLocalProvider(
                 LocalRippleConfiguration provides SoftRippleConfiguration,
                 LocalContentColor provides colorScheme.onSurfaceVariant,
-                LocalAppColors provides if (isDark) DarkAppColors else LightAppColors,
-                LocalIsDarkTheme provides isDark,
-                LocalIsBoomingTheme provides booming,
-                LocalIsYtmTheme provides ytm,
-                LocalForcedDarkColorScheme provides forcedDarkScheme,
-                LocalLiquidGlassEnabled provides liquidGlassEnabled,
+                LocalAppColors provides DarkAppColors,
+                LocalIsDarkTheme provides true,
+                LocalForcedDarkColorScheme provides colorScheme,
                 content = content,
             )
         },
-        typography = typo(colorScheme, ytm = ytm),
+        typography = typo(colorScheme),
     )
 }
 
@@ -355,19 +192,3 @@ fun ForceDarkContent(content: @Composable () -> Unit) {
     )
 }
 
-/**
- * Resolves the stored theme mode to a plain boolean.
- *
- * Pulled out of [AppTheme] so chrome living *outside* it can ask the same question — the desktop
- * title bar is drawn before AppTheme is entered, so it has no MaterialTheme to read and would
- * otherwise need its own copy of this `when`.
- */
-@Composable
-fun isDarkTheme(themeMode: String): Boolean =
-    when (themeMode) {
-        DataStoreManager.THEME_MODE_LIGHT -> false
-        DataStoreManager.THEME_MODE_SYSTEM -> isSystemInDarkTheme()
-        DataStoreManager.THEME_MODE_BOOMING -> true
-        DataStoreManager.THEME_MODE_YTM -> true
-        else -> true
-    }

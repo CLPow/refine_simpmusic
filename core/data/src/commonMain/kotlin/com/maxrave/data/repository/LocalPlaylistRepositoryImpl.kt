@@ -42,7 +42,6 @@ import com.maxrave.kotlinytmusicscraper.parser.playlistContinuationContents
 import com.maxrave.logger.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -92,8 +91,6 @@ internal class LocalPlaylistRepositoryImpl(
     ) = withContext(Dispatchers.IO) {
         localDataSource.updateLocalPlaylistYouTubePlaylistSyncState(id, syncState)
     }
-
-    override fun downloadStateFlow(id: Long): Flow<Int> = localDataSource.getDownloadStateFlowOfLocalPlaylist(id)
 
     override fun getAllDownloadingLocalPlaylists(): Flow<List<LocalPlaylistEntity>> =
         flow {
@@ -838,21 +835,6 @@ internal class LocalPlaylistRepositoryImpl(
                     playlistId,
                 ),
             )
-        }.flowOn(Dispatchers.IO)
-
-    override fun changePositionOfSongInPlaylist(
-        playlistId: Long,
-        videoId: String,
-        newPosition: Int,
-    ): Flow<String> =
-        flow {
-            localDataSource.editPositionOfSongInPlaylist(
-                playlistId,
-                videoId,
-                newPosition,
-            )
-            delay(100)
-            emit("Position updated")
         }.flowOn(Dispatchers.IO)
 
     /**

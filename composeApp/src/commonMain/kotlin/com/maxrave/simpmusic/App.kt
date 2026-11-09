@@ -43,7 +43,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_MEDIUM_LOWER_BOUND
 import coil3.toUri
 import com.maxrave.domain.data.player.GenericMediaItem
-import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.ui.component.AppBottomNavigationBar
 import com.maxrave.simpmusic.ui.component.AppNavigationRail
@@ -252,7 +251,7 @@ fun App(viewModel: SharedViewModel = koinInject()) {
 
     val isWide = windowSize.isWidthAtLeastBreakpoint(WIDTH_DP_MEDIUM_LOWER_BOUND) || getPlatform() == Platform.Desktop
 
-    AppTheme(themeMode = DataStoreManager.THEME_MODE_YTM, liquidGlassEnabled = false) {
+    AppTheme {
       CompositionLocalProvider(LocalWideLayout provides isWide) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,

@@ -50,7 +50,3 @@ actual fun KeepScreenOn() {
     // TODO: Implement if needed
 }
 
-@Composable
-actual fun rememberIsInPipMode(): Boolean {
-    return false
-}

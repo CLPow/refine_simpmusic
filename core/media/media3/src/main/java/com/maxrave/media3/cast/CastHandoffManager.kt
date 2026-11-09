@@ -8,7 +8,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import com.maxrave.domain.data.player.GenericMediaItem
 import com.maxrave.logger.Logger
-import com.maxrave.media3.exoplayer.CrossfadeExoPlayerAdapter
+import com.maxrave.media3.exoplayer.ExoPlayerAdapter
 import com.maxrave.media3.exoplayer.toMedia3MediaItem
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -31,11 +31,11 @@ import org.simpmusic.cast.currentCastDeviceName
  * silences local playback and pushes a small window of resolved-URL items to the receiver;
  * on return to local it restores the adapter at the last remote position. While remote,
  * the adapter routes transport calls to the session player and playback-start requests to
- * [CrossfadeExoPlayerAdapter.castPlaybackRouter], which lands in [pushQueueWindow].
+ * [ExoPlayerAdapter.castPlaybackRouter], which lands in [pushQueueWindow].
  */
 @UnstableApi
 internal class CastHandoffManager(
-    private val adapter: CrossfadeExoPlayerAdapter,
+    private val adapter: ExoPlayerAdapter,
     private val sessionPlayer: Player,
     private val resolver: CastStreamResolver,
     private val coroutineScope: CoroutineScope,

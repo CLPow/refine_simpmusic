@@ -2,10 +2,8 @@ package com.maxrave.kotlinytmusicscraper
 
 import com.maxrave.kotlinytmusicscraper.models.Tabs
 import com.eygraber.uri.toKmpUri
-import com.maxrave.common.ITAG
 import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.kotlinytmusicscraper.YouTube.Companion.DEFAULT_VISITOR_DATA
-import com.maxrave.kotlinytmusicscraper.extension.toListFormat
 import com.maxrave.kotlinytmusicscraper.extractor.ExtractSource
 import com.maxrave.kotlinytmusicscraper.extractor.contentLengthOf
 import com.maxrave.kotlinytmusicscraper.extractor.orderByAudioTrack
@@ -25,12 +23,9 @@ import com.maxrave.kotlinytmusicscraper.models.Run
 import com.maxrave.kotlinytmusicscraper.models.SearchSuggestions
 import com.maxrave.kotlinytmusicscraper.models.SongInfo
 import com.maxrave.kotlinytmusicscraper.models.SongItem
-import com.maxrave.kotlinytmusicscraper.models.TidalMetadataResult
 import com.maxrave.kotlinytmusicscraper.models.VideoItem
 import com.maxrave.kotlinytmusicscraper.models.WatchEndpoint
 import com.maxrave.kotlinytmusicscraper.models.YTItemType
-import com.maxrave.kotlinytmusicscraper.models.YouTubeClient
-import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.TVHTML5
 import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.WEB
 import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.WEB_REMIX
 import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.ANDROID_MUSIC
@@ -39,7 +34,6 @@ import com.maxrave.kotlinytmusicscraper.models.MusicQueueRenderer
 import com.maxrave.kotlinytmusicscraper.models.YouTubeLocale
 import com.maxrave.kotlinytmusicscraper.models.getContinuation
 import com.maxrave.kotlinytmusicscraper.models.oddElements
-import com.maxrave.kotlinytmusicscraper.models.response.AccountMenuResponse
 import com.maxrave.kotlinytmusicscraper.models.response.AccountSwitcherEndpointResponse
 import com.maxrave.kotlinytmusicscraper.models.response.AddItemYouTubePlaylistResponse
 import com.maxrave.kotlinytmusicscraper.models.response.BrowseResponse
@@ -50,39 +44,28 @@ import com.maxrave.kotlinytmusicscraper.models.response.GetSearchSuggestionsResp
 import com.maxrave.kotlinytmusicscraper.models.response.LikeStatus
 import com.maxrave.kotlinytmusicscraper.models.response.NextAndroidMusicResponse
 import com.maxrave.kotlinytmusicscraper.models.response.NextResponse
-import com.maxrave.kotlinytmusicscraper.models.response.PipedResponse
 import com.maxrave.kotlinytmusicscraper.models.response.PlayerResponse
 import com.maxrave.kotlinytmusicscraper.models.response.SearchResponse
 import com.maxrave.kotlinytmusicscraper.models.response.SimpMusicChartResponse
-import com.maxrave.kotlinytmusicscraper.models.response.TidalSearchResponse
-import com.maxrave.kotlinytmusicscraper.models.response.TidalOAuthResponse
-import com.maxrave.kotlinytmusicscraper.models.response.RemoteConfig
 import com.maxrave.kotlinytmusicscraper.models.response.toLikeStatus
 import com.maxrave.kotlinytmusicscraper.models.response.toListAccountInfo
-import com.maxrave.kotlinytmusicscraper.models.simpmusic.FdroidResponse
-import com.maxrave.kotlinytmusicscraper.models.simpmusic.GithubResponse
 import com.maxrave.kotlinytmusicscraper.models.sponsorblock.SkipSegments
-import com.maxrave.kotlinytmusicscraper.models.youtube.GhostResponse
 import com.maxrave.kotlinytmusicscraper.models.youtube.Transcript
 import com.maxrave.kotlinytmusicscraper.models.youtube.YouTubeInitialPage
 import com.maxrave.kotlinytmusicscraper.models.youtube.tryDecodeText
 import com.maxrave.kotlinytmusicscraper.pages.AlbumPage
 import com.maxrave.kotlinytmusicscraper.pages.ArtistPage
-import com.maxrave.kotlinytmusicscraper.pages.ArtistSection
 import com.maxrave.kotlinytmusicscraper.pages.BrowseResult
 import com.maxrave.kotlinytmusicscraper.pages.ExplorePage
 import com.maxrave.kotlinytmusicscraper.pages.MoodAndGenres
 import com.maxrave.kotlinytmusicscraper.pages.NextPage
 import com.maxrave.kotlinytmusicscraper.pages.NextResult
-import com.maxrave.kotlinytmusicscraper.pages.PlaylistContinuationPage
 import com.maxrave.kotlinytmusicscraper.pages.PlaylistPage
 import com.maxrave.kotlinytmusicscraper.pages.RelatedPage
 import com.maxrave.kotlinytmusicscraper.pages.SearchPage
 import com.maxrave.kotlinytmusicscraper.pages.SearchResult
 import com.maxrave.kotlinytmusicscraper.pages.SearchSuggestionPage
 import com.maxrave.kotlinytmusicscraper.parser.fromPlaylistContinuationToTrackWithSetVideoId
-import com.maxrave.kotlinytmusicscraper.parser.fromPlaylistContinuationToTracks
-import com.maxrave.kotlinytmusicscraper.parser.fromPlaylistToTrack
 import com.maxrave.kotlinytmusicscraper.parser.fromPlaylistToTrackWithSetVideoId
 import com.maxrave.kotlinytmusicscraper.parser.getContinuePlaylistContinuation
 import com.maxrave.kotlinytmusicscraper.parser.getPlaylistContinuation
@@ -93,11 +76,7 @@ import com.maxrave.logger.Logger
 import com.mohamedrejeb.ksoup.html.parser.KsoupHtmlHandler
 import com.mohamedrejeb.ksoup.html.parser.KsoupHtmlParser
 import io.ktor.client.call.body
-import io.ktor.client.engine.ProxyBuilder
-import io.ktor.client.engine.http
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.URLBuilder
-import io.ktor.http.parseQueryString
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.CoroutineScope
@@ -109,8 +88,6 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.daysUntil
 import kotlinx.datetime.toLocalDateTime
@@ -122,7 +99,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import okio.Path
 import kotlin.jvm.JvmInline
-import kotlin.math.abs
 import kotlin.math.round
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -146,10 +122,6 @@ class YouTube {
 
     // Runs the blocking stream extraction alongside the player request (see [player]).
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-
-    private val tidalTokenMutex = Mutex()
-    private var tidalAccessToken: String? = null
-    private var tidalTokenExpiresAt: Long = 0L
 
     var cookiePath: Path?
         get() = ytMusic.cookiePath
@@ -228,76 +200,6 @@ class YouTube {
         set(value) {
             ytMusic.authUser = value
         }
-
-    /**
-     * TIDAL credentials, backed by [Ytmusic]. Set by the data layer from cached remote config.
-     */
-    var tidalClientId: String
-        get() = ytMusic.tidalClientId
-        set(value) {
-            ytMusic.tidalClientId = value
-        }
-
-    var tidalClientSecret: String
-        get() = ytMusic.tidalClientSecret
-        set(value) {
-            ytMusic.tidalClientSecret = value
-        }
-
-    /**
-     * Json deserializer for PO token request
-     */
-    private val poTokenJsonDeserializer =
-        Json {
-            ignoreUnknownKeys = true
-            encodeDefaults = true
-            coerceInputValues = true
-            useArrayPolymorphism = true
-        }
-
-    private fun String.getPoToken(): String? =
-        this
-            .replace("[", "")
-            .replace("]", "")
-            .split(",")
-            .findLast { it.contains("\"") }
-            ?.replace("\"", "")
-
-    /**
-     * Remove proxy for client
-     */
-    fun removeProxy() {
-        ytMusic.proxy = null
-    }
-
-    /**
-     * Set the proxy for client
-     */
-    fun setProxy(
-        isHttp: Boolean,
-        host: String,
-        port: Int,
-    ) {
-        runCatching {
-            if (isHttp) ProxyBuilder.http("$host:$port") else ProxyBuilder.socks(host, port)
-        }.onSuccess {
-            ytMusic.proxy = it
-        }.onFailure {
-            it.printStackTrace()
-        }
-    }
-
-    private val listPipedInstances =
-        listOf(
-            "https://pipedapi.nosebs.ru",
-            "https://pipedapi.kavin.rocks",
-            "https://pipedapi.tokhmi.xyz",
-            "https://pipedapi.syncpundit.io",
-            "https://pipedapi.leptons.xyz",
-            "https://pipedapi.r4fo.com",
-            "https://yapi.vyper.me",
-            "https://pipedapi-libre.kavin.rocks",
-        )
 
     /**
      * Search for a song, album, artist, playlist, etc.
@@ -383,28 +285,6 @@ class YouTube {
      * broken while it waits out a refusal.
      */
     val accountGuard get() = ytMusic.accountGuard
-
-    suspend fun searchSongsSignedOut(query: String): Result<List<SongItem>> =
-        runCatching {
-            val response =
-                ytMusic
-                    .search(WEB_REMIX, query, SearchFilter.FILTER_SONG.value, setLogin = false)
-                    .body<SearchResponse>()
-            response.contents
-                ?.tabbedSearchResultsRenderer
-                ?.tabs
-                ?.firstOrNull()
-                ?.tabRenderer
-                ?.content
-                ?.sectionListRenderer
-                ?.contents
-                ?.lastOrNull()
-                ?.musicShelfRenderer
-                ?.contents
-                ?.mapNotNull { SearchPage.toYTItem(it.musicResponsiveListItemRenderer) }
-                ?.filterIsInstance<SongItem>()
-                .orEmpty()
-        }
 
     /**
      * Every search request response a limited data. Use this function to get the next data
@@ -616,30 +496,6 @@ class YouTube {
             }
         }
 
-    suspend fun testArtist(browseId: String): Result<ArrayList<ArtistSection>> =
-        runCatching {
-            val response = ytMusic.browse(WEB_REMIX, browseId).body<BrowseResponse>()
-            val artistSections = arrayListOf<ArtistSection>()
-            val content =
-                response.contents
-                    ?.singleColumnBrowseResultsRenderer
-                    ?.tabs
-                    ?.firstOrNull()
-                    ?.tabRenderer
-                    ?.content
-                    ?.sectionListRenderer
-                    ?.contents
-            if (content != null) {
-                for (i in 0 until content.size) {
-                    ArtistPage
-                        .fromSectionListRendererContent(content.get(i))
-                        ?.let { artistSections.add(it) }
-                    Logger.d(TAG, "Section $i checking \n artistSection ${artistSections.lastOrNull()}")
-                }
-            }
-            return@runCatching artistSections
-        }
-
     /**
      * Get the artist page data from YouTube Music
      * @param browseId the artist browseId
@@ -797,31 +653,6 @@ class YouTube {
             return@runCatching null
         }
 
-    suspend fun getPlaylistFullTracks(playlistId: String): Result<List<SongItem>> =
-        runCatching {
-            val songs = mutableListOf<SongItem>()
-            val response = ytMusic.playlist(playlistId).body<BrowseResponse>()
-            songs.addAll(
-                response.fromPlaylistToTrack(),
-            )
-            var continuation = response.getPlaylistContinuation()
-            while (continuation != null) {
-                val continuationResponse =
-                    ytMusic
-                        .browse(
-                            client = WEB_REMIX,
-                            setLogin = true,
-                            params = null,
-                            continuation = continuation,
-                        ).body<BrowseResponse>()
-                songs.addAll(
-                    continuationResponse.fromPlaylistContinuationToTracks(),
-                )
-                continuation = continuationResponse.getContinuePlaylistContinuation()
-            }
-            return@runCatching songs
-        }
-
     /**
      * Get the playlist page data from YouTube Music
      * @param playlistId the playlistId
@@ -914,26 +745,6 @@ class YouTube {
             )
         }
 
-    suspend fun playlistContinuation(continuation: String) =
-        runCatching {
-            val response =
-                ytMusic
-                    .browse(
-                        client = WEB_REMIX,
-                        continuation = continuation,
-                        setLogin = true,
-                    ).body<BrowseResponse>()
-            PlaylistContinuationPage(
-                songs =
-                    response.continuationContents?.musicPlaylistShelfContinuation?.contents?.mapNotNull {
-                        PlaylistPage.fromMusicResponsiveListItemRenderer(it.musicResponsiveListItemRenderer)
-                    }!!,
-                continuation =
-                    response.continuationContents.musicPlaylistShelfContinuation.continuations
-                        ?.getContinuation(),
-            )
-        }
-
     /**
      * Execute a custom POST request to YouTube Music
      * In SimpMusic, I use this function to parsing Home, Playlist, Album data instead using [album], [playlist], [artist] function
@@ -955,16 +766,6 @@ class YouTube {
     }
 
     /**
-     * Get the related data of a song from YouTube Music
-     * @param videoId the videoId of song
-     * @return a [Result]<[NextResponse]> object
-     */
-    suspend fun nextCustom(videoId: String) =
-        runCatching {
-            ytMusic.nextCustom(WEB_REMIX, videoId).body<NextResponse>()
-        }
-
-    /**
      * Get Skip Segments from SponsorBlock
      * @param videoId the videoId of song
      * @return a [Result]<[List]<[SkipSegments]>> object
@@ -972,16 +773,6 @@ class YouTube {
     suspend fun getSkipSegments(videoId: String): Result<List<SkipSegments>> =
         runCatching {
             ytMusic.getSkipSegments(videoId).body<List<SkipSegments>>()
-        }
-
-    suspend fun checkForGithubReleaseUpdate(): Result<GithubResponse> =
-        runCatching {
-            ytMusic.checkForGithubReleaseUpdate().body<GithubResponse>()
-        }
-
-    suspend fun checkForFdroidUpdate(): Result<FdroidResponse> =
-        runCatching {
-            ytMusic.checkForFdroidUpdate().body<FdroidResponse>()
         }
 
     suspend fun newRelease(): Result<ExplorePage> =
@@ -1216,75 +1007,6 @@ class YouTube {
             )
             // Get author thumbnails, subscribers, description, like count
         }
-
-    private suspend fun getVisitorData(
-        videoId: String,
-        playlistId: String?,
-    ): Triple<String, String, PlayerResponse.PlaybackTracking?> {
-        try {
-            val pId = if (playlistId?.startsWith("VL") == true) playlistId.removeRange(0..1) else playlistId
-            val ghostRequest = ytMusic.ghostRequest(videoId, pId)
-            val cookie =
-                "PREF=hl=en&tz=UTC; SOCS=CAI; ${
-                    ghostRequest.headers
-                        .getAll("set-cookie")
-                        ?.map {
-                            it.split(";").first()
-                        }?.filter {
-                            it.lastOrNull() != '='
-                        }?.joinToString("; ")
-                }"
-            var response = ""
-            var data = ""
-            val ksoupHtmlParser =
-                KsoupHtmlParser(
-                    object : KsoupHtmlHandler {
-                        override fun onText(text: String) {
-                            super.onText(text)
-                            if (text.contains("var ytInitialPlayerResponse")) {
-                                val temp = text.replace("var ytInitialPlayerResponse = ", "").split(";var").firstOrNull()
-                                temp?.let {
-                                    response = it.trimIndent()
-                                }
-                            } else if (text.contains("var ytInitialData = ")) {
-                                val temp = text.replace("var ytInitialData = ", "").dropLast(1)
-                                temp.let {
-                                    data = it.trimIndent()
-                                }
-                            }
-                        }
-                    },
-                )
-            ksoupHtmlParser.write(ghostRequest.bodyAsText())
-            ksoupHtmlParser.end()
-            val ytInitialData = poTokenJsonDeserializer.decodeFromString<GhostResponse>(data)
-            val ytInitialPlayerResponse = poTokenJsonDeserializer.decodeFromString<GhostResponse>(response)
-            val playbackTracking = ytInitialPlayerResponse.playbackTracking
-            val loggedIn =
-                ytInitialData.responseContext.serviceTrackingParams
-                    ?.find { it.service == "GFEEDBACK" }
-                    ?.params
-                    ?.find { it.key == "logged_in" }
-                    ?.value == "1"
-            Logger.d(TAG, "Logged In $loggedIn")
-            val visitorData =
-                ytInitialPlayerResponse.responseContext.serviceTrackingParams
-                    ?.find { it.service == "GFEEDBACK" }
-                    ?.params
-                    ?.find { it.key == "visitor_data" }
-                    ?.value
-                    ?: ytInitialData.responseContext.webResponseContextExtensionData
-                        ?.ytConfigData
-                        ?.visitorData
-            Logger.d(TAG, "Visitor Data $visitorData")
-            Logger.d(TAG, "New Cookie $cookie")
-            Logger.d(TAG, "Playback Tracking $playbackTracking")
-            return Triple(cookie, visitorData ?: this@YouTube.visitorData ?: "", playbackTracking)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            return Triple("", "", null)
-        }
-    }
 
     suspend fun newPipePlayer(
         videoId: String,
@@ -1883,19 +1605,6 @@ class YouTube {
             null
         }
 
-    suspend fun accountInfo(customCookie: String? = null): Result<AccountInfo?> =
-        runCatching {
-            ytMusic
-                .accountMenu(customCookie, WEB_REMIX)
-                .apply {
-                    Logger.d(TAG, this.bodyAsText())
-                }.body<AccountMenuResponse>()
-                .actions[0]
-                .openPopupAction.popup.multiPageMenuRenderer.header
-                ?.activeAccountHeaderRenderer
-                ?.toAccountInfo()
-        }
-
     suspend fun getAccountListWithPageId(customCookie: String): Result<List<AccountInfo>> =
         runCatching {
             val res =
@@ -1907,13 +1616,6 @@ class YouTube {
             Logger.d(TAG, "Account List Response: $accountSwitcherEndpointResponse")
             accountSwitcherEndpointResponse.toListAccountInfo()
         }
-
-    suspend fun pipeStream(
-        videoId: String,
-        pipedInstance: String,
-    ) = runCatching {
-        ytMusic.pipedStreams(videoId, pipedInstance).body<PipedResponse>()
-    }
 
     suspend fun getLibraryPlaylists() =
         runCatching {
@@ -1968,12 +1670,9 @@ class YouTube {
             )
         }
 
-    suspend fun getYouTubeCaption(
-        videoId: String,
-        preferLang: String,
-    ) = runCatching {
-        val ytWeb = ytMusic.player(WEB, videoId, null, null).body<YouTubeInitialPage>()
-        val baseCaption =
+    suspend fun getYouTubeCaption(videoId: String) =
+        runCatching {
+            val ytWeb = ytMusic.player(WEB, videoId, null, null).body<YouTubeInitialPage>()
             ytMusic
                 .getYouTubeCaption(
                     ytWeb.captions?.playerCaptionsTracklistRenderer?.captionTracks?.firstOrNull()?.baseUrl?.replace(
@@ -1982,24 +1681,7 @@ class YouTube {
                     ) ?: "",
                 ).body<Transcript>()
                 .tryDecodeText()
-        val translateCaption =
-            try {
-                ytMusic
-                    .getYouTubeCaption(
-                        "${
-                            ytWeb.captions?.playerCaptionsTracklistRenderer?.captionTracks?.firstOrNull()?.baseUrl?.replace(
-                                "&fmt=srv3",
-                                "",
-                            )
-                        }&tlang=$preferLang",
-                    ).body<Transcript>()
-                    .tryDecodeText()
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
-            }
-        return@runCatching baseCaption to translateCaption
-    }
+        }
 
     suspend fun scrapeYouTube(videoId: String) =
         runCatching {
@@ -2088,57 +1770,6 @@ class YouTube {
             ytMusic.getSimpMusicChart().body<SimpMusicChartResponse>()
         }
 
-    /**
-     * Fetch the remote app config (TIDAL credentials) from GitHub raw.
-     * Returns a [Result] so callers can fall back silently when the fetch/parse fails.
-     */
-    suspend fun getTidalRemoteConfig(): Result<RemoteConfig> =
-        runCatching {
-            ytMusic.getTidalRemoteConfig()
-        }
-
-    /**
-     * Ensure a valid Tidal OAuth token is available, refreshing if expired.
-     * In-memory only — token is re-fetched on each app launch (follows Spotify auth pattern).
-     */
-    private suspend fun ensureTidalToken(): String =
-        tidalTokenMutex.withLock {
-            val now = Clock.System.now().toEpochMilliseconds()
-            val cached = tidalAccessToken
-            if (cached != null && now < tidalTokenExpiresAt) return@withLock cached
-
-            val response = ytMusic.getTidalOAuthToken().body<TidalOAuthResponse>()
-            tidalAccessToken = response.accessToken
-            tidalTokenExpiresAt = now + (response.expiresIn * 1000L) - 60_000L
-            Logger.d("Stream", "Tidal OAuth token refreshed, expires in ${response.expiresIn}s")
-            response.accessToken
-        }
-
-    /**
-     * Search Tidal official API for metadata (bpm, key, keyScale).
-     * Token is managed in-memory and auto-refreshed when expired.
-     */
-    suspend fun searchTidalMetadata(
-        query: String,
-        durationSeconds: Int,
-    ) = runCatching {
-        val token = ensureTidalToken()
-        val searchRes = ytMusic.searchTidalId(token, query).body<TidalSearchResponse>()
-        val matchedItem =
-            searchRes.tracks
-                ?.items
-                ?.filterNotNull()
-                ?.filter { it.duration?.let { dur -> abs(dur - durationSeconds) <= 1 } ?: false }
-                ?.minByOrNull { abs((it.duration ?: 0) - durationSeconds) }
-                ?: throw Exception("No matching track found")
-        val attrs = matchedItem.audioAnalysisAttributes
-        TidalMetadataResult(
-            bpm = attrs?.bpm?.toDoubleOrNull()?.toInt(),
-            musicKey = attrs?.key,
-            keyScale = attrs?.keyScale,
-        )
-    }
-
     // Any format carrying a signatureCipher would do; medium Opus is the one YouTube returns for
     // every video, logged in or not, which is why the lookup pins that itag rather than scanning.
     /**
@@ -2146,21 +1777,6 @@ class YouTube {
      * if it has not been extracted yet. Diagnostic only — see [com.maxrave.kotlinytmusicscraper.extractor.ExtractSource].
      */
     fun getExtractSource(videoId: String): String? = ExtractSource.of(videoId)
-
-    private fun getNParam(listFormat: List<PlayerResponse.StreamingData.Format>): String? =
-        listFormat
-            .firstOrNull { it.itag == ITAG.AUDIO_OPUS_MEDIUM }
-            ?.let { format ->
-                val sc = format.signatureCipher ?: format.url ?: return null
-                val params = parseQueryString(sc)
-                val url =
-                    params["url"]?.let { URLBuilder(it) }
-                        ?: run {
-                            Logger.e(TAG, "Could not parse cipher url")
-                            return null
-                        }
-                url.parameters["n"]
-            }
 
     fun download(
         track: SongItem,

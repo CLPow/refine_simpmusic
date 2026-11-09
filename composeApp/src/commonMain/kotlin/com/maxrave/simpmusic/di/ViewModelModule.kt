@@ -1,7 +1,6 @@
 package com.maxrave.simpmusic.di
 
 import com.maxrave.simpmusic.viewModel.AlbumViewModel
-import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.ArtistViewModel
 import com.maxrave.simpmusic.viewModel.HomeViewModel
 import com.maxrave.simpmusic.viewModel.LibraryDynamicPlaylistViewModel
@@ -23,7 +22,6 @@ val viewModelModule =
     module {
         single {
             SharedViewModel(
-                get(),
                 get(),
                 get(),
                 get(),
@@ -85,8 +83,6 @@ val viewModelModule =
         }
         viewModel {
             SettingsViewModel(
-                get(),
-                get(),
                 get(),
                 get(),
                 get(),

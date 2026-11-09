@@ -5,19 +5,15 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Point
 import android.os.Build
-import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
-import androidx.core.app.PictureInPictureModeChangedInfo
-import androidx.core.util.Consumer
 import com.maxrave.domain.data.model.ui.ScreenSizeInfo
 import com.maxrave.logger.Logger
 
@@ -86,28 +82,3 @@ actual fun KeepScreenOn() {
     }
 }
 
-fun Context.findActivity(): ComponentActivity {
-    var context = this
-    while (context is ContextWrapper) {
-        if (context is ComponentActivity) return context
-        context = context.baseContext
-    }
-    throw IllegalStateException("Picture in picture should be called in the context of an Activity")
-}
-
-@Composable
-actual fun rememberIsInPipMode(): Boolean {
-    val activity = LocalContext.current.findActivity()
-    var pipMode by remember { mutableStateOf(activity.isInPictureInPictureMode) }
-    DisposableEffect(activity) {
-        val observer =
-            Consumer<PictureInPictureModeChangedInfo> { info ->
-                pipMode = info.isInPictureInPictureMode
-            }
-        activity.addOnPictureInPictureModeChangedListener(
-            observer,
-        )
-        onDispose { activity.removeOnPictureInPictureModeChangedListener(observer) }
-    }
-    return pipMode
-}

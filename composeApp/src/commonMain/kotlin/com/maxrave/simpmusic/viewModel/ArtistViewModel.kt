@@ -49,8 +49,6 @@ class ArtistViewModel(
 
     // Artist name-logo image + accent color from the hidden catalog (immersive header).
     private val _artistLogo: MutableStateFlow<ArtistLogo?> = MutableStateFlow(null)
-    val artistLogo: StateFlow<ArtistLogo?> = _artistLogo
-
     private var _followed: MutableStateFlow<Boolean> = MutableStateFlow(false)
     var followed: StateFlow<Boolean> = _followed
 

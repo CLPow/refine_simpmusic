@@ -33,8 +33,6 @@ interface AlbumRepository {
         downloadState: Int,
     )
 
-    suspend fun deleteFollowedArtistSingleAndAlbum(channelId: String)
-
     fun getAlbumData(browseId: String): Flow<Resource<AlbumBrowse>>
 
     fun getAlbumMore(

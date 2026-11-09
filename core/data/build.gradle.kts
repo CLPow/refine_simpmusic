@@ -71,9 +71,7 @@ kotlin {
             dependencies {
                 implementation(projects.common)
                 implementation(projects.domain)
-                implementation(projects.aiService)
                 implementation(projects.lyricsService)
-                implementation(projects.spotify)
                 implementation(projects.kotlinYtmusicScraper)
 
                 implementation(libs.kotlin.stdlib)

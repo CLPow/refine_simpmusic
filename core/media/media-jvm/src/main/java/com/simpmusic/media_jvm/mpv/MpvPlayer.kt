@@ -8,21 +8,6 @@ import java.util.Locale
 private const val TAG = "MpvPlayer"
 
 /**
- * The two halves of the DJ-style filter sweep, mirroring `BiquadFilter.FilterType` on the Android
- * backend: during a crossfade the outgoing track gets a low-pass whose cutoff falls, and the
- * incoming track a high-pass whose cutoff falls.
- *
- * [lavfiName] is the libavfilter filter name. It doubles as the `af-command` *target*, which is why
- * the caller has to say which sweep a handle is running — see [MpvPlayer.setCrossfadeCutoffHz].
- */
-enum class MpvCrossfadeFilter(
-    internal val lavfiName: String,
-) {
-    LOW_PASS("lowpass"),
-    HIGH_PASS("highpass"),
-}
-
-/**
  * Event callbacks for a single [MpvPlayer], shaped after vlcj's `MediaPlayerEventAdapter` so the
  * adapter's event-handling logic is a straight port.
  *
@@ -86,12 +71,6 @@ open class MpvPlayerEventAdapter {
 class MpvPlayer private constructor(
     private val ctx: Pointer,
     private val lib: MpvLibrary,
-    /**
-     * The video frame source, or null for an audio-only handle. Drives mpv's software render
-     * API and publishes finished frames for Compose to draw — the successor of the
-     * `MpvVideoSurfacePanel` that Swing used to blit.
-     */
-    val videoFrames: MpvVideoFrameSource? = null,
 ) {
     companion object {
         /** Userdata tag for every `mpv_observe_property` registration; we dispatch by name. */
@@ -108,30 +87,17 @@ class MpvPlayer private constructor(
         /** Scratch buffer for get/set_property with a native format. One per calling thread. */
         private val scratch = ThreadLocal.withInitial { Memory(8) }
 
-        /** `@label:` of the DJ sweep entry, so `af-command` can retune it mid-fade. */
-        private const val SWEEP_LABEL = "simpDjSweep"
-
-        /** `@label:` of the rubberband entry that carries the AutoMix pitch match. */
-        private const val PITCH_LABEL = "simpDjPitch"
+        /** `@label:` of the rubberband entry that carries the pitch shift. */
+        private const val PITCH_LABEL = "simpPitch"
 
         /**
-         * `@label:` of the "Enhance audio" entry, kept apart from the crossfade labels because the
-         * two tiers are installed and removed independently — see [applyAudioFilters].
-         */
-        const val ENHANCE_LABEL = "simpEnhance"
-
-        /**
-         * Create and initialize a libmpv handle.
+         * Create and initialize an audio-only libmpv handle (no video decoding, null video output).
          *
-         * @param audioOnly disables video decoding and the video output entirely. When false, an
-         *   [MpvVideoFrameSource] is created and its render context is attached before any file
-         *   is loaded, as render.h requires.
          * @param networkCacheSeconds mpv's `cache-secs`. VLC's `--network-caching` was expressed
          *   in milliseconds (10000 / 15000); mpv's equivalent is in seconds.
          * @return null if libmpv is unavailable or the handle could not be initialized.
          */
         fun create(
-            audioOnly: Boolean = true,
             networkCacheSeconds: Int = 10,
         ): MpvPlayer? {
             val lib = MpvLibrary.INSTANCE ?: return null
@@ -241,21 +207,14 @@ class MpvPlayer private constructor(
                 "reconnect=1,reconnect_streamed=1,reconnect_delay_max=30",
             )
 
-            // ALWAYS pin the video output explicitly, on every branch.
+            // ALWAYS pin the video output explicitly.
             //
             // mpv picks the VO during mpv_initialize(). Leaving it unset lets mpv auto-probe, and
             // in a headless JVM process it can land on a terminal-graphics driver — which is
             // exactly what happened: it selected `sixel`, and libsixel aborted the whole JVM with
             //   ../src/allocator.c:139: sixel_allocator_malloc: Assertion `allocator' failed.
-            // (SIGABRT, exit 134) during ordinary music playback. Creating the render context
-            // afterwards does NOT retroactively change a VO that mpv_initialize already chose.
-            //
-            // `libmpv` is the VO that backs the render API — v0.37.0 DOCS/man/vo.rst:561:
-            //   ``libmpv``
-            //       For use with libmpv direct embedding. ...
-            //       (See ``<mpv/render.h>``.)
-            // Note `--vo=<driver>` takes a SINGLE driver, not a priority list (unlike `--vd`), so
-            // a "libmpv,null" fallback chain is not available here.
+            // (SIGABRT, exit 134) during ordinary music playback. Setting it afterwards does NOT
+            // retroactively change a VO that mpv_initialize already chose.
 
             // Unlike option(), a failure here is fatal rather than a warning — see below.
             fun requiredOption(
@@ -270,14 +229,9 @@ class MpvPlayer private constructor(
                 return true
             }
 
-            val voPinned =
-                if (audioOnly) {
-                    // VLC ":no-video".
-                    option("vid", "no")
-                    requiredOption("vo", "null")
-                } else {
-                    requiredOption("vo", "libmpv")
-                }
+            // VLC ":no-video".
+            option("vid", "no")
+            val voPinned = requiredOption("vo", "null")
             if (!voPinned) {
                 // Never hand an unpinned VO to mpv_initialize: auto-probing is what selected the
                 // terminal-graphics driver that aborted the process. Failing to create a player is
@@ -294,31 +248,7 @@ class MpvPlayer private constructor(
                 return null
             }
 
-            // The render context must exist before the first loadfile — render.h: "The renderer
-            // needs to be created with mpv_render_context_create() before you start playback (or
-            // otherwise cause a VO to be created)", and "Video initialization will fail if the
-            // render context was not initialized yet ... or it will revert to a VO that creates
-            // its own window."
-            //
-            // Creating it here (post-initialize, pre-loadfile) is correct: mpv_initialize() only
-            // applies options, while the VO is instantiated when a file with video is loaded.
-            var frameSource: MpvVideoFrameSource? = null
-            if (!audioOnly) {
-                val created = MpvVideoFrameSource()
-                if (created.attach(ctx)) {
-                    frameSource = created
-                } else {
-                    // vo=libmpv is now pinned but has no render context behind it. Disable video
-                    // decoding outright so no VO is ever needed, and point the VO at the null sink
-                    // as a second line of defence. vid=no is the load-bearing one: it is settable
-                    // at runtime and guarantees mpv can never reach a terminal-graphics driver.
-                    Logger.e(TAG, "Software render context unavailable; continuing without video")
-                    lib.mpv_set_property_string(ctx, "vid", "no")
-                    lib.mpv_set_property_string(ctx, "vo", "null")
-                }
-            }
-
-            return MpvPlayer(ctx, lib, frameSource).also {
+            return MpvPlayer(ctx, lib).also {
                 it.start()
             }
         }
@@ -669,179 +599,37 @@ class MpvPlayer private constructor(
         setPropertyDouble("speed", rate.toDouble())
     }
 
-    /**
-     * How much of the video may be cropped to fill the render target, 0.0 (letterbox, mpv's
-     * default) to 1.0 (cover it completely).
-     *
-     * This has to be mpv's job rather than the caller's: mpv scales and letterboxes each frame
-     * into the size reported through the render context, so by the time a frame reaches Compose
-     * the black bars are already part of the pixels and no `ContentScale` can remove them.
-     */
-    fun setPanscan(value: Double) {
-        if (isReleased) return
-        setPropertyDouble("panscan", value.coerceIn(0.0, 1.0))
-    }
+    // ================= Pitch shift =================
 
-    // ================= DJ crossfade audio chain =================
-    //
-    // Android runs the sweep through `CrossfadeFilterAudioProcessor` and the tempo/pitch match
-    // through `PlaybackParameters`. Neither exists here, so both are expressed as mpv audio
-    // filters. Everything mpv-specific about that — filter names, the `af` string grammar,
-    // number formatting — is contained in this section; the adapter only ever speaks Hz and
-    // ratios, exactly as it does on Android.
-
-    /**
-     * What [installCrossfadeChain] actually got past mpv. The caller must not drive a stage that
-     * came back false — `af-command` against a filter that is not in the chain fails on every
-     * animation step.
-     */
-    data class CrossfadeChain(
-        val sweep: Boolean,
-        val pitchShift: Boolean,
-    ) {
-        companion object {
-            val NONE = CrossfadeChain(sweep = false, pitchShift = false)
-        }
-    }
-
-    /**
-     * Install the audio filter chain a DJ-style crossfade needs on this handle.
-     *
-     * Rebuilding the `af` chain is the expensive part (mpv drains and re-creates the filter
-     * graph), so it happens once here and the per-step updates go through `af-command`
-     * ([setCrossfadeCutoffHz] / [setPitchScale]) which retunes the live filters in place.
-     *
-     * The chain is written as an `af` property string, v0.37.0 options.rst:1941
-     * ``--af=<filter1[=parameter1:parameter2:...],filter2,...>``, with `@label:` prefixes per
-     * v0.37.0 vf.rst:15 (*"Before the filter name, a label can be specified with ``@name:``"*)
-     * so `af-command` can address each entry later.
-     *
-     * @param sweep the filter sweep to arm, or null for none. Armed at [sweepStartHz] so the
-     *   chain is installed transparently (the sweep only bites once [setCrossfadeCutoffHz] runs).
-     * @param pitchShift arms `rubberband` at its neutral `pitch-scale=1.0`. Required for
-     *   [setPitchScale]; `speed` alone never moves pitch (see [setPitchScale]).
-     * @return which parts mpv actually accepted — see [CrossfadeChain].
-     */
-    fun installCrossfadeChain(
-        sweep: MpvCrossfadeFilter?,
-        sweepStartHz: Float,
-        pitchShift: Boolean,
-    ): CrossfadeChain {
-        if (isReleased) return CrossfadeChain.NONE
-        if (sweep == null && !pitchShift) {
-            clearAudioFilters()
-            return CrossfadeChain.NONE
-        }
-        if (applyCrossfadeChain(sweep, sweepStartHz, pitchShift)) {
-            return CrossfadeChain(sweep = sweep != null, pitchShift = pitchShift)
-        }
-        // librubberband is an OPTIONAL build-time dependency of libmpv — this build reports
-        // "rubberband rubberband-3" among its features, but a bundled build for another platform
-        // may not have it, in which case mpv rejects the whole chain string. The lavfi biquads
-        // ship with every FFmpeg, so drop the pitch stage rather than lose the sweep as well.
-        if (pitchShift && sweep != null && applyCrossfadeChain(sweep, sweepStartHz, false)) {
-            Logger.w(TAG, "rubberband unavailable; crossfade keeps the filter sweep without pitch match")
-            return CrossfadeChain(sweep = true, pitchShift = false)
-        }
-        Logger.w(TAG, "Could not install the crossfade filter chain; falling back to a volume-only fade")
-        clearAudioFilters()
-        return CrossfadeChain.NONE
-    }
-
-    /**
-     * The "Enhance audio" entry, or null while it is off — and off means no entry at all, so the
-     * chain is exactly what 2.3.8 played.
-     *
-     * Held here because `af` is one property: writing it replaces the entire chain, so every write
-     * has to carry both tiers.
-     */
+    /** Audio filter entries currently installed. */
     @Volatile
-    private var enhanceEntry: String? = null
+    private var filterEntries: List<String> = emptyList()
 
-    /** Crossfade entries currently installed, so an Enhance audio change can rewrite around them. */
-    @Volatile
-    private var crossfadeEntries: List<String> = emptyList()
+    private fun applyAudioFilters(): Boolean = setPropertyString("af", filterEntries.joinToString(","))
 
     /**
-     * Write `af` from both tiers at once.
+     * Arm `rubberband` at its neutral `pitch-scale=1.0` so [setPitchScale] can drive it.
      *
-     * Enhance goes first so the crossfade sweep acts on the signal the listener actually hears;
-     * the crossfade stages only attenuate, so the limiter's ceiling still holds at the output.
-     */
-    private fun applyAudioFilters(): Boolean {
-        val entries = listOfNotNull(enhanceEntry) + crossfadeEntries
-        return setPropertyString("af", entries.joinToString(","))
-    }
-
-    /**
-     * Installs the "Enhance audio" entry built by [mpvEnhanceEntry], or removes it with null.
+     * The chain is written as an `af` property string, v0.37.0 options.rst:1941, with an `@label:`
+     * prefix (vf.rst:15) so `af-command` can address the entry later. librubberband is an
+     * OPTIONAL build-time dependency of libmpv, so mpv may reject it.
      *
-     * `af` is one property, so a rejected entry would take the crossfade entries down with it. If
-     * mpv refuses the chain (a libmpv built without one of the filters), the entry is dropped
-     * again and the rest of the chain re-applied; returns false so the caller can report it.
+     * @return whether mpv accepted the filter.
      */
-    fun setEnhanceEntry(entry: String?): Boolean {
-        if (isReleased) return true
-        if (entry == enhanceEntry) return true
-        enhanceEntry = entry
+    fun installPitchShift(): Boolean {
+        if (isReleased) return false
+        // v0.37.0 af.rst:196 ``pitch-scale=<amount>`` — *"Sets the pitch scaling factor.
+        // Frequencies are multiplied by this value. (default: 1.0)"*.
+        filterEntries = listOf("@$PITCH_LABEL:rubberband=pitch-scale=1.0")
         if (applyAudioFilters()) return true
-        Logger.w(TAG, "mpv rejected the Enhance audio chain; playing without it")
-        enhanceEntry = null
-        applyAudioFilters()
-        return entry == null
-    }
-
-    private fun applyCrossfadeChain(
-        sweep: MpvCrossfadeFilter?,
-        sweepStartHz: Float,
-        pitchShift: Boolean,
-    ): Boolean {
-        val entries = mutableListOf<String>()
-        if (sweep != null) {
-            // TWO cascaded 2-pole Butterworth stages = 4th order / 24 dB per octave, matching
-            // BiquadFilter on Android ("two cascaded Butterworth stages for 4th-order (24
-            // dB/octave) rolloff, matching professional DJ mixer filter steepness").
-            // width_type/width are spelled out rather than inherited from libavfilter's defaults.
-            val stage = "${sweep.lavfiName}=f=${mpvNumber(sweepStartHz)}:width_type=q:width=0.707"
-            // The graph is wrapped in [ ] because it contains `,` and `=`, which would otherwise
-            // be eaten by mpv's own filter-list parser — v0.37.0 vf.rst:380
-            // ``--vf=lavfi=[gradfun=20:30,vflip]`` … *"The filter graph string is quoted with
-            // ``[`` and ``]``"*, and af.rst:243 repeats the requirement for the audio lavfi.
-            entries += "@$SWEEP_LABEL:lavfi=[$stage,$stage]"
-        }
-        if (pitchShift) {
-            // v0.37.0 af.rst:196 ``pitch-scale=<amount>`` — *"Sets the pitch scaling factor.
-            // Frequencies are multiplied by this value. (default: 1.0)"*.
-            entries += "@$PITCH_LABEL:rubberband=pitch-scale=1.0"
-        }
-        crossfadeEntries = entries
-        return applyAudioFilters()
-    }
-
-    /**
-     * Retune the live sweep to [hz] without rebuilding the chain.
-     *
-     * `af-command <label> <command> <argument> [<target>]` (v0.37.0 input.rst:1313). `frequency`
-     * is a runtime-settable AVOption of libavfilter's biquad filters, so mpv forwards it straight
-     * to `avfilter_graph_send_command`.
-     *
-     * [target][MpvCrossfadeFilter.lavfiName] is passed explicitly rather than defaulting to `all`:
-     * mpv's lavfi graph also holds the `abuffer`/`abuffersink` endpoints, which answer any command
-     * with `ENOSYS` and would make an otherwise successful retune report failure.
-     */
-    fun setCrossfadeCutoffHz(
-        sweep: MpvCrossfadeFilter,
-        hz: Float,
-    ) {
-        if (isReleased) return
-        command("af-command", SWEEP_LABEL, "frequency", mpvNumber(hz), sweep.lavfiName)
+        clearAudioFilters()
+        return false
     }
 
     /**
      * Shift pitch by [scale] (1.0 = unchanged), independently of playback speed.
      *
-     * This needs `rubberband` in the chain, which is why [installCrossfadeChain] must have been
-     * called with `pitchShift = true`. mpv's `speed` property alone can never do this: with
+     * This needs `rubberband` in the chain, which is why [installPitchShift] must have succeeded. mpv's `speed` property alone can never do this: with
      * `--audio-pitch-correction` (default yes, v0.37.0 options.rst:1870) a speed change is
      * pitch-CORRECTED, and with it disabled pitch would be welded to tempo — Android needs the two
      * to move independently, the way Media3's `PlaybackParameters(speed, pitch)` does.
@@ -867,9 +655,7 @@ class MpvPlayer private constructor(
      */
     fun clearAudioFilters() {
         if (isReleased) return
-        // Drops the crossfade tier only. This used to blank the whole property, which took the
-        // Enhance audio entry down with it at the end of every transition.
-        crossfadeEntries = emptyList()
+        filterEntries = emptyList()
         applyAudioFilters()
     }
 
@@ -903,18 +689,12 @@ class MpvPlayer private constructor(
     // ================= teardown =================
 
     /**
-     * Stop the pump and render threads, then destroy the handle.
+     * Stop the pump thread, then destroy the handle.
      *
-     * Ordering matters twice over:
-     *  - `mpv_wait_event` must not run against a handle that `mpv_terminate_destroy` is tearing
-     *    down, so the pump is stopped and joined first.
-     *  - render.h: *"You must free the context with mpv_render_context_free() before the mpv core
-     *    is destroyed. If this doesn't happen, undefined behavior will result."* — so
-     *    [MpvVideoFrameSource.detach] runs before `mpv_terminate_destroy`.
-     *
-     * The whole sequence runs off-thread because both `detach` (which joins the render thread) and
-     * `mpv_terminate_destroy` (which blocks until the core is gone) would otherwise stall the
-     * single service thread that drives playback.
+     * `mpv_wait_event` must not run against a handle that `mpv_terminate_destroy` is tearing down,
+     * so the pump is stopped and joined first. The sequence runs off-thread because
+     * `mpv_terminate_destroy` blocks until the core is gone and would otherwise stall the single
+     * service thread that drives playback.
      */
     fun release() {
         if (isReleased) return
@@ -931,7 +711,6 @@ class MpvPlayer private constructor(
 
         val thread = pumpThread
         pumpThread = null
-        val frameSource = videoFrames
 
         Thread({
             // Join WITHOUT a timeout. The pump may still be inside a JNA call against this
@@ -946,11 +725,6 @@ class MpvPlayer private constructor(
                 thread?.join()
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
-            }
-            try {
-                frameSource?.detach()
-            } catch (e: Throwable) {
-                Logger.w(TAG, "Error detaching video frame source: ${e.message}")
             }
             try {
                 lib.mpv_terminate_destroy(ctx)
@@ -1032,14 +806,6 @@ class MpvPlayer private constructor(
             Logger.e(TAG, "get $name threw: ${e.message}")
             null
         }
-
-    /** Codec, bitrate (kbps) and sample rate of the audio now decoding, for Stats for nerds. */
-    fun audioInfo(): Triple<String?, Int?, Int?> {
-        if (isReleased) return Triple(null, null, null)
-        val bitrate = getPropertyDouble("audio-bitrate").takeIf { it > 0 }?.let { (it / 1000).toInt() }
-        val rate = getPropertyDouble("audio-params/samplerate").takeIf { it > 0 }?.toInt()
-        return Triple(getPropertyString("audio-codec-name"), bitrate, rate)
-    }
 
     /** @return the property value, or 0.0 when unavailable (e.g. nothing loaded yet). */
     private fun getPropertyDouble(name: String): Double =

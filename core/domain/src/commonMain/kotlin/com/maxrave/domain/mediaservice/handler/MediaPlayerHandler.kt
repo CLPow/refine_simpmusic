@@ -160,8 +160,6 @@ interface MediaPlayerHandler {
     fun stopBufferedUpdate()
 
     // Settings
-    fun publishTrackInfo()
-
     fun mayBeSaveRecentSong(runBlocking: Boolean = false)
 
     fun mayBeSavePlaybackState()
@@ -260,7 +258,6 @@ data class ControlState(
     val isLiked: Boolean,
     val isNextAvailable: Boolean,
     val isPreviousAvailable: Boolean,
-    val isCrossfading: Boolean,
     val volume: Float, // 0f..1f
 )
 

@@ -36,28 +36,6 @@ interface ArtistRepository {
         followedStatus: Int,
     ): Boolean?
 
-    /**
-     * Subscribes to every artist already followed locally.
-     *
-     * Turning the setting on is a statement about the whole library, not about the next artist
-     * tapped — without this, artists followed before the switch stay invisible to the account.
-     * Emits the number that succeeded and the number attempted.
-     */
-    fun syncFollowedArtistsToYouTube(): Flow<Pair<Int, Int>>
-
-    /**
-     * The other direction: marks every artist subscribed to on the signed-in YouTube account as
-     * followed locally, so a library built up on YouTube shows under Followed here.
-     *
-     * Additive by design. An artist followed only in SimpMusic is left alone rather than
-     * unfollowed for being absent from the account — [syncFollowedArtistsToYouTube] is what pushes
-     * those the other way, and treating absence as a delete would make the two sweeps undo each
-     * other.
-     *
-     * Emits the number newly followed and the number found on the account.
-     */
-    fun syncFollowedArtistsFromYouTube(): Flow<Pair<Int, Int>>
-
     fun getFollowedArtists(): Flow<List<ArtistEntity>>
 
     suspend fun updateArtistInLibrary(

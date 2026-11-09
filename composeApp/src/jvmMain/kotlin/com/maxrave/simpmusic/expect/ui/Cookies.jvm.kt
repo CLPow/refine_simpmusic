@@ -78,38 +78,3 @@ actual fun PlatformWebView(
     }
 }
 
-@Composable
-actual fun DiscordWebView(
-    state: MutableState<WebViewState>,
-    aboveContent: @Composable (BoxScope.() -> Unit),
-    onLoginDone: (String) -> Unit
-) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                stringResource(Res.string.desktop_webview_description),
-                style = typo().labelMedium,
-                color = Color.White,
-                textAlign = TextAlign.Center
-            )
-            Button(
-                onClick = {
-                    openUrl("https://www.simpmusic.org/blogs/en/how-to-log-in-to-Discord-on-desktop-app")
-                },
-            ) {
-                Text(
-                    stringResource(Res.string.open_blog_post),
-                    style = typo().labelMedium,
-                    color = Color.DarkGray,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-        aboveContent()
-    }
-}

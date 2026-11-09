@@ -5,14 +5,6 @@ import co.touchlab.kermit.Logger
 object Logger {
     private val logger = Logger
 
-    // Tags suppressed at all log levels. Add a tag here to silence its logs globally.
-    private val mutedTags =
-        setOf(
-            "DiscordWebSocket",
-        )
-
-    private fun isMuted(tag: String): Boolean = tag in mutedTags
-
     /** Release builds keep warnings and errors only; debug/info lines sit on hot paths. */
     fun setMinLevel(level: LogLevel) {
         logger.setMinSeverity(
@@ -29,7 +21,6 @@ object Logger {
         tag: String,
         message: String,
     ) {
-        if (isMuted(tag)) return
         logger.d(
             tag = tag,
             message = {
@@ -42,7 +33,6 @@ object Logger {
         tag: String,
         message: String,
     ) {
-        if (isMuted(tag)) return
         logger.i(tag = tag, message = { message })
     }
 
@@ -50,7 +40,6 @@ object Logger {
         tag: String,
         message: String,
     ) {
-        if (isMuted(tag)) return
         logger.w(tag = tag, message = { message })
     }
 
@@ -59,7 +48,6 @@ object Logger {
         message: String,
         e: Throwable? = null,
     ) {
-        if (isMuted(tag)) return
         logger.e(throwable = e, tag = tag, message = { message })
     }
 }

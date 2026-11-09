@@ -4,13 +4,9 @@ import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.withTimeoutOrNull
 import com.maxrave.domain.data.model.home.HomeChip
 import androidx.lifecycle.viewModelScope
-import com.maxrave.common.SELECTED_LANGUAGE
-import com.maxrave.common.SUPPORTED_LANGUAGE
 import com.maxrave.domain.data.entities.SongEntity
-import com.maxrave.domain.data.model.home.HomeDataCombine
 import com.maxrave.domain.data.model.home.HomeItem
 import com.maxrave.domain.data.model.home.chart.Chart
-import com.maxrave.domain.data.model.mood.Mood
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.manager.DataStoreManager.Values.TRUE
 import com.maxrave.domain.repository.HomeRepository
@@ -32,14 +28,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import simpmusic.composeapp.generated.resources.Res
-import simpmusic.composeapp.generated.resources.music_video
-import simpmusic.composeapp.generated.resources.new_release
 import simpmusic.composeapp.generated.resources.song
 import simpmusic.composeapp.generated.resources.view_count
 import kotlinx.coroutines.flow.firstOrNull
 import org.jetbrains.compose.resources.getString
-import simpmusic.composeapp.generated.resources.shelf_on_repeat
-import simpmusic.composeapp.generated.resources.shelf_buried_favourites
 import com.maxrave.domain.repository.AccountRepository
 import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.domain.utils.toTrack
@@ -90,19 +82,11 @@ class HomeViewModel(
     private val _recommendationsFailed = MutableStateFlow(false)
     val recommendationsFailed: StateFlow<Boolean> = _recommendationsFailed
 
-    private val _exploreMoodItem: MutableStateFlow<Mood?> = MutableStateFlow(null)
-    val exploreMoodItem: StateFlow<Mood?> = _exploreMoodItem
     private val _accountInfo: MutableStateFlow<Pair<String?, String?>?> = MutableStateFlow(null)
-    val accountInfo: StateFlow<Pair<String?, String?>?> = _accountInfo
-
     private var homeJob: Job? = null
-
-    val showSnackBarErrorState = MutableSharedFlow<String>()
 
     private val _chart: MutableStateFlow<Chart?> = MutableStateFlow(null)
     val chart: StateFlow<Chart?> = _chart
-    private val _newRelease: MutableStateFlow<List<HomeItem>> = MutableStateFlow(arrayListOf())
-    val newRelease: StateFlow<List<HomeItem>> = _newRelease
     var regionCodeChart: MutableStateFlow<String?> = MutableStateFlow(null)
 
     /** Ceiling on one attempt at the feed; a slower answer counts as a failed attempt. */
@@ -131,9 +115,7 @@ class HomeViewModel(
     private val STALE_AFTER_MS = 10 * 60_000L
 
     val loading = MutableStateFlow<Boolean>(true)
-    val loadingChart = MutableStateFlow<Boolean>(true)
     private var regionCode: String = ""
-    private var language: String = ""
 
     private val _songEntity: MutableStateFlow<SongEntity?> = MutableStateFlow(null)
     val songEntity: StateFlow<SongEntity?> = _songEntity
@@ -154,8 +136,6 @@ class HomeViewModel(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "")
 
     private val _mainHomeThumbnail: MutableStateFlow<String?> = MutableStateFlow(null)
-    val mainHomeThumbnail: StateFlow<String?> = _mainHomeThumbnail
-
     init {
         viewModelScope.launch {
             if (dataStoreManager.cookie.first().isEmpty() &&
@@ -167,9 +147,7 @@ class HomeViewModel(
         homeJob = Job()
         viewModelScope.launch {
             regionCodeChart.value = dataStoreManager.chartKey.first()
-            language = dataStoreManager.getString(SELECTED_LANGUAGE).first()
-                ?: SUPPORTED_LANGUAGE.codes.first()
-            // One load per change of region, language, account or chip. These used to be five
+            // One load per change of region, account or chip. These used to be five
             // collectors, each starting (and cancelling) its own load at launch, one of them only
             // after a fixed one-second wait whenever a cookie existed: every cold start paid it.
             var lastCookie: String? = null
@@ -177,13 +155,11 @@ class HomeViewModel(
                 launch {
                     combine(
                         dataStoreManager.location.distinctUntilChanged(),
-                        dataStoreManager.language.distinctUntilChanged(),
                         dataStoreManager.cookie.distinctUntilChanged(),
                         params,
-                    ) { location, lang, cookie, chip -> Triple(location to lang, cookie, chip) }
-                        .collectLatest { (locale, cookie, chip) ->
-                            regionCode = locale.first
-                            language = locale.second
+                    ) { location, cookie, chip -> Triple(location, cookie, chip) }
+                        .collectLatest { (location, cookie, chip) ->
+                            regionCode = location
                             val accountSwitched = lastCookie != null && lastCookie != cookie
                             lastCookie = cookie
                             if (accountSwitched) {
@@ -248,8 +224,6 @@ class HomeViewModel(
         shownAny = true
         homeJob =
             viewModelScope.launch {
-                language = dataStoreManager.getString(SELECTED_LANGUAGE).first()
-                    ?: SUPPORTED_LANGUAGE.codes.first()
                 regionCode = dataStoreManager.location.first()
                 // A reload of the same feed keeps it on screen while YouTube answers, so the page
                 // is never blank. No local shelves: YouTube Music's Home is YouTube's feed only.
@@ -368,29 +342,6 @@ class HomeViewModel(
                         }
                     }
             }
-        }
-    }
-
-    fun exploreChart(region: String) {
-        viewModelScope.launch {
-            loadingChart.value = true
-            homeRepository
-                .getChartData(
-                    region,
-                ).collect { values ->
-                    regionCodeChart.value = region
-                    dataStoreManager.setChartKey(region)
-                    when (values) {
-                        is Resource.Success -> {
-                            _chart.value = values.data
-                        }
-
-                        else -> {
-                            _chart.value = null
-                        }
-                    }
-                    loadingChart.value = false
-                }
         }
     }
 

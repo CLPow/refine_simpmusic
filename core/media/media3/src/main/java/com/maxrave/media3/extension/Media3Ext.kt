@@ -93,15 +93,6 @@ fun Track.toMediaItem(): MediaItem {
         ).build()
 }
 
-@androidx.annotation.OptIn(UnstableApi::class)
-fun List<Track>.toMediaItems(): List<MediaItem> {
-    val listMediaItem = mutableListOf<MediaItem>()
-    for (item in this) {
-        listMediaItem.add(item.toMediaItem())
-    }
-    return listMediaItem
-}
-
 @UnstableApi
 fun MediaItem.isSong(): Boolean = this.mediaMetadata.description?.contains(MERGING_DATA_TYPE.SONG) == true
 

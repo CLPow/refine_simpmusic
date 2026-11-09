@@ -56,12 +56,6 @@ interface LocalPlaylistRepository {
         videoId: String,
     ): Flow<PairSongLocalPlaylist?>
 
-    fun changePositionOfSongInPlaylist(
-        playlistId: Long,
-        videoId: String,
-        newPosition: Int,
-    ): Flow<String>
-
     /**
      * Move a song within a synced playlist: updates both YouTube (via API) and local DB positions.
      * @param playlistId Local playlist ID
@@ -89,8 +83,6 @@ interface LocalPlaylistRepository {
         fromIndex: Int,
         toIndex: Int,
     ): Flow<LocalResource<String>>
-
-    fun downloadStateFlow(id: Long): Flow<Int>
 
     fun getAllDownloadingLocalPlaylists(): Flow<List<LocalPlaylistEntity>>
 

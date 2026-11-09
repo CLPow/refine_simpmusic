@@ -6,18 +6,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.maxrave.domain.data.model.home.HomeChip
-import com.maxrave.data.parser.parseChart
-import com.maxrave.data.parser.parseGenreObject
 import com.maxrave.data.parser.parseMixedContent
-import com.maxrave.data.parser.parseMoodsMomentObject
-import com.maxrave.data.parser.parseNewRelease
 import com.maxrave.domain.data.model.home.HomeItem
-import com.maxrave.domain.data.model.home.chart.Chart
-import com.maxrave.domain.data.model.mood.Mood
-import com.maxrave.domain.data.model.mood.MoodItem
-import com.maxrave.domain.data.model.mood.MoodSection
-import com.maxrave.domain.data.model.mood.genre.GenreObject
-import com.maxrave.domain.data.model.mood.moodmoments.MoodsMomentObject
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.repository.HomeRepository
 import com.maxrave.domain.utils.Resource
@@ -61,28 +51,6 @@ internal class HomeRepositoryImpl(
 ) : HomeRepository {
     private val _homeChips = MutableStateFlow<List<HomeChip>>(emptyList())
     override val homeChips: StateFlow<List<HomeChip>> = _homeChips
-    override fun getLocalShelves(
-        onRepeatTitle: String,
-        buriedTitle: String,
-    ): Flow<List<HomeItem>> =
-        flow {
-            // getMostPlayedSongs already filters to totalPlayTime > 1 and orders by it, which is
-            // exactly the candidate set both shelves want; taking it once keeps this to a single
-            // query rather than one per shelf.
-            val played = localDataSource.getMostPlayedSongs().first()
-            emit(
-                listOfNotNull(
-                    LocalShelfBuilder.onRepeat(played, onRepeatTitle),
-                    LocalShelfBuilder.buriedFavourites(played, buriedTitle),
-                ),
-            )
-        }.catch { throwable ->
-            // Local shelves are an addition, never a dependency. If this fails the home feed should
-            // look exactly as it did before they existed.
-            Logger.e("HomeRepository", "local shelves failed: ${throwable.message}")
-            emit(emptyList())
-        }.flowOn(Dispatchers.IO)
-
     /**
      * Same posture as the Room converters: a cache written by an older build must not crash the
      * app after the model gains a field, so unknown keys are dropped rather than rejected.
@@ -231,32 +199,6 @@ internal class HomeRepositoryImpl(
                 }
         }.flowOn(Dispatchers.IO)
 
-    override fun getExploreData(
-        viewString: String,
-        songString: String,
-    ): Flow<Resource<List<HomeItem>>> =
-        flow {
-            youTube
-                .customQuery(browseId = "FEmusic_explore")
-                .onSuccess { result ->
-                    val sections =
-                        result.contents
-                            ?.singleColumnBrowseResultsRenderer
-                            ?.tabs
-                            ?.firstOrNull()
-                            ?.tabRenderer
-                            ?.content
-                            ?.sectionListRenderer
-                            ?.contents
-                    val shelves =
-                        parseMixedContent(sections, viewString, songString)
-                            .filter { it.title.isNotBlank() && it.contents.isNotEmpty() }
-                    emit(Resource.Success(shelves))
-                }.onFailure { error ->
-                    emit(Resource.Error<List<HomeItem>>(error.message.toString()))
-                }
-        }.flowOn(Dispatchers.IO)
-
     override fun getHomeDataContinue(
         continueParam: String,
         viewString: String,
@@ -287,166 +229,9 @@ internal class HomeRepositoryImpl(
             }
     }.flowOn(Dispatchers.IO)
 
-    override fun getNewRelease(
-        newReleaseString: String,
-        musicVideoString: String,
-    ): Flow<Resource<List<HomeItem>>> =
-        flow {
-            youTube
-                .newRelease()
-                .onSuccess { result ->
-                    emit(Resource.Success<List<HomeItem>>(parseNewRelease(result, newReleaseString, musicVideoString)))
-                }.onFailure { error ->
-                    emit(Resource.Error<List<HomeItem>>(error.message.toString()))
-                }
-        }.flowOn(Dispatchers.IO)
-
-    override fun getChartData(countryCode: String): Flow<Resource<Chart>> =
-        flow {
-            runCatching {
-                youTube
-                    .customQuery("FEmusic_charts", country = countryCode)
-                    .onSuccess { result ->
-                        val data =
-                            result.contents
-                                ?.singleColumnBrowseResultsRenderer
-                                ?.tabs
-                                ?.get(
-                                    0,
-                                )?.tabRenderer
-                                ?.content
-                                ?.sectionListRenderer
-                        val chart = parseChart(data)
-                        if (chart != null) {
-                            emit(Resource.Success<Chart>(chart))
-                        } else {
-                            emit(Resource.Error<Chart>("Error"))
-                        }
-                    }.onFailure { error ->
-                        emit(Resource.Error<Chart>(error.message.toString()))
-                    }
-            }
-        }.flowOn(Dispatchers.IO)
-
-    override fun getMoodAndMomentsData(): Flow<Resource<Mood>> =
-        flow {
-            // Serve the cached copy first so the grid paints instantly; the network result is
-            // emitted right after and overwrites it. The category list changes about as often as
-            // YouTube ships a new mood, so a stale frame costs nothing while a spinner does.
-            val cached =
-                dataStoreManager.moodAndGenresCache
-                    .first()
-                    ?.let { runCatching { moodJson.decodeFromString<Mood>(it) }.getOrNull() }
-            if (cached != null) {
-                emit(Resource.Success<Mood>(cached))
-            }
-            runCatching {
-                youTube
-                    .moodAndGenres()
-                    .onSuccess { result ->
-                        // Every section is kept, in the order YouTube sent it, under its own
-                        // title. Indexing result[0]/result[1] used to break the moment a
-                        // signed-in account got an extra "For you" section in front.
-                        val sections =
-                            result.map { section ->
-                                MoodSection(
-                                    title = section.title,
-                                    items =
-                                        section.items.map { item ->
-                                            MoodItem(
-                                                title = item.title,
-                                                params = item.endpoint.params ?: "",
-                                                stripeColor = item.stripeColor,
-                                            )
-                                        },
-                                )
-                            }
-                        val mood = Mood(sections)
-                        emit(Resource.Success<Mood>(mood))
-                        dataStoreManager.setMoodAndGenresCache(moodJson.encodeToString(mood))
-                    }.onFailure { e ->
-                        // Already showing the cached copy — surfacing an error over it would
-                        // replace working content with an error state.
-                        if (cached == null) {
-                            emit(Resource.Error<Mood>(e.message.toString()))
-                        }
-                    }
-            }
-        }.flowOn(Dispatchers.IO)
-
-    override fun getMoodCategoryArtwork(params: String): Flow<String?> =
-        flow {
-            val cache = readMoodArtworkCache()
-            val hit = cache[params]
-            if (hit != null && !hit.isStale()) {
-                emit(hit.url)
-                return@flow
-            }
-            val resolved =
-                youTube
-                    .customQuery(
-                        browseId = "FEmusic_moods_and_genres_category",
-                        params = params,
-                    ).getOrNull()
-                    ?.let { parseMoodsMomentObject(it) }
-                    ?.items
-                    ?.firstNotNullOfOrNull { section ->
-                        section.contents
-                            .firstNotNullOfOrNull { it.thumbnails?.lastOrNull()?.url }
-                    }
-            emit(resolved)
-            if (resolved != null) {
-                dataStoreManager.setMoodArtworkCache(
-                    moodJson.encodeToString(
-                        cache + (params to MoodArtwork(resolved, Clock.System.now().toEpochMilliseconds())),
-                    ),
-                )
-            }
-        }.flowOn(Dispatchers.IO)
-
     private suspend fun readMoodArtworkCache(): Map<String, MoodArtwork> =
         dataStoreManager.moodArtworkCache
             .first()
             ?.let { runCatching { moodJson.decodeFromString<Map<String, MoodArtwork>>(it) }.getOrNull() }
             .orEmpty()
-
-    override fun getMoodData(params: String): Flow<Resource<MoodsMomentObject>> =
-        flow {
-            runCatching {
-                youTube
-                    .customQuery(
-                        browseId = "FEmusic_moods_and_genres_category",
-                        params = params,
-                    ).onSuccess { result ->
-                        val data = parseMoodsMomentObject(result)
-                        if (data != null) {
-                            emit(Resource.Success<MoodsMomentObject>(data))
-                        } else {
-                            emit(Resource.Error<MoodsMomentObject>("Error"))
-                        }
-                    }.onFailure { e ->
-                        emit(Resource.Error<MoodsMomentObject>(e.message.toString()))
-                    }
-            }
-        }.flowOn(Dispatchers.IO)
-
-    override fun getGenreData(params: String): Flow<Resource<GenreObject>> =
-        flow {
-            runCatching {
-                youTube
-                    .customQuery(
-                        browseId = "FEmusic_moods_and_genres_category",
-                        params = params,
-                    ).onSuccess { result ->
-                        val data = parseGenreObject(result)
-                        if (data != null) {
-                            emit(Resource.Success<GenreObject>(data))
-                        } else {
-                            emit(Resource.Error<GenreObject>("Error"))
-                        }
-                    }.onFailure { e ->
-                        emit(Resource.Error<GenreObject>(e.message.toString()))
-                    }
-            }
-        }.flowOn(Dispatchers.IO)
 }

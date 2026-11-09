@@ -4,9 +4,7 @@ import com.maxrave.domain.extension.now
 import com.maxrave.kotlinytmusicscraper.extractor.Extractor
 import com.maxrave.kotlinytmusicscraper.models.Context
 import com.maxrave.kotlinytmusicscraper.models.SongItem
-import com.maxrave.kotlinytmusicscraper.models.WatchEndpoint
 import com.maxrave.kotlinytmusicscraper.models.YouTubeClient
-import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.IOS
 import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.TVHTML5
 import com.maxrave.kotlinytmusicscraper.models.YouTubeClient.Companion.WEB_REMIX
 import com.maxrave.kotlinytmusicscraper.models.YouTubeLocale
@@ -23,7 +21,6 @@ import com.maxrave.kotlinytmusicscraper.models.body.NextBody
 import com.maxrave.kotlinytmusicscraper.models.body.PlayerBody
 import com.maxrave.kotlinytmusicscraper.models.body.SearchBody
 import com.maxrave.kotlinytmusicscraper.models.response.DownloadProgress
-import com.maxrave.kotlinytmusicscraper.models.response.RemoteConfig
 import com.maxrave.kotlinytmusicscraper.utils.parseCookieString
 import com.maxrave.kotlinytmusicscraper.utils.sha1
 import com.maxrave.ktorext.encoding.brotli
@@ -46,14 +43,11 @@ import io.ktor.client.request.headers
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.prepareRequest
-import io.ktor.client.request.forms.submitForm
 import io.ktor.client.request.setBody
 import io.ktor.client.request.url
 import io.ktor.client.statement.bodyAsChannel
-import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpHeaders
-import io.ktor.http.Parameters
 import io.ktor.http.contentType
 import io.ktor.http.userAgent
 import io.ktor.serialization.kotlinx.json.json
@@ -65,7 +59,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
 import kotlinx.io.readByteArray
@@ -125,7 +118,6 @@ class Ytmusic {
         )
     var visitorData: String? = null
     var dataSyncId: String? = null
-    private var poTokenChallengeRequestKey = "O43z0dpjhgX20SCx4KAo"
     var cookie: String? = null
         set(value) {
             field = value
@@ -140,12 +132,6 @@ class Ytmusic {
     // valid together with the authuser that owns it; sending 0 for a channel of the
     // second signed-in account makes YouTube answer as if not logged in.
     var authUser: Int = 0
-
-    // TIDAL credentials. Empty until CommonRepositoryImpl pushes the values fetched from the
-    // remote config (cached in DataStore). Deliberately NOT hard-coded in source — while
-    // empty, TIDAL metadata lookups fail silently until the first successful fetch.
-    var tidalClientId: String = ""
-    var tidalClientSecret: String = ""
 
     private var cookieMap = emptyMap<String, String>()
 
@@ -215,8 +201,6 @@ class Ytmusic {
             }
         }
 
-    internal fun HttpRequestBuilder.mask(value: String = "*") = header("X-Goog-FieldMask", value)
-
     @OptIn(ExperimentalTime::class)
     private fun HttpRequestBuilder.ytClient(
         client: YouTubeClient,
@@ -259,18 +243,6 @@ class Ytmusic {
         parameter("prettyPrint", false)
     }
 
-    @OptIn(ExperimentalTime::class)
-    internal fun getAuthorizationHeader(): String? =
-        cookie?.let { cookie ->
-            if ("SAPISID" !in cookieMap || "__Secure-3PAPISID" !in cookieMap) null
-            // SAPISIDHASH is built from Unix time in seconds (it was divided by 1000 again, giving 1970).
-            val currentTime = now().toInstant(TimeZone.currentSystemDefault()).epochSeconds
-            val sapisidCookie = cookieMap["SAPISID"] ?: cookieMap["__Secure-3PAPISID"]
-            val sapisidHash = sha1("$currentTime $sapisidCookie https://music.youtube.com")
-            Logger.d(TAG, "SAPI SID Hash: SAPISIDHASH ${currentTime}_$sapisidHash")
-            "SAPISIDHASH ${currentTime}_$sapisidHash"
-        }
-
     fun getNewPipePlayer(videoId: String): List<Pair<Int, String>> = extractor.newPipePlayer(videoId)
 
     fun mergeAudioVideoDownload(filePath: String): DownloadProgress = extractor.mergeAudioVideoDownload(filePath)
@@ -310,126 +282,11 @@ class Ytmusic {
             contentType(ContentType.Application.Json)
         }
 
-    suspend fun ghostRequest(
-        videoId: String,
-        playlistId: String?,
-    ) = httpClient
-        .get(
-            "https://www.youtube.com/watch?v=$videoId&bpctr=9999999999&has_verified=1"
-                .let {
-                    if (playlistId != null) "$it&list=$playlistId" else it
-                },
-        ) {
-            headers {
-                header("Connection", "close")
-                header("Host", "www.youtube.com")
-                header("Cookie", if (cookie.isNullOrEmpty()) "PREF=hl=en&tz=UTC; SOCS=CAI" else cookie)
-                header("Sec-Fetch-Mode", "navigate")
-                header(
-                    "User-Agent",
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/94.0.4606.71 Safari/537.36",
-                )
-            }
-        }
-
-    private fun HttpRequestBuilder.poHeader() {
-        headers {
-            header("accept", "*/*")
-            header("origin", "https://www.youtube.com")
-            header("content-type", "application/json+protobuf")
-            header("priority", "u=1, i")
-            header("referer", "https://www.youtube.com/")
-            header("sec-ch-ua", "\"Microsoft Edge\";v=\"131\", \"Chromium\";v=\"131\", \"Not_A Brand\";v=\"24\"")
-            header("sec-ch-ua-mobile", "?0")
-            header("sec-ch-ua-platform", "\"macOS\"")
-            header("sec-fetch-dest", "empty")
-            header("sec-fetch-mode", "cors")
-            header("sec-fetch-site", "cross-site")
-            header(
-                "user-agent",
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0",
-            )
-            header("x-goog-api-key", "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw")
-            header("x-user-agent", "grpc-web-javascript/0.1")
-        }
-    }
-
-    suspend fun createPoTokenChallenge() =
-        httpClient.post(
-            "https://jnn-pa.googleapis.com/\$rpc/google.internal.waa.v1.Waa/Create",
-        ) {
-            poHeader()
-            setBody("[\"$poTokenChallengeRequestKey\"]")
-        }
-
-    suspend fun generatePoToken(challenge: String) =
-        httpClient.post(
-            "https://jnn-pa.googleapis.com/\$rpc/google.internal.waa.v1.Waa/GenerateIT",
-        ) {
-            poHeader()
-            setBody("[\"$poTokenChallengeRequestKey\", \"$challenge\"]")
-        }
-
-//    curl 'https://jnn-pa.googleapis.com/$rpc/google.internal.waa.v1.Waa/Create' \
-//    -H 'accept: */*' \
-//    -H 'accept-language: vi,en;q=0.9,en-GB;q=0.8,en-US;q=0.7' \
-//    -H 'content-type: application/json+protobuf' \
-//    -H 'origin: https://www.youtube.com' \
-//    -H 'priority: u=1, i' \
-//    -H 'referer: https://www.youtube.com/' \
-//    -H 'sec-ch-ua: "Microsoft Edge";v="131", "Chromium";v="131", "Not_A Brand";v="24"' \
-//    -H 'sec-ch-ua-mobile: ?0' \
-//    -H 'sec-ch-ua-platform: "macOS"' \
-//    -H 'sec-fetch-dest: empty' \
-//    -H 'sec-fetch-mode: cors' \
-//    -H 'sec-fetch-site: cross-site' \
-//    -H 'user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0' \
-//    -H 'x-goog-api-key: AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw' \
-//    -H 'x-user-agent: grpc-web-javascript/0.1' \
-//    --data-raw '["O43z0dpjhgX20SCx4KAo"]'
-
-    suspend fun noLogInPlayer(
-        videoId: String,
-        cookie: String,
-        visitorData: String?,
-        poToken: String,
-    ) = httpClient.post("https://www.youtube.com/youtubei/v1/player") {
-        accept(ContentType.Application.Json)
-        contentType(ContentType.Application.Json)
-        header("Host", "www.youtube.com")
-        header("Origin", "https://www.youtube.com")
-        header("Sec-Fetch-Mode", "navigate")
-        header(HttpHeaders.UserAgent, IOS.userAgent)
-        header(
-            "Set-Cookie",
-            cookie,
-        )
-        header("X-Goog-Visitor-Id", visitorData ?: this@Ytmusic.visitorData)
-        header("X-YouTube-Client-Name", IOS.clientName)
-        header("X-YouTube-Client-Version", IOS.clientVersion)
-        setBody(
-            PlayerBody(
-                context = IOS.toContext(locale, null),
-                playlistId = null,
-                cpn = null,
-                videoId = videoId,
-                playbackContext = PlayerBody.PlaybackContext(),
-                serviceIntegrityDimensions =
-                    PlayerBody.ServiceIntegrityDimensions(
-                        poToken = poToken,
-                    ),
-            ),
-        )
-        parameter("prettyPrint", false)
-    }
-
     suspend fun getSimpMusicChart() =
         httpClient.get("https://chart.simpmusic.org/api/playlists") {
             accept(ContentType.Application.Json)
             contentType(ContentType.Application.Json)
         }
-
-    suspend fun test403Error(url: String): Boolean = httpClient.get(url).status.value in 200..299
 
     suspend fun player(
         client: YouTubeClient,
@@ -474,13 +331,6 @@ class Ytmusic {
 //                    },
             ),
         )
-    }
-
-    suspend fun pipedStreams(
-        videoId: String,
-        pipedInstance: String,
-    ) = httpClient.get("$pipedInstance/streams/$videoId") {
-        contentType(ContentType.Application.Json)
     }
 
     suspend fun getSuggestQuery(query: String) =
@@ -626,28 +476,6 @@ class Ytmusic {
             parameter("service", "YouTube")
         }
 
-    /**
-     * Update source for this build.
-     *
-     * Repointed from `maxrave-dev/SimpMusic` to the private fork this binary is actually built
-     * from. An official release is not an upgrade for this build — it carries none of the local
-     * patches and would silently undo them — so offering it would be wrong.
-     *
-     * While the fork is private and carries no releases, GitHub answers this unauthenticated
-     * request with 404. That is the intended resting state: the caller logs a warning and shows
-     * nothing, so the app simply never advertises an update. Publish releases on the fork (or make
-     * it public) and this starts reporting them with no further change.
-     */
-    suspend fun checkForGithubReleaseUpdate() =
-        httpClient.get("https://api.github.com/repos/$UPDATE_REPO/releases/latest") {
-            contentType(ContentType.Application.Json)
-        }
-
-    suspend fun checkForFdroidUpdate() =
-        httpClient.get("https://f-droid.org/api/v1/packages/com.maxrave.simpmusic") {
-            contentType(ContentType.Application.Json)
-        }
-
     suspend fun playlist(playlistId: String) =
         httpClient.post("browse") {
             ytClient(WEB_REMIX, !cookie.isNullOrEmpty())
@@ -713,31 +541,6 @@ class Ytmusic {
                 ),
             )
         }
-    }
-
-    suspend fun nextCustom(
-        client: YouTubeClient,
-        videoId: String,
-    ) = httpClient.post("next") {
-        ytClient(client, setLogin = false)
-        setBody(
-            BrowseBody(
-                context = client.toContext(locale, visitorData),
-                browseId = null,
-                params = "wAEB",
-                enablePersistentPlaylistPanel = true,
-                isAudioOnly = true,
-                tunerSettingValue = "AUTOMIX_SETTING_NORMAL",
-                playlistId = "RDAMVM$videoId",
-                watchEndpointMusicSupportedConfigs =
-                    WatchEndpoint.WatchEndpointMusicSupportedConfigs(
-                        WatchEndpoint.WatchEndpointMusicSupportedConfigs.WatchEndpointMusicConfig(
-                            musicVideoType = "MUSIC_VIDEO_TYPE_ATV",
-                        ),
-                    ),
-            ),
-        )
-        parameter("alt", "json")
     }
 
     suspend fun nextCtoken(
@@ -1241,51 +1044,6 @@ class Ytmusic {
             e.printStackTrace()
             true
         }
-    }
-
-    suspend fun getTidalOAuthToken() =
-        httpClient.submitForm(
-            url = TIDAL_AUTH_URL,
-            formParameters =
-                Parameters.build {
-                    append("client_id", tidalClientId)
-                    append("client_secret", tidalClientSecret)
-                    append("grant_type", "client_credentials")
-                },
-        )
-
-    suspend fun searchTidalId(
-        token: String,
-        query: String,
-    ) = httpClient.get(TIDAL_SEARCH_URL) {
-        header("Authorization", "Bearer $token")
-        header("Accept", "application/json")
-        header("Referer", "https://tidal.com/")
-        userAgent("Mozilla/5.0 (X11; Linux x86_64; rv:144.0) Gecko/20100101 Firefox/144.0")
-        parameter("query", query)
-        parameter("types", "TRACKS")
-        parameter("limit", 5)
-        parameter("countryCode", "US")
-        parameter("locale", "en_US")
-        parameter("deviceType", "BROWSER")
-        parameter("includeContributors", true)
-        parameter("supportsUserData", true)
-    }
-
-    /**
-     * Fetch the remote app config (TIDAL credentials) from GitHub raw.
-     *
-     * raw.githubusercontent.com serves .json files as `text/plain`, so Ktor's
-     * ContentNegotiation will not auto-deserialize the body. We read it as text and parse
-     * it explicitly with [normalJson] (which ignores unknown keys for forward-compat).
-     */
-    suspend fun getTidalRemoteConfig(): RemoteConfig {
-        val text =
-            httpClient
-                .get(TIDAL_REMOTE_CONFIG_URL) {
-                    accept(ContentType.Application.Json)
-                }.bodyAsText()
-        return normalJson.decodeFromString(RemoteConfig.serializer(), text)
     }
 
     companion object {

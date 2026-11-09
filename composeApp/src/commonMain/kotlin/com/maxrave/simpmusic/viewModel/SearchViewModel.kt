@@ -2,13 +2,11 @@ package com.maxrave.simpmusic.viewModel
 
 import com.maxrave.domain.data.model.searchResult.SearchSummary
 import androidx.lifecycle.viewModelScope
-import com.maxrave.common.SELECTED_LANGUAGE
 import com.maxrave.domain.data.entities.SearchHistory
 import com.maxrave.domain.data.model.searchResult.albums.AlbumsResult
 import com.maxrave.domain.data.model.searchResult.artists.ArtistsResult
 import com.maxrave.domain.data.model.searchResult.playlists.PlaylistsResult
 import com.maxrave.domain.data.model.searchResult.songs.SongsResult
-import com.maxrave.domain.data.model.mood.Mood
 import com.maxrave.domain.data.model.searchResult.videos.VideosResult
 import com.maxrave.domain.data.type.SearchResultType
 import com.maxrave.domain.manager.DataStoreManager
@@ -27,16 +25,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.StringResource
-import simpmusic.composeapp.generated.resources.Res
-import simpmusic.composeapp.generated.resources.albums
-import simpmusic.composeapp.generated.resources.all
-import simpmusic.composeapp.generated.resources.artists
-import simpmusic.composeapp.generated.resources.featured_playlists
-import simpmusic.composeapp.generated.resources.playlists
-import simpmusic.composeapp.generated.resources.podcasts
-import simpmusic.composeapp.generated.resources.songs
-import simpmusic.composeapp.generated.resources.videos
 
 // State cho tìm kiếm
 data class SearchScreenState(
@@ -68,18 +56,6 @@ enum class SearchType {
     PODCASTS,
 }
 
-fun SearchType.toStringRes(): StringResource =
-    when (this) {
-        SearchType.ALL -> Res.string.all
-        SearchType.SONGS -> Res.string.songs
-        SearchType.VIDEOS -> Res.string.videos
-        SearchType.ALBUMS -> Res.string.albums
-        SearchType.ARTISTS -> Res.string.artists
-        SearchType.PLAYLISTS -> Res.string.playlists
-        SearchType.FEATURED_PLAYLISTS -> Res.string.featured_playlists
-        SearchType.PODCASTS -> Res.string.podcasts
-    }
-
 // UI state cho tìm kiếm
 sealed class SearchScreenUIState {
     object Empty : SearchScreenUIState()
@@ -106,7 +82,6 @@ class SearchViewModel(
     val searchHistory: StateFlow<List<String>> get() = _searchHistory.asStateFlow()
 
     var regionCode: String? = null
-    var language: String? = null
 
     /** The filtered search in flight; a newer chip or query replaces it. */
     private var filterJob: Job? = null
@@ -119,7 +94,6 @@ class SearchViewModel(
     init {
         viewModelScope.launch {
             regionCode = dataStoreManager.location.first()
-            language = dataStoreManager.getString(SELECTED_LANGUAGE).first()
         }
         getSearchHistory()
     }
@@ -318,33 +292,6 @@ class SearchViewModel(
                                 state.copy(
                                     searchType = SearchType.FEATURED_PLAYLISTS,
                                     searchFeaturedPlaylistsResult = featuredPlaylistList,
-                                )
-                            }
-                        }
-                        _searchScreenUIState.value = SearchScreenUIState.Success
-                    }
-
-                    is Resource.Error -> {
-                        _searchScreenUIState.value = SearchScreenUIState.Error
-                    }
-                }
-            }
-        }
-    }
-
-    fun searchPodcast(query: String) {
-        _searchScreenUIState.value = SearchScreenUIState.Loading
-        filterJob?.cancel()
-        filterJob = viewModelScope.launch {
-            searchRepository.getSearchDataPodcast(query).collect { values ->
-                if (_searchScreenState.value.query.isNotBlank() && _searchScreenState.value.query != query) return@collect
-                when (values) {
-                    is Resource.Success -> {
-                        values.data?.let { podcastList ->
-                            _searchScreenState.update { state ->
-                                state.copy(
-                                    searchType = SearchType.PODCASTS,
-                                    searchPodcastsResult = podcastList,
                                 )
                             }
                         }

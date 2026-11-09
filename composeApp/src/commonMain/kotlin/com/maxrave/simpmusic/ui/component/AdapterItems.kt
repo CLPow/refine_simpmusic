@@ -1,9 +1,7 @@
 package com.maxrave.simpmusic.ui.component
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -14,7 +12,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,8 +27,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -58,23 +53,16 @@ import com.maxrave.common.Config
 import com.maxrave.domain.data.entities.AlbumEntity
 import com.maxrave.domain.data.entities.LocalPlaylistEntity
 import com.maxrave.domain.data.entities.PlaylistEntity
-import com.maxrave.domain.data.entities.PodcastsEntity
 import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.data.model.browse.artist.ResultAlbum
 import com.maxrave.domain.data.model.browse.artist.ResultPlaylist
 import com.maxrave.domain.data.model.browse.artist.ResultSingle
 import com.maxrave.domain.data.model.home.Content
 import com.maxrave.domain.data.model.home.HomeItem
-import com.maxrave.domain.data.model.home.chart.ItemArtist
-import com.maxrave.domain.data.model.home.chart.ItemVideo
-import com.maxrave.domain.data.model.mood.genre.ItemsPlaylist
-import com.maxrave.domain.data.model.mood.moodmoments.Item
 import com.maxrave.domain.data.model.searchResult.albums.AlbumsResult
 import com.maxrave.domain.data.model.searchResult.playlists.PlaylistsResult
-import com.maxrave.domain.data.model.searchResult.songs.Artist
 import com.maxrave.domain.data.type.ChartItem
 import com.maxrave.domain.data.type.HomeContentType
-import com.maxrave.domain.data.type.MonthlyRecapItem
 import com.maxrave.domain.mediaservice.handler.PlaylistType
 import com.maxrave.domain.mediaservice.handler.QueueData
 import com.maxrave.domain.utils.connectArtists
@@ -91,7 +79,6 @@ import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
 import com.maxrave.simpmusic.ui.theme.LocalForceDarkText
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.HomeViewModel
-import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import simpmusic.composeapp.generated.resources.Res
@@ -99,8 +86,6 @@ import simpmusic.composeapp.generated.resources.album
 import simpmusic.composeapp.generated.resources.app_name
 import simpmusic.composeapp.generated.resources.description
 import simpmusic.composeapp.generated.resources.playlist
-import simpmusic.composeapp.generated.resources.subscribers
-import simpmusic.composeapp.generated.resources.wrapped_recap_subtitle
 import simpmusic.composeapp.generated.resources.you
 
 @Composable
@@ -337,14 +322,7 @@ fun HomeItemContentPlaylist(
                     is ResultSingle -> data.thumbnails.lastOrNull()?.url
                     is ResultAlbum -> data.thumbnails.lastOrNull()?.url
                     is ResultPlaylist -> data.thumbnails.lastOrNull()?.url
-                    is PodcastsEntity -> data.thumbnail
                     is AlbumsResult -> data.thumbnails.lastOrNull()?.url
-                    // A recap owns no artwork; it borrows the month's own top song's, resolved
-                    // where the recap itself is (LibraryViewModel.getMonthlyRecaps).
-                    // Deliberately null: a recap has no artwork of its own, so it falls to
-                    // the title placeholder below — the same tile a local playlist without
-                    // a thumbnail gets. Same reason ChartItem above is null.
-                    is MonthlyRecapItem -> null
                     else -> null
                 }
             AsyncImage(
@@ -374,17 +352,6 @@ fun HomeItemContentPlaylist(
                             )
                         }
 
-                        // A month whose top song has no artwork still has a name, and the
-                        // deterministic title tile reads as a playlist where the grey holder
-                        // reads as a failed load.
-                        is MonthlyRecapItem -> {
-                            painterPlaylistThumbnail(
-                                data.title,
-                                style = typo().bodySmall,
-                                thumbSize * 0.9f to thumbSize * 0.9f,
-                            )
-                        }
-
                         else -> {
                             rememberHolderPainter()
                         }
@@ -402,17 +369,6 @@ fun HomeItemContentPlaylist(
                         is ChartItem -> {
                             painterPlaylistThumbnail(
                                 data.name,
-                                style = typo().bodySmall,
-                                thumbSize * 0.9f to thumbSize * 0.9f,
-                            )
-                        }
-
-                        // A month whose top song has no artwork still has a name, and the
-                        // deterministic title tile reads as a playlist where the grey holder
-                        // reads as a failed load.
-                        is MonthlyRecapItem -> {
-                            painterPlaylistThumbnail(
-                                data.title,
                                 style = typo().bodySmall,
                                 thumbSize * 0.9f to thumbSize * 0.9f,
                             )
@@ -446,9 +402,7 @@ fun HomeItemContentPlaylist(
                         is ResultSingle -> data.title
                         is ResultAlbum -> data.title
                         is ResultPlaylist -> data.title
-                        is PodcastsEntity -> data.title
                         is AlbumsResult -> data.title
-                        is MonthlyRecapItem -> data.title
                         else -> ""
                     },
                 style = typo().titleSmall,
@@ -519,14 +473,6 @@ fun HomeItemContentPlaylist(
 
                         is ResultPlaylist -> {
                             data.author
-                        }
-
-                        is PodcastsEntity -> {
-                            data.authorName
-                        }
-
-                        is MonthlyRecapItem -> {
-                            stringResource(Res.string.wrapped_recap_subtitle)
                         }
 
                         is AlbumsResult -> {
@@ -935,441 +881,3 @@ fun HomeItemArtist(
     }
 }
 
-@Composable
-fun MoodMomentAndGenreHomeItem(
-    title: String,
-    stripeColor: Long,
-    onClick: () -> Unit,
-) {
-    ElevatedCard(
-        elevation =
-            CardDefaults.cardElevation(
-                defaultElevation = 6.dp,
-            ),
-        onClick = onClick,
-        shape = RoundedCornerShape(5.dp),
-        modifier =
-            Modifier
-                .width(160.dp)
-                .height(50.dp)
-                .padding(8.dp),
-    ) {
-        Row {
-            Box(
-                // `solid.leftStripeColor` straight from the API (full ARGB). This used to be
-                // generateRandomColor(), which — being outside remember — rolled a new colour on
-                // every recomposition, so the stripes flickered while scrolling.
-                Modifier
-                    .width(10.dp)
-                    .height(64.dp)
-                    .background(Color(stripeColor)),
-            )
-            Text(
-                text = title,
-                style = typo().titleSmall,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.CenterVertically),
-            )
-        }
-    }
-}
-
-@Composable
-fun ItemVideoChart(
-    onClick: () -> Unit,
-    data: ItemVideo,
-    position: Int,
-) {
-    Box(
-        Modifier
-            .wrapContentSize()
-            .focusable(true)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable {
-                onClick()
-            },
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .padding(10.dp),
-        ) {
-            val thumb = data.thumbnails.lastOrNull()?.url
-            Logger.w("AsyncImage", "HomeItemSong: $thumb")
-            AsyncImage(
-                model =
-                    ImageRequest
-                        .Builder(LocalPlatformContext.current)
-                        .data(thumb)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .diskCacheKey(thumb)
-                        .crossfade(550)
-                        .build(),
-                placeholder = rememberHolderPainter(isVideo = true),
-                error = rememberHolderPainter(isVideo = true),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier =
-                    Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .width(280.dp)
-                        .height(160.dp)
-                        .clip(
-                            RoundedCornerShape(10),
-                        ),
-            )
-            Row {
-                Text(
-                    text = position.toString(),
-                    style = typo().titleLarge,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    modifier =
-                        Modifier
-                            .width(40.dp)
-                            .wrapContentHeight(align = Alignment.CenterVertically)
-                            .align(Alignment.CenterVertically),
-                )
-                Column(Modifier.padding(start = 10.dp)) {
-                    Text(
-                        text = data.title,
-                        style = typo().titleMedium,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier =
-                            Modifier
-                                .width(210.dp)
-                                .wrapContentHeight(align = Alignment.CenterVertically)
-                                .padding(top = 10.dp),
-                    )
-                    Text(
-                        text =
-                            listOfNotNull(
-                                data.artists.toListName().connectArtists().takeIf { it.isNotBlank() },
-                                data.views.takeIf { it.isNotBlank() },
-                            ).joinToString(" • "),
-                        style = typo().bodyMedium,
-                        minLines = 1,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier =
-                            Modifier
-                                .width(210.dp)
-                                .wrapContentHeight(align = Alignment.CenterVertically)
-                                .basicMarquee(
-                                    initialDelayMillis = 2000,
-                                    repeatDelayMillis = 2000,
-                                    velocity = 25.dp,
-                                )
-                                .padding(vertical = 3.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ItemArtistChart(
-    onClick: () -> Unit,
-    data: ItemArtist,
-    widthDp: Dp,
-) {
-    Box(
-        Modifier
-            .wrapContentSize()
-            .focusable(true)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable {
-                onClick()
-            },
-    ) {
-        Row(
-            modifier =
-                Modifier
-                    .padding(10.dp)
-                    .width(widthDp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = data.rank,
-                style = typo().titleLarge,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                modifier =
-                    Modifier
-                        .wrapContentSize(Alignment.Center)
-                        .align(Alignment.CenterVertically)
-                        .padding(end = 20.dp),
-            )
-            val thumb = data.thumbnails.lastOrNull()?.url
-            Logger.w("AsyncImage", "HomeItemSong: $thumb")
-            AsyncImage(
-                model =
-                    ImageRequest
-                        .Builder(LocalPlatformContext.current)
-                        .data(thumb)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .diskCacheKey(thumb)
-                        .crossfade(550)
-                        .build(),
-                placeholder = rememberHolderPainter(),
-                error = rememberHolderPainter(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier =
-                    Modifier
-                        .align(Alignment.CenterVertically)
-                        .size(60.dp)
-                        .clip(
-                            CircleShape,
-                        ),
-            )
-            Column(
-                Modifier
-                    .padding(start = 15.dp)
-                    .width(160.dp)
-                    .align(Alignment.CenterVertically),
-            ) {
-                Text(
-                    text = data.title,
-                    style = typo().titleMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier =
-                        Modifier
-                            .wrapContentHeight(align = Alignment.CenterVertically),
-                )
-                Text(
-                    text =
-                        if (data.subscribers.contains(
-                                stringResource(Res.string.subscribers).replace("%1\$s ", ""),
-                            )
-                        ) {
-                            data.subscribers
-                        } else {
-                            stringResource(
-                                Res.string.subscribers,
-                                data.subscribers,
-                            )
-                        },
-                    style = typo().bodySmall,
-                    minLines = 1,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier =
-                        Modifier
-                            .wrapContentHeight(align = Alignment.CenterVertically)
-                            .basicMarquee(
-                                initialDelayMillis = 2000,
-                                repeatDelayMillis = 2000,
-                                velocity = 25.dp,
-                            ),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun ItemTrackChart(
-    onClick: () -> Unit,
-    data: Track,
-    position: Int?,
-    widthDp: Dp,
-) {
-    Box(
-        modifier =
-            Modifier
-                .wrapContentSize()
-                .focusable(true)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable {
-                    onClick()
-                },
-    ) {
-        Row(
-            modifier =
-                Modifier
-                    .width(widthDp)
-                    .padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Crossfade(targetState = position != null, label = "Chart Track Position") {
-                if (it) {
-                    Row {
-                        Text(
-                            text = position.toString(),
-                            style = typo().titleLarge,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            modifier =
-                                Modifier
-                                    .width(40.dp)
-                                    .wrapContentHeight(align = Alignment.CenterVertically)
-                                    .align(Alignment.CenterVertically),
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                    }
-                }
-            }
-            val thumb = data.thumbnails?.lastOrNull()?.url
-            Logger.w("AsyncImage", "HomeItemSong: $thumb")
-            AsyncImage(
-                model =
-                    ImageRequest
-                        .Builder(LocalPlatformContext.current)
-                        .data(thumb)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .diskCacheKey(thumb)
-                        .crossfade(550)
-                        .build(),
-                placeholder = rememberHolderPainter(),
-                error = rememberHolderPainter(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier =
-                    Modifier
-                        .align(Alignment.CenterVertically)
-                        .size(50.dp)
-                        .clip(
-                            RoundedCornerShape(10),
-                        ),
-            )
-            Column(
-                Modifier
-                    .padding(
-                        start = 20.dp,
-                    ).align(Alignment.CenterVertically),
-                verticalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                Text(
-                    text = data.title,
-                    style = typo().titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .wrapContentHeight(align = Alignment.CenterVertically)
-                            .padding(
-                                bottom = 3.dp,
-                            ),
-                )
-
-                Text(
-                    text = data.artists.toListName().connectArtists(),
-                    style = typo().bodySmall,
-                    minLines = 1,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .wrapContentHeight(align = Alignment.CenterVertically)
-                            .basicMarquee(
-                                initialDelayMillis = 2000,
-                                repeatDelayMillis = 2000,
-                                velocity = 25.dp,
-                            ),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun MoodAndGenresContentItem(
-    data: Any?,
-    navController: NavController,
-    homeViewModel: HomeViewModel = koinViewModel(),
-) {
-    Column(
-        modifier = Modifier.wrapContentHeight(align = Alignment.CenterVertically, unbounded = true),
-    ) {
-        Text(
-            text =
-                when (data) {
-                    is ItemsPlaylist -> (data).header
-                    is Item -> (data).header
-                    else -> ""
-                },
-            style = typo().titleMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier =
-                Modifier
-                    .padding(top = 8.dp)
-                    .padding(
-                        horizontal = 15.dp,
-                    ).fillMaxWidth(),
-        )
-        LazyRow(
-            modifier =
-                Modifier.padding(
-                    10.dp,
-                ),
-        ) {
-            val itemList =
-                when (data) {
-                    is ItemsPlaylist -> (data).contents
-                    is Item -> (data).contents
-                    else -> listOf()
-                }
-            items(itemList) { item ->
-                HomeItemContentPlaylist(onClick = {
-                    // The "Songs" shelf mixes tracks into a list that is otherwise all playlists,
-                    // so route by videoId: a track starts its radio, everything else opens a page.
-                    val moodSong = item as? com.maxrave.domain.data.model.mood.moodmoments.Content
-                    val songVideoId = moodSong?.videoId
-                    if (moodSong != null && songVideoId != null) {
-                        val track =
-                            Track(
-                                album = null,
-                                artists = listOf(Artist(id = null, name = moodSong.subtitle)),
-                                duration = null,
-                                durationSeconds = null,
-                                isAvailable = true,
-                                isExplicit = false,
-                                likeStatus = null,
-                                thumbnails = moodSong.thumbnails,
-                                title = moodSong.title,
-                                videoId = songVideoId,
-                                videoType = null,
-                                category = null,
-                                feedbackTokens = null,
-                                resultType = null,
-                            )
-                        homeViewModel.setQueueData(
-                            QueueData.Data(
-                                listTracks = arrayListOf(track),
-                                firstPlayedTrack = track,
-                                playlistId = "RDAMVM$songVideoId",
-                                playlistName = "\"${moodSong.title}\" Radio",
-                                playlistType = PlaylistType.RADIO,
-                                continuation = null,
-                            ),
-                        )
-                        homeViewModel.loadMediaItem(track, type = Config.SONG_CLICK)
-                    } else {
-                        navController.navigate(
-                            PlaylistDestination(
-                                playlistId =
-                                    if (item is com.maxrave.domain.data.model.mood.genre.Content) {
-                                        item.playlistBrowseId
-                                    } else {
-                                        (item as com.maxrave.domain.data.model.mood.moodmoments.Content).playlistBrowseId
-                                    },
-                            ),
-                        )
-                    }
-                }, data = item)
-            }
-        }
-    }
-}

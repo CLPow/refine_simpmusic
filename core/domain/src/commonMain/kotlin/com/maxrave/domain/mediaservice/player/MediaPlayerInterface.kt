@@ -1,8 +1,5 @@
 package com.maxrave.domain.mediaservice.player
 
-import com.maxrave.domain.audio.EnhanceSettings
-import com.maxrave.domain.audio.EnhanceStatus
-import com.maxrave.domain.audio.TrackInfo
 import com.maxrave.domain.data.player.GenericMediaItem
 import com.maxrave.domain.data.player.GenericPlaybackParameters
 
@@ -97,7 +94,6 @@ interface MediaPlayerInterface {
     var playbackParameters: GenericPlaybackParameters
 
     // Audio settings
-    val audioSessionId: Int
     var volume: Float
 
     /**
@@ -113,50 +109,7 @@ interface MediaPlayerInterface {
      */
     var sleepFadeFactor: Float
 
-    /**
-     * Suppresses crossfade without touching the user's setting.
-     *
-     * Listen Together needs every device in a room to change track at the same instant; a fade
-     * overlaps two tracks for seconds and drifts the room apart. Overwriting `crossfadeEnabled` in
-     * DataStore instead would lose the user's real preference if the process died mid-room.
-     */
-    var crossfadeSuppressed: Boolean
-
-    /**
-     * `mediaId`s of the tracks that came from the album currently loaded in the queue, or empty
-     * when the queue is not an album.
-     *
-     * Playback uses it to leave the transitions *inside* an album alone while still crossfading at
-     * its edges — the last album track into the first radio track that endless queue appended, for
-     * instance. A set of ids rather than a count because shuffle reorders the queue, radio included,
-     * so position tells you nothing about which tracks belonged to the album.
-     */
-    var albumTrackIds: Set<String>
     var skipSilenceEnabled: Boolean
-
-    /**
-     * The "Enhance audio" settings. Off (the default) must leave the audio bit-exact.
-     *
-     * Default no-op so a backend without the engine simply plays the source untouched.
-     */
-    fun setEnhance(settings: EnhanceSettings) = Unit
-
-    /**
-     * What YouTube said about [mediaId]'s stream: its loudness (dB relative to YouTube's reference,
-     * for the engine's turn-down-only normalization) and its format. Keyed by media id because
-     * during a crossfade two tracks play at once and each needs its own gain; published for the
-     * next track too, so a crossfade starts at the incoming track's own level.
-     */
-    fun setTrackInfo(
-        mediaId: String,
-        info: TrackInfo,
-    ) = Unit
-
-    /** Hold-to-compare: while true, play the original at the engine's matched level. */
-    fun setEnhanceCompare(compare: Boolean) = Unit
-
-    /** What the engine is doing now, for Stats for nerds; null where there is no engine. */
-    fun enhanceStatus(): EnhanceStatus? = null
 
     // Listener management
     fun addListener(listener: MediaPlayerListener)

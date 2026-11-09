@@ -14,15 +14,12 @@ import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -63,7 +60,6 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.maxrave.domain.mediaservice.handler.RepeatState
-import com.maxrave.simpmusic.expect.ui.PlatformBackdrop
 import com.maxrave.simpmusic.extension.formatDuration
 import com.maxrave.simpmusic.ui.component.rememberHolderPainter
 import com.maxrave.simpmusic.ui.icon.KeyboardArrowDown
@@ -116,13 +112,10 @@ private val YtmRedProgress = Color(0xFFFF0000)
  * cover, title and artist, play/pause and next, and a thin white progress line along its bottom.
  * A tap opens the player. A horizontal swipe changes the track; a downward swipe stops playback
  * and puts the bar away.
- *
- * [backdrop] is unused; it stays in the signature for callers that still pass one.
  */
 @Composable
 fun MiniPlayer(
     modifier: Modifier,
-    backdrop: PlatformBackdrop? = null,
     sharedViewModel: SharedViewModel = koinInject(),
     onClose: () -> Unit,
     onClick: () -> Unit,

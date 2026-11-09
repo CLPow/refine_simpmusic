@@ -576,8 +576,6 @@ class LocalPlaylistViewModel(
 
     private var _listSetVideoId: MutableStateFlow<List<SetVideoIdEntity>?> =
         MutableStateFlow(null)
-    val listSetVideoId: StateFlow<List<SetVideoIdEntity>?> = _listSetVideoId
-
     fun getSetVideoId(youtubePlaylistId: String) {
         viewModelScope.launch {
             localPlaylistRepository.getYouTubeSetVideoId(youtubePlaylistId).collect {

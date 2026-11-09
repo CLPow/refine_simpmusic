@@ -9,41 +9,26 @@ import androidx.room.execSQL
 import androidx.room.useWriterConnection
 import com.maxrave.domain.data.entities.AlbumEntity
 import com.maxrave.domain.data.entities.ArtistEntity
-import com.maxrave.domain.data.entities.AutoEqCurveEntity
-import com.maxrave.domain.data.entities.AutoEqEntryEntity
-import com.maxrave.domain.data.entities.AutoEqIndexMetaEntity
-import com.maxrave.domain.data.entities.EpisodeEntity
-import com.maxrave.domain.data.entities.FollowedArtistSingleAndAlbum
 import com.maxrave.domain.data.entities.GoogleAccountEntity
 import com.maxrave.domain.data.entities.LocalPlaylistEntity
 import com.maxrave.domain.data.entities.LyricsEntity
 import com.maxrave.domain.data.entities.NewFormatEntity
-import com.maxrave.domain.data.entities.NotificationEntity
 import com.maxrave.domain.data.entities.PairSongLocalPlaylist
 import com.maxrave.domain.data.entities.PlaylistEntity
-import com.maxrave.domain.data.entities.PodcastsEntity
 import com.maxrave.domain.data.entities.QueueEntity
 import com.maxrave.domain.data.entities.SearchHistory
 import com.maxrave.domain.data.entities.SetVideoIdEntity
 import com.maxrave.domain.data.entities.SongEntity
 import com.maxrave.domain.data.entities.SongInfoEntity
-import com.maxrave.domain.data.entities.TranslatedLyricsEntity
 import com.maxrave.domain.data.entities.YourYouTubePlaylistList
-import com.maxrave.domain.data.entities.analytics.EventArtistEntity
-import com.maxrave.domain.data.entities.analytics.PlaybackEventEntity
-import com.maxrave.domain.data.entities.sync.SyncTombstoneEntity
 
 @Database(
     entities = [
-        SyncTombstoneEntity::class,
         NewFormatEntity::class, SongInfoEntity::class, SearchHistory::class, SongEntity::class, ArtistEntity::class,
         AlbumEntity::class, PlaylistEntity::class, LocalPlaylistEntity::class, LyricsEntity::class, QueueEntity::class,
-        SetVideoIdEntity::class, PairSongLocalPlaylist::class, GoogleAccountEntity::class, FollowedArtistSingleAndAlbum::class,
-        NotificationEntity::class, TranslatedLyricsEntity::class, PodcastsEntity::class, EpisodeEntity::class,
-        YourYouTubePlaylistList::class, PlaybackEventEntity::class, EventArtistEntity::class,
-        AutoEqEntryEntity::class, AutoEqIndexMetaEntity::class, AutoEqCurveEntity::class
+        SetVideoIdEntity::class, PairSongLocalPlaylist::class, GoogleAccountEntity::class, YourYouTubePlaylistList::class,
     ],
-    version = 30,
+    version = 31,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 2, to = 3), AutoMigration(
@@ -96,6 +81,7 @@ import com.maxrave.domain.data.entities.sync.SyncTombstoneEntity
         // 30 adds GoogleAccountEntity.authUser (NOT NULL, SQL default 0), nothing else
         // (upstream's 26; this fork's 26-29 were already taken).
         AutoMigration(29, 30),
+        AutoMigration(30, 31, spec = AutoMigration30_31::class),
     ],
 )
 @TypeConverters(Converters::class)

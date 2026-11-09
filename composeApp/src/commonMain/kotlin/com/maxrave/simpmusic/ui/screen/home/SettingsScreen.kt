@@ -45,7 +45,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil3.compose.LocalPlatformContext
 import com.maxrave.common.QUALITY
-import com.maxrave.common.SUPPORTED_LANGUAGE
 import com.maxrave.common.SUPPORTED_LOCATION
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.repository.AccountRepository
@@ -62,7 +61,6 @@ import com.maxrave.simpmusic.getPlatform
 import com.maxrave.simpmusic.ui.component.ytm.Ytm
 import com.maxrave.simpmusic.ui.component.ytm.YtmTopBar
 import com.maxrave.simpmusic.ui.navigation.destination.home.SettingsCategoryDestination
-import com.maxrave.simpmusic.ui.navigation.destination.home.SoundSettingsDestination
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.SettingsViewModel
@@ -81,7 +79,6 @@ import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.audio_quality
 import simpmusic.composeapp.generated.resources.cancel
 import simpmusic.composeapp.generated.resources.ytm_about
-import simpmusic.composeapp.generated.resources.ytm_app_language
 import simpmusic.composeapp.generated.resources.ytm_app_version
 import simpmusic.composeapp.generated.resources.ytm_autoplay
 import simpmusic.composeapp.generated.resources.ytm_autoplay_summary
@@ -93,9 +90,6 @@ import simpmusic.composeapp.generated.resources.ytm_allow_external_start
 import simpmusic.composeapp.generated.resources.ytm_allow_external_start_summary
 import simpmusic.composeapp.generated.resources.ytm_stream_wifi_only
 import simpmusic.composeapp.generated.resources.ytm_stream_wifi_only_summary
-import simpmusic.composeapp.generated.resources.ytm_translate_lyrics
-import simpmusic.composeapp.generated.resources.ytm_translate_lyrics_summary
-import simpmusic.composeapp.generated.resources.ytm_translation_language
 import simpmusic.composeapp.generated.resources.ytm_cache
 import simpmusic.composeapp.generated.resources.ytm_clear
 import simpmusic.composeapp.generated.resources.ytm_clear_cache
@@ -138,8 +132,6 @@ import simpmusic.composeapp.generated.resources.ytm_privacy
 import simpmusic.composeapp.generated.resources.ytm_restricted_mode
 import simpmusic.composeapp.generated.resources.ytm_restricted_mode_summary
 import simpmusic.composeapp.generated.resources.ytm_settings
-import simpmusic.composeapp.generated.resources.ytm_sound
-import simpmusic.composeapp.generated.resources.ytm_sound_summary
 import simpmusic.composeapp.generated.resources.ytm_share_crash_log
 import simpmusic.composeapp.generated.resources.ytm_share_crash_log_summary
 import simpmusic.composeapp.generated.resources.ytm_source_code
@@ -201,7 +193,6 @@ fun SettingScreen(
     LaunchedEffect(Unit) { viewModel.getData() }
     val platformContext = LocalPlatformContext.current
     val scope = rememberCoroutineScope()
-    val language by viewModel.language.collectAsStateWithLifecycle()
     val location by viewModel.location.collectAsStateWithLifecycle()
     val quality by viewModel.quality.collectAsStateWithLifecycle()
     val downloadQuality by viewModel.downloadQuality.collectAsStateWithLifecycle()
@@ -210,18 +201,15 @@ fun SettingScreen(
     val cacheSize by viewModel.cacheSize.collectAsStateWithLifecycle()
     val downloadedSize by viewModel.downloadedCacheSize.collectAsStateWithLifecycle()
     val autoplay by dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }.collectAsStateWithLifecycle(false)
-    val translateLyrics by viewModel.useTranslation.collectAsStateWithLifecycle()
     val qualityMobile by dataStoreManager.qualityMobile.collectAsStateWithLifecycle(null)
     val streamOverWifiOnly by dataStoreManager.streamOverWifiOnly.collectAsStateWithLifecycle(false)
     val doubleTapSeekSeconds by dataStoreManager.doubleTapSeekSeconds.collectAsStateWithLifecycle(10)
     val allowExternalStart by dataStoreManager.allowExternalStartPlayback.collectAsStateWithLifecycle(true)
-    val translationLanguage by viewModel.translationLanguage.collectAsStateWithLifecycle()
     val signInExpired by accountRepository.signInExpired.collectAsStateWithLifecycle()
     var choice by remember { mutableStateOf<ChoiceDialog?>(null) }
     var confirm by remember { mutableStateOf<ConfirmDialog?>(null) }
     var showLicenses by remember { mutableStateOf(false) }
 
-    val appLanguage = stringResource(Res.string.ytm_app_language)
     val locationTitle = stringResource(Res.string.ytm_location)
     val audioQuality = stringResource(Res.string.audio_quality)
     val audioQualityWifi = stringResource(Res.string.ytm_audio_quality_wifi)
@@ -235,7 +223,6 @@ fun SettingScreen(
     val clearHistoryConfirm = stringResource(Res.string.ytm_clear_history_confirm)
     val clearHistoryConfirmBody = stringResource(Res.string.ytm_clear_history_confirm_body)
     val shareCrashLog = stringResource(Res.string.ytm_share_crash_log)
-    val translationLanguageTitle = stringResource(Res.string.ytm_translation_language)
 
     Column(Modifier.fillMaxSize().background(Ytm.Background)) {
         YtmTopBar(navController = navController, title = stringResource(category.title), onBack = { navController.navigateUp() }, showActions = false)
@@ -247,24 +234,6 @@ fun SettingScreen(
                         summary = stringResource(Res.string.ytm_restricted_mode_summary),
                         checked = !explicit,
                     ) { viewModel.setExplicitContentEnabled(!it) }
-                    SettingRow(
-                        title = appLanguage,
-                        summary = SUPPORTED_LANGUAGE.getLanguageFromCode(language ?: "en-US"),
-                    ) {
-                        val names = SUPPORTED_LANGUAGE.items.map { it.toString() }
-                        choice =
-                            ChoiceDialog(
-                                title = appLanguage,
-                                options = names,
-                                selected = names.indexOf(SUPPORTED_LANGUAGE.getLanguageFromCode(language ?: "en-US")),
-                            ) { index ->
-                                // Recreate only once the new language is saved, or the new
-                                // activity can come up in the old one.
-                                viewModel.changeLanguage(SUPPORTED_LANGUAGE.getCodeFromLanguage(names[index])) {
-                                    sharedViewModel.activityRecreate()
-                                }
-                            }
-                    }
                     SettingRow(title = locationTitle, summary = location.orEmpty()) {
                         val codes = SUPPORTED_LOCATION.items.map { it.toString() }
                         choice =
@@ -304,9 +273,6 @@ fun SettingScreen(
                     }
                 }
                 SettingsCategory.Playback -> {
-                    SettingRow(title = stringResource(Res.string.ytm_sound), summary = stringResource(Res.string.ytm_sound_summary)) {
-                        navController.navigate(SoundSettingsDestination) { launchSingleTop = true }
-                    }
                     SwitchRow(
                         title = stringResource(Res.string.ytm_autoplay),
                         summary = stringResource(Res.string.ytm_autoplay_summary),
@@ -326,26 +292,6 @@ fun SettingScreen(
                             summary = stringResource(Res.string.ytm_allow_external_start_summary),
                             checked = allowExternalStart,
                         ) { enabled -> scope.launch { dataStoreManager.setAllowExternalStartPlayback(enabled) } }
-                    }
-                    SwitchRow(
-                        title = stringResource(Res.string.ytm_translate_lyrics),
-                        summary = stringResource(Res.string.ytm_translate_lyrics_summary),
-                        checked = translateLyrics == DataStoreManager.TRUE,
-                    ) { viewModel.setUseTranslation(it) }
-                    if (translateLyrics == DataStoreManager.TRUE) {
-                        // Translations are stored per two-letter code, so regional variants
-                        // of one language collapse into a single choice.
-                        val languages =
-                            SUPPORTED_LANGUAGE.items
-                                .map { it.toString() }
-                                .distinctBy { SUPPORTED_LANGUAGE.getCodeFromLanguage(it).take(2) }
-                        val current = languages.find { SUPPORTED_LANGUAGE.getCodeFromLanguage(it).take(2) == translationLanguage }
-                        SettingRow(title = translationLanguageTitle, summary = current ?: translationLanguage.orEmpty()) {
-                            choice =
-                                ChoiceDialog(translationLanguageTitle, languages, languages.indexOf(current)) { index ->
-                                    viewModel.setTranslationLanguage(SUPPORTED_LANGUAGE.getCodeFromLanguage(languages[index]).take(2))
-                                }
-                        }
                     }
                 }
                 SettingsCategory.DataSaving -> {
@@ -532,7 +478,7 @@ private class ConfirmDialog(
 
 /** A YouTube Music settings row: title, grey summary, the whole row tappable. */
 @Composable
-internal fun SettingRow(
+private fun SettingRow(
     title: String,
     summary: String? = null,
     enabled: Boolean = true,
@@ -553,7 +499,7 @@ internal fun SettingRow(
 
 /** A settings row with a switch on the right; the row is the one switch for accessibility. */
 @Composable
-internal fun SwitchRow(
+private fun SwitchRow(
     title: String,
     summary: String?,
     checked: Boolean,

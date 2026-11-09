@@ -54,7 +54,7 @@ internal fun deriveOrderIndex(
  * What the player should do when the pager settles on a new page.
  *
  * - [Next] / [Previous] keep the existing crossfade flow on Android intact
- *   (CrossfadeExoPlayerAdapter relies on `player.next()` / `player.previous()`).
+ *   (ExoPlayerAdapter relies on `player.next()` / `player.previous()`).
  * - [Skip] jumps to a non-adjacent index via `playMediaItemInMediaSource`, which
  *   internally handles unshuffling.
  */

@@ -18,7 +18,6 @@ import com.maxrave.domain.data.model.browse.playlist.Author
 import com.maxrave.domain.data.model.browse.playlist.PlaylistBrowse
 import com.maxrave.domain.data.model.searchResult.playlists.PlaylistsResult
 import com.maxrave.domain.data.model.searchResult.songs.Thumbnail
-import com.maxrave.domain.data.type.ChartItem
 import com.maxrave.domain.data.type.PlaylistType
 import com.maxrave.domain.extension.now
 import com.maxrave.domain.manager.DataStoreManager
@@ -204,105 +203,6 @@ internal class PlaylistRepositoryImpl(
                 }
             }.flowOn(Dispatchers.IO)
         }
-
-    override fun getRDATRadioData(
-        radioId: String,
-        viewString: String,
-    ): Flow<Resource<Pair<PlaylistBrowse, String?>>> =
-        flow<Resource<Pair<PlaylistBrowse, String?>>> {
-            runCatching {
-                val id =
-                    if (radioId.startsWith("VL")) {
-                        radioId
-                    } else {
-                        "VL$radioId"
-                    }
-                youTube
-                    .customQuery(browseId = id, setLogin = true)
-                    .onSuccess { result ->
-                        val listContent: ArrayList<MusicShelfRenderer.Content> = arrayListOf()
-                        val data: List<MusicShelfRenderer.Content>? =
-                            result.contents
-                                ?.singleColumnBrowseResultsRenderer
-                                ?.tabs
-                                ?.get(
-                                    0,
-                                )?.tabRenderer
-                                ?.content
-                                ?.sectionListRenderer
-                                ?.contents
-                                ?.get(
-                                    0,
-                                )?.musicPlaylistShelfRenderer
-                                ?.contents
-                                ?: result.contents
-                                    ?.twoColumnBrowseResultsRenderer
-                                    ?.secondaryContents
-                                    ?.sectionListRenderer
-                                    ?.contents
-                                    ?.get(0)
-                                    ?.musicPlaylistShelfRenderer
-                                    ?.contents
-                        if (data != null) {
-                            Logger.d("Data", "data: $data")
-                            Logger.d("Data", "data size: ${data.size}")
-                            listContent.addAll(data)
-                        }
-                        val header =
-                            result.header?.musicDetailHeaderRenderer
-                                ?: result.header?.musicEditablePlaylistDetailHeaderRenderer
-                                ?: result.contents
-                                    ?.twoColumnBrowseResultsRenderer
-                                    ?.tabs
-                                    ?.get(0)
-                                    ?.tabRenderer
-                                    ?.content
-                                    ?.sectionListRenderer
-                                    ?.contents
-                                    ?.get(0)
-                                    ?.musicResponsiveHeaderRenderer
-                                ?: result.contents
-                                    ?.twoColumnBrowseResultsRenderer
-                                    ?.tabs
-                                    ?.get(0)
-                                    ?.tabRenderer
-                                    ?.content
-                                    ?.sectionListRenderer
-                                    ?.contents
-                                    ?.get(0)
-                                    ?.musicEditablePlaylistDetailHeaderRenderer
-                                    ?.header
-                                    ?.musicResponsiveHeaderRenderer
-                        Logger.d("Header", "header: $header")
-                        val finalContinueParam =
-                            result.getPlaylistContinuation()
-                        Logger.d("Repository", "playlist data: ${listContent.size}")
-                        Logger.d("Repository", "continueParam: $finalContinueParam")
-//                        else {
-//                            var listTrack = playlistBrowse.tracks.toMutableList()
-                        Logger.d("Repository", "playlist final data: ${listContent.size}")
-                        if (finalContinueParam != null) {
-                            parsePlaylistData(header, listContent, radioId, viewString)?.let { playlist ->
-                                emit(
-                                    Resource.Success(
-                                        Pair(
-                                            playlist.copy(
-                                                author = Author("", "YouTube Music"),
-                                            ),
-                                            finalContinueParam,
-                                        ),
-                                    ),
-                                )
-                            } ?: emit(Resource.Error("Can't parse data"))
-                        } else {
-                            emit(Resource.Error("Continue param is null"))
-                        }
-                    }.onFailure { e ->
-                        Logger.e("Playlist Data", e.message ?: "Error")
-                        emit(Resource.Error(e.message.toString()))
-                    }
-            }
-        }.flowOn(Dispatchers.IO)
 
     override fun getFullPlaylistData(
         playlistId: String,
@@ -770,23 +670,102 @@ internal class PlaylistRepositoryImpl(
             emit(localDataSource.getYourYouTubePlaylistList(emailPageId))
         }.flowOn(Dispatchers.IO)
 
-    override fun getChartPlaylist(): Flow<Resource<List<ChartItem>>> =
-        flow {
-            youTube
-                .getSimpMusicChart()
-                .onSuccess { response ->
-                    val data = response.data?.filterNotNull() ?: emptyList()
-                    val result =
-                        data.mapNotNull {
-                            ChartItem(
-                                name = it.name ?: return@mapNotNull null,
-                                ytPlaylistId = it.youtubePlaylistId ?: return@mapNotNull null,
-                            )
+    private fun getRDATRadioData(
+        radioId: String,
+        viewString: String,
+    ): Flow<Resource<Pair<PlaylistBrowse, String?>>> =
+        flow<Resource<Pair<PlaylistBrowse, String?>>> {
+            runCatching {
+                val id =
+                    if (radioId.startsWith("VL")) {
+                        radioId
+                    } else {
+                        "VL$radioId"
+                    }
+                youTube
+                    .customQuery(browseId = id, setLogin = true)
+                    .onSuccess { result ->
+                        val listContent: ArrayList<MusicShelfRenderer.Content> = arrayListOf()
+                        val data: List<MusicShelfRenderer.Content>? =
+                            result.contents
+                                ?.singleColumnBrowseResultsRenderer
+                                ?.tabs
+                                ?.get(
+                                    0,
+                                )?.tabRenderer
+                                ?.content
+                                ?.sectionListRenderer
+                                ?.contents
+                                ?.get(
+                                    0,
+                                )?.musicPlaylistShelfRenderer
+                                ?.contents
+                                ?: result.contents
+                                    ?.twoColumnBrowseResultsRenderer
+                                    ?.secondaryContents
+                                    ?.sectionListRenderer
+                                    ?.contents
+                                    ?.get(0)
+                                    ?.musicPlaylistShelfRenderer
+                                    ?.contents
+                        if (data != null) {
+                            Logger.d("Data", "data: $data")
+                            Logger.d("Data", "data size: ${data.size}")
+                            listContent.addAll(data)
                         }
-                    emit(Resource.Success(result))
-                }.onFailure { exception ->
-                    exception.printStackTrace()
-                    emit(Resource.Error<List<ChartItem>>(exception.message ?: "Unknown error"))
-                }
+                        val header =
+                            result.header?.musicDetailHeaderRenderer
+                                ?: result.header?.musicEditablePlaylistDetailHeaderRenderer
+                                ?: result.contents
+                                    ?.twoColumnBrowseResultsRenderer
+                                    ?.tabs
+                                    ?.get(0)
+                                    ?.tabRenderer
+                                    ?.content
+                                    ?.sectionListRenderer
+                                    ?.contents
+                                    ?.get(0)
+                                    ?.musicResponsiveHeaderRenderer
+                                ?: result.contents
+                                    ?.twoColumnBrowseResultsRenderer
+                                    ?.tabs
+                                    ?.get(0)
+                                    ?.tabRenderer
+                                    ?.content
+                                    ?.sectionListRenderer
+                                    ?.contents
+                                    ?.get(0)
+                                    ?.musicEditablePlaylistDetailHeaderRenderer
+                                    ?.header
+                                    ?.musicResponsiveHeaderRenderer
+                        Logger.d("Header", "header: $header")
+                        val finalContinueParam =
+                            result.getPlaylistContinuation()
+                        Logger.d("Repository", "playlist data: ${listContent.size}")
+                        Logger.d("Repository", "continueParam: $finalContinueParam")
+//                        else {
+//                            var listTrack = playlistBrowse.tracks.toMutableList()
+                        Logger.d("Repository", "playlist final data: ${listContent.size}")
+                        if (finalContinueParam != null) {
+                            parsePlaylistData(header, listContent, radioId, viewString)?.let { playlist ->
+                                emit(
+                                    Resource.Success(
+                                        Pair(
+                                            playlist.copy(
+                                                author = Author("", "YouTube Music"),
+                                            ),
+                                            finalContinueParam,
+                                        ),
+                                    ),
+                                )
+                            } ?: emit(Resource.Error("Can't parse data"))
+                        } else {
+                            emit(Resource.Error("Continue param is null"))
+                        }
+                    }.onFailure { e ->
+                        Logger.e("Playlist Data", e.message ?: "Error")
+                        emit(Resource.Error(e.message.toString()))
+                    }
+            }
         }.flowOn(Dispatchers.IO)
 }

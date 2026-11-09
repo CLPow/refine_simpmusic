@@ -129,7 +129,7 @@ version-code = "121"
 3. Booming Home must use the **same YouTube Music shelves** as classic (no invented or duplicated sections).  
 4. **Remove India** from location list **and** chart country list.  
 5. **Sync backup** from phone into desktop (`~/.simpmusic/`).  
-6. **Lyrics phone:** keep lyrics in **normal** Now Playing **and** **fullscreen** (tabs: All / Original / Translation / Romanized).  
+6. **Lyrics phone:** keep lyrics in **normal** Now Playing **and** **fullscreen** (no translation or romanization; removed in 2.3.10).  
 7. **Lyrics Android Auto:** title + real artist visible; lyric in artist/subtitle row; **must stay alive for the entire drive** (not die after ~1.5 songs).  
 8. **Shuffle / repeat** icons on AA must reflect and stick to actual state when tapped.  
 9. **Notification / widget** must show **title + artist**, not the lyric as artist.  
@@ -268,7 +268,7 @@ Trap that caused empty/stuck home: `combine()` waiting for all sources; `runCatc
 
 ### 7.5 Phone player / lyrics
 - Lyrics card + inline line **restored** in `NowPlayingContentSpotify` (user: phone needs lyrics).  
-- Fullscreen: `LyricsTabBar` All / Original / Translation / Romanized.  
+- Fullscreen: `LyricsTabBar` (removed; lyrics are original text only since 2.3.10).  
 - Import text lyrics: DownloadForOffline icon → dialog → `SharedViewModel.importTextLyrics` → `LyricsEntity(UNSYNCED)`.  
 - Album/Playlist desktop headers: 320dp art, `headlineLarge` bold title.  
 - Apple Music renderer: `AppleMusicLyricsView` / `AppleMusicShared` / `NowPlayingContent` applemusic package.  

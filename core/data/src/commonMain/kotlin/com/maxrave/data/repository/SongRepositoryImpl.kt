@@ -23,7 +23,6 @@ import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.repository.SongRepository
 import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.domain.utils.Resource
-import com.maxrave.domain.utils.isRadioQueueId
 import com.maxrave.data.mapping.toTrack
 import com.maxrave.kotlinytmusicscraper.YouTube
 import com.maxrave.kotlinytmusicscraper.models.SongItem
@@ -41,7 +40,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -102,9 +100,6 @@ internal class SongRepositoryImpl(
             )
         }.flowOn(Dispatchers.IO)
 
-    override fun getDownloadedVideoIdListFromListVideoIdAsFlow(listVideoId: List<String>) =
-        localDataSource.getDownloadedVideoIdListFromListVideoIdAsFlow(listVideoId)
-
     override fun getLikedSongs(): Flow<List<SongEntity>> =
         flow {
             emit(
@@ -114,36 +109,18 @@ internal class SongRepositoryImpl(
             )
         }.flowOn(Dispatchers.IO)
 
-    override suspend fun downloadAllLikedSongs(): Int =
-        withContext(Dispatchers.IO) {
-            val pending =
-                getFullDataFromDB { limit, offset ->
-                    localDataSource.getLikedSongs(limit, offset)
-                }.filter { it.downloadState != DownloadState.STATE_DOWNLOADED }
-            Logger.d(TAG, "Auto-download: queueing ${pending.size} liked songs")
-            pending.forEach { song ->
-                downloadHandler.downloadTrack(song.videoId, song.title, song.thumbnails.orEmpty())
-            }
-            pending.size
-        }
-
     /**
      * The order below is the whole feature.
      *
      * A song is orphaned only once nothing points at it, so every cached container has to go first —
      * sweeping songs on their own found zero to delete, because eleven thousand of them were held
-     * alive by playlists nobody prunes. Artists lead so the two tables keyed on `channelId` can be
-     * measured against what is still followed; podcasts, albums and playlists follow; songs last,
-     * then the satellite rows that were already orphaned before any of this ran.
+     * alive by playlists nobody prunes. Artists lead, then albums and playlists; songs last, then the
+     * satellite rows that were already orphaned before any of this ran.
      */
     override suspend fun clearHistoryAndOrphanedSongs(): Int =
         withContext(Dispatchers.IO) {
             persistLiveQueueBeforeSweep()
-            localDataSource.deleteAllPlaybackEvents()
             val artists = localDataSource.deleteUnfollowedArtists()
-            val notifications = localDataSource.deleteNotificationsOfUnfollowedArtists()
-            val artistReleases = localDataSource.deleteFollowedArtistReleasesOfUnfollowedArtists()
-            val podcasts = localDataSource.deleteUnfavoritedPodcasts()
             val albums = localDataSource.deleteUnreferencedAlbums()
             val playlists = localDataSource.deleteUnreferencedPlaylists()
             val orphans = localDataSource.getOrphanedSongIds()
@@ -152,8 +129,7 @@ internal class SongRepositoryImpl(
             Logger.d(
                 TAG,
                 "Clear history: removed $removed of ${orphans.size} candidate songs, " +
-                    "$artists artists, $notifications notifications, $artistReleases artist releases, " +
-                    "$podcasts podcasts, $albums albums, $playlists playlists, $satellites stale rows",
+                    "$artists artists, $albums albums, $playlists playlists, $satellites stale rows",
             )
             // Last, and outside every statement above: SQLite refuses VACUUM inside a transaction.
             // Without it the file stays fragmented and less space comes back than the user expects.
@@ -312,9 +288,6 @@ internal class SongRepositoryImpl(
             localDataSource.insertSongInfo(songInfo)
         }
 
-    override suspend fun getSongInfoEntity(videoId: String): Flow<SongInfoEntity?> =
-        flow { emit(localDataSource.getSongInfo(videoId)) }.flowOn(Dispatchers.IO)
-
     override suspend fun recoverQueue(
         temp: List<Track>,
         playlistType: String?,
@@ -325,10 +298,6 @@ internal class SongRepositoryImpl(
                 playlistType = playlistType,
             )
         withContext(Dispatchers.IO) { localDataSource.recoverQueue(queueEntity) }
-    }
-
-    override suspend fun removeQueue() {
-        withContext(Dispatchers.IO) { localDataSource.deleteQueue() }
     }
 
     override suspend fun getSavedQueue(): Flow<List<QueueEntity>?> =
@@ -509,17 +478,6 @@ internal class SongRepositoryImpl(
             emit(youTube.getLikedInfo(videoId).getOrNull() == LikeStatus.LIKE)
         }.flowOn(Dispatchers.IO)
 
-    override suspend fun getYouTubeRating(videoId: String): Flow<Int> =
-        flow {
-            emit(
-                when (youTube.getLikedInfo(videoId).getOrNull()) {
-                    LikeStatus.LIKE -> 1
-                    LikeStatus.DISLIKE -> -1
-                    else -> 0
-                },
-            )
-        }.flowOn(Dispatchers.IO)
-
     override suspend fun dislikeOnYouTube(mediaId: String?): Flow<Int> =
         flow {
             if (mediaId != null) {
@@ -648,6 +606,9 @@ internal class SongRepositoryImpl(
                 emit(Resource.Success<Pair<List<Track>, String?>>(Pair(next.items.songsOrOfficialVideos().toListTrack(), next.continuation)))
             }
         }.flowOn(Dispatchers.IO)
+
+    private fun getSongInfoEntity(videoId: String): Flow<SongInfoEntity?> =
+        flow { emit(localDataSource.getSongInfo(videoId)) }.flowOn(Dispatchers.IO)
 }
 
 // What a video title says inside quotes is the song: A2O MAY 'BAD HABITS TONITE' Official Video.

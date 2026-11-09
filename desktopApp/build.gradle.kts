@@ -46,7 +46,7 @@ version =
         .removeSuffix("-hf")
 
 kotlin {
-    // 21 matches :media-jvm-ui (requires 21+).
+    // JDK 21, the same toolchain as the rest of the desktop modules.
     jvmToolchain(21)
 
     // KMP jvm() target — Conveyor 2.0's writeConveyorConfig task looks up
@@ -83,10 +83,8 @@ kotlin {
                 implementation(libs.native.tray)
 
                 // Media player JVM UI primitives consumed by jvmMain expect/actuals.
-                implementation(projects.mediaJvmUi)
 
                 // Commons-IO drives the custom AppImage packaging task below.
-                implementation(libs.commons.io)
                 // org.json is bundled in the Android SDK but missing on JVM desktop; PipePipeExtractor
                 // references org.json.* so it must be provided explicitly here.
                 implementation(libs.org.json)

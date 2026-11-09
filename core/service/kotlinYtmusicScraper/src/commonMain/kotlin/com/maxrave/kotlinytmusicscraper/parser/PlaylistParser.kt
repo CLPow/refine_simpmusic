@@ -9,33 +9,6 @@ import com.maxrave.kotlinytmusicscraper.models.response.BrowseResponse
 import com.maxrave.kotlinytmusicscraper.models.response.LikeStatus
 import com.maxrave.logger.Logger
 
-fun BrowseResponse.fromPlaylistToTrack(): List<SongItem> =
-    (
-        (
-            this.contents
-                ?.singleColumnBrowseResultsRenderer
-                ?.tabs
-                ?: this.contents?.twoColumnBrowseResultsRenderer?.tabs
-        )?.firstOrNull()
-            ?.tabRenderer
-            ?.content
-            ?.sectionListRenderer
-            ?.contents
-            ?.firstOrNull()
-            ?.musicPlaylistShelfRenderer
-            ?.contents
-            ?: this.contents
-                ?.twoColumnBrowseResultsRenderer
-                ?.secondaryContents
-                ?.sectionListRenderer
-                ?.contents
-                ?.firstOrNull()
-                ?.musicPlaylistShelfRenderer
-                ?.contents
-    )?.mapNotNull { content ->
-        content.toSongItem()
-    } ?: emptyList()
-
 fun BrowseResponse.fromPlaylistToTrackWithSetVideoId(): List<Pair<SongItem, String>> =
     (
         (
@@ -64,21 +37,6 @@ fun BrowseResponse.fromPlaylistToTrackWithSetVideoId(): List<Pair<SongItem, Stri
             content.toSongItem() ?: return@mapNotNull null,
             content.toPlaylistItemData()?.playlistSetVideoId ?: return@mapNotNull null,
         )
-    } ?: emptyList()
-
-fun BrowseResponse.fromPlaylistContinuationToTracks(): List<SongItem> =
-    (
-        this.continuationContents
-            ?.musicPlaylistShelfContinuation
-            ?.contents
-            ?: this.continuationContents
-                ?.sectionListContinuation
-                ?.contents
-                ?.firstOrNull()
-                ?.musicShelfRenderer
-                ?.contents
-    )?.mapNotNull { contents ->
-        contents.toSongItem()
     } ?: emptyList()
 
 /**

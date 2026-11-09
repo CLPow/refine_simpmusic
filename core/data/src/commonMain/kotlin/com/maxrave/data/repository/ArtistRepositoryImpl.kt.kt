@@ -3,9 +3,6 @@ package com.maxrave.data.repository
 import com.maxrave.data.db.datasource.LocalDataSource
 import com.maxrave.data.extension.getFullDataFromDB
 import com.maxrave.data.parser.parseArtistData
-import com.maxrave.data.parser.subscribedArtistsContinuation
-import com.maxrave.data.parser.toSubscribedArtists
-import com.maxrave.data.parser.toSubscribedArtistsContinuationPage
 import com.maxrave.domain.data.entities.ArtistEntity
 import com.maxrave.domain.data.model.browse.artist.ArtistBrowse
 import com.maxrave.domain.repository.ArtistRepository
@@ -75,10 +72,6 @@ internal class ArtistRepositoryImpl(
     ): Boolean? =
         withContext(Dispatchers.Main) {
             localDataSource.updateFollowed(followedStatus, channelId)
-            if (followedStatus == 0) {
-                localDataSource.deleteNotificationsByChannelId(channelId)
-                localDataSource.deleteFollowedArtistSingleAndAlbum(channelId)
-            }
             // The local flag is already written above and stays written: Follow must not depend
             // on the network. Mirroring is opt-in, and its outcome is handed back rather than
             // swallowed so the caller can say something when the account could not be reached.
@@ -89,76 +82,6 @@ internal class ArtistRepositoryImpl(
                 setSubscription(channelId, followedStatus == 1)
             }
         }
-
-    override fun syncFollowedArtistsToYouTube(): Flow<Pair<Int, Int>> =
-        flow {
-            val followed =
-                getFullDataFromDB { limit, offset ->
-                    localDataSource.getFollowedArtists(limit, offset)
-                }
-            // Sequential on purpose. These are writes to someone's account, and firing a few
-            // hundred of them at once is exactly the shape that gets a session rate-limited.
-            var done = 0
-            followed.forEach { artist ->
-                if (setSubscription(artist.channelId, true)) done++
-            }
-            emit(done to followed.size)
-        }.flowOn(Dispatchers.IO)
-
-    override fun syncFollowedArtistsFromYouTube(): Flow<Pair<Int, Int>> =
-        flow {
-            val found = linkedMapOf<String, ArtistEntity>()
-
-            val first =
-                youTube
-                    .customQuery(browseId = LIBRARY_SUBSCRIPTIONS_BROWSE_ID)
-                    .onFailure {
-                        Logger.w("ArtistRepositoryImpl", "Could not read subscriptions: ${it.message}")
-                    }.getOrNull()
-                    ?: run {
-                        emit(0 to 0)
-                        return@flow
-                    }
-
-            first.toSubscribedArtists().forEach { found[it.channelId] = it }
-
-            // Subscription lists run to hundreds of channels, so the first page is rarely all of
-            // it. Bounded rather than `while (continuation != null)`: a token that kept returning
-            // itself would otherwise spin forever against someone's account.
-            var continuation = first.subscribedArtistsContinuation()
-            var page = 0
-            while (continuation != null && page < MAX_SUBSCRIPTION_PAGES) {
-                val next =
-                    youTube
-                        .customQuery(browseId = null, continuation = continuation)
-                        .getOrNull()
-                        ?: break
-                val (artists, token) = next.toSubscribedArtistsContinuationPage()
-                if (artists.isEmpty() && token == null) break
-                artists.forEach { found[it.channelId] = it }
-                continuation = token
-                page++
-            }
-
-            // Insert only what is missing. `insertArtist` replaces on conflict, so writing over an
-            // existing row would discard the cached name-logo, its colour and the original
-            // inLibrary timestamp for an artist the user already had here.
-            var newlyFollowed = 0
-            found.values.forEach { artist ->
-                val existing = localDataSource.getArtist(artist.channelId)
-                when {
-                    existing == null -> {
-                        localDataSource.insertArtist(artist)
-                        newlyFollowed++
-                    }
-                    !existing.followed -> {
-                        localDataSource.updateFollowed(1, artist.channelId)
-                        newlyFollowed++
-                    }
-                }
-            }
-            emit(newlyFollowed to found.size)
-        }.flowOn(Dispatchers.IO)
 
     /** One subscribe/unsubscribe call, logged on failure. Returns whether the account was updated. */
     private suspend fun setSubscription(

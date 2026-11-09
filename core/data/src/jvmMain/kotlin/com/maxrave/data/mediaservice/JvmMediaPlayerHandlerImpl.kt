@@ -1,6 +1,5 @@
 package com.maxrave.data.mediaservice
 
-import com.maxrave.domain.audio.TrackInfo
 import com.maxrave.domain.mediaservice.handler.playerErrorAction
 import com.maxrave.domain.mediaservice.handler.WIFI_ONLY_ERROR_CODE_NAME
 import com.maxrave.domain.mediaservice.handler.PlayerErrorAction
@@ -57,7 +56,6 @@ import com.maxrave.domain.mediaservice.handler.SleepTimerState
 import com.maxrave.domain.mediaservice.handler.ToastType
 import com.maxrave.domain.mediaservice.player.MediaPlayerInterface
 import com.maxrave.domain.mediaservice.player.MediaPlayerListener
-import com.maxrave.domain.repository.AnalyticsRepository
 import com.maxrave.domain.repository.LocalPlaylistRepository
 import com.maxrave.domain.repository.SongRepository
 import com.maxrave.domain.repository.StreamRepository
@@ -73,7 +71,6 @@ import com.maxrave.logger.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -97,13 +94,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import org.koin.mp.KoinPlatform.getKoin
 import org.simpmusic.nowplayingcenter.NPYC
 import org.simpmusic.nowplayingcenter.domain.NowPlayingListener
 import org.simpmusic.nowplayingcenter.domain.Platform
-import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.pow
@@ -118,7 +113,6 @@ class JvmMediaPlayerHandlerImpl(
     private val songRepository: SongRepository,
     private val streamRepository: StreamRepository,
     private val localPlaylistRepository: LocalPlaylistRepository,
-    private val analyticsRepository: AnalyticsRepository,
     private val coroutineScope: CoroutineScope,
 ) : MediaPlayerHandler,
     MediaPlayerListener {
@@ -210,7 +204,6 @@ class JvmMediaPlayerHandlerImpl(
                 isLiked = false,
                 isNextAvailable = player.hasNextMediaItem(),
                 isPreviousAvailable = player.hasPreviousMediaItem(),
-                isCrossfading = false,
                 volume = player.volume,
             ),
         )
@@ -267,7 +260,6 @@ class JvmMediaPlayerHandlerImpl(
         )
     }
 
-    private var volumeNormalizationJob: Job? = null
 
     private var sleepTimerJob: Job? = null
 
@@ -330,7 +322,6 @@ class JvmMediaPlayerHandlerImpl(
         progressJob = Job()
         bufferedJob = Job()
         sleepTimerJob = Job()
-        volumeNormalizationJob = Job()
         updateNotificationJob = Job()
         toggleLikeJob = Job()
         loadJob = Job()
@@ -338,10 +329,6 @@ class JvmMediaPlayerHandlerImpl(
         getSkipSegmentsJob = Job()
         getFormatJob = Job()
         skipSilent = runBlocking { dataStoreManager.skipSilent.first() == TRUE }
-        // Collected, not read once: the Sound page changes these while music plays.
-        backgroundScope.launch {
-            dataStoreManager.enhanceSettings.distinctUntilChanged().collect { player.setEnhance(it) }
-        }
         _nowPlaying.value = player.currentMediaItem
         if (runBlocking { dataStoreManager.saveStateOfPlayback.first() } == TRUE) {
             Logger.d(TAG, "SaveStateOfPlayback TRUE")
@@ -1154,7 +1141,6 @@ class JvmMediaPlayerHandlerImpl(
     override fun resetCrossfade() {
         _controlState.update {
             it.copy(
-                isCrossfading = false,
             )
         }
     }
@@ -1506,15 +1492,6 @@ class JvmMediaPlayerHandlerImpl(
                 data = queueData,
             )
         }
-        // Snapshot which tracks came from the album, for the crossfade rule. Taken at load time
-        // because endless queue appends to this same queue afterwards, and those additions are not
-        // album tracks — that boundary is exactly where crossfade should resume.
-        player.albumTrackIds =
-            if (queueData.playlistType == PlaylistType.ALBUM) {
-                queueData.listTracks.map { it.videoId }.toSet()
-            } else {
-                emptySet()
-            }
         Logger.w(TAG, "setQueueData: $queueData")
     }
 
@@ -2141,40 +2118,6 @@ class JvmMediaPlayerHandlerImpl(
         }
     }
 
-    /**
-     * Publishes YouTube's loudness and format for the track now playing *and* the next one, so the
-     * engine's normalization has the incoming track's gain before a crossfade or gapless change
-     * reaches it. Whether loudness is used is the engine's business ("Enhance audio" › Normalize
-     * volume), so this runs on every track whatever the settings.
-     */
-    override fun publishTrackInfo() {
-        val current = player.currentMediaItem?.mediaId ?: return
-        val next =
-            if (player.shuffleModeEnabled) null else player.getMediaItemAt(player.currentMediaItemIndex + 1)?.mediaId
-        volumeNormalizationJob?.cancel()
-        volumeNormalizationJob =
-            coroutineScope.launch {
-                listOfNotNull(current, next).distinct().forEach { mediaId ->
-                    launch {
-                        streamRepository
-                            .getFormatFlow(mediaId.removePrefix("Video"))
-                            .cancellable()
-                            .distinctUntilChanged()
-                            .collectLatest { format ->
-                                player.setTrackInfo(
-                                    mediaId,
-                                    TrackInfo(
-                                        loudnessDb = format?.loudnessDb?.toFloat(),
-                                        itag = format?.itag,
-                                        bitrateKbps = format?.bitrate?.takeIf { it > 0 }?.let { it / 1000 },
-                                    ),
-                                )
-                            }
-                    }
-                }
-            }
-    }
-
     override fun mayBeSavePlaybackState() {
         if (runBlocking { dataStoreManager.saveStateOfPlayback.first() } == TRUE) {
             runBlocking {
@@ -2290,8 +2233,6 @@ class JvmMediaPlayerHandlerImpl(
             bufferedJob = null
             sleepTimerJob?.cancel()
             sleepTimerJob = null
-            volumeNormalizationJob?.cancel()
-            volumeNormalizationJob = null
             toggleLikeJob?.cancel()
             toggleLikeJob = null
             updateNotificationJob?.cancel()
@@ -2396,13 +2337,8 @@ class JvmMediaPlayerHandlerImpl(
         reason: Int,
     ) {
         Logger.w(TAG, "Checking current state before transition ${simpleMediaState.value}")
-        val lastPlayed = nowPlayingState.value.songEntity
-        val currentState = simpleMediaState.value
-        if (currentState is SimpleMediaState.Progress && lastPlayed != null && lastPlayed.durationSeconds > 0) {
-            mayBeTrackingListeningLocal(lastPlayed, currentState.progress)
-        }
         Logger.w(TAG, "Smooth Switching Transition Current Position: ${player.currentPosition}")
-        publishTrackInfo()
+        player.volume = 1f
         Logger.w(TAG, "REASON onMediaItemTransition: $reason")
         Logger.d(TAG, "Media Item Transition Media Item: ${mediaItem?.metadata?.title}")
         if (mediaItem?.mediaId != _nowPlaying.value?.mediaId) {
@@ -2439,40 +2375,6 @@ class JvmMediaPlayerHandlerImpl(
             resetCrossfade()
         }
         mayBeSaveRecentSong()
-    }
-
-    private fun mayBeTrackingListeningLocal(
-        song: SongEntity,
-        currentPositionMillis: Long,
-    ) {
-        coroutineScope.launch {
-            val trackingEnabled = dataStoreManager.localTrackingEnabled.first() == TRUE
-            if (!trackingEnabled) {
-                return@launch
-            }
-            val percent = (currentPositionMillis / (song.durationSeconds * 1000f))
-            Logger.w(TAG, "${song.title} - $currentPositionMillis ms listened, duration: ${song.durationSeconds * 1000} ms, percent: $percent")
-            if (percent < 0.2f) {
-                Logger.d(TAG, "Not enough listening time for ${song.title}, skipping tracking")
-                return@launch
-            }
-            Logger.d(TAG, "Tracking listening for ${song.title} at position $currentPositionMillis ms")
-            analyticsRepository
-                .insertPlaybackEvent(
-                    videoId = song.videoId,
-                    channelIds = song.artistId ?: emptyList(),
-                    albumBrowseId = song.albumId,
-                    durationSecond = song.durationSeconds.toLong(),
-                    listenedSecond =
-                        if (percent >= 0.8f) {
-                            song.durationSeconds.toLong()
-                        } else {
-                            (currentPositionMillis / 1000)
-                        },
-                ).collect {
-                    Logger.d(TAG, "Inserted playback event for ${song.title}: $it")
-                }
-        }
     }
 
     override fun onTracksChanged(tracks: GenericTracks) {
@@ -2516,12 +2418,6 @@ class JvmMediaPlayerHandlerImpl(
         }
         reorderShuffledQueue(list)
         updateNextPreviousTrackAvailability()
-    }
-
-    override fun onCrossfadeStateChanged(isCrossfading: Boolean) {
-        _controlState.update {
-            it.copy(isCrossfading = isCrossfading)
-        }
     }
 
     override fun onTimelineChanged(

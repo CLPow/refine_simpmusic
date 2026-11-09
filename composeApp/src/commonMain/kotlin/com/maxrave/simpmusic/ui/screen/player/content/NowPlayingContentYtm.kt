@@ -86,7 +86,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -109,10 +108,8 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
-import com.maxrave.common.Config
 import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
-import com.maxrave.domain.mediaservice.handler.PlaylistType
 import com.maxrave.domain.mediaservice.handler.QueueData
 import com.maxrave.domain.mediaservice.handler.RepeatState
 import com.maxrave.domain.repository.SongRepository
@@ -143,7 +140,6 @@ import com.maxrave.simpmusic.ui.icon.SkipPrevious
 import com.maxrave.simpmusic.ui.icon.ThumbUp
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.LyricsProvider
-import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.lastOrNull
@@ -1094,19 +1090,6 @@ private fun LyricsTab(
     val synced = data.lyrics.syncType != null && data.lyrics.syncType != "UNSYNCED"
     val timeline = state.timelineFlow.collectAsState()
     val starts = remember(lines) { lines.map { it.startTimeMs.toLongOrNull() ?: 0L } }
-    // Present only when translation is on in Settings. Matched to the original by start time,
-    // or by position when the translation carries no usable times.
-    val translatedLines = data.translatedLyrics?.first?.lines.orEmpty()
-    val translations =
-        remember(lines, translatedLines) {
-            val byStart = translatedLines.associateBy { it.startTimeMs }
-            lines.mapIndexed { index, line ->
-                (byStart[line.startTimeMs] ?: translatedLines.getOrNull(index)?.takeIf { translatedLines.size == lines.size })
-                    ?.words
-                    ?.stripRichSyncTimestamps()
-                    ?.takeIf { it.isNotBlank() && it.trim() != line.words.stripRichSyncTimestamps().trim() }
-            }
-        }
     // The sung line, recomputed per tick but only read (and recomposed) when it changes.
     val active by remember(starts, synced) {
         derivedStateOf {
@@ -1170,14 +1153,6 @@ private fun LyricsTab(
                     style = typo().headlineSmall.copy(fontSize = 24.sp, lineHeight = 32.sp, fontWeight = FontWeight.Bold),
                     color = Color.White.copy(alpha = alpha),
                 )
-                translations.getOrNull(index)?.let { translated ->
-                    Text(
-                        text = translated,
-                        style = typo().bodyLarge.copy(fontSize = 17.sp, lineHeight = 24.sp),
-                        color = Color.White.copy(alpha = alpha * 0.7f),
-                        modifier = Modifier.padding(top = 2.dp),
-                    )
-                }
             }
         }
         item(key = "source") {

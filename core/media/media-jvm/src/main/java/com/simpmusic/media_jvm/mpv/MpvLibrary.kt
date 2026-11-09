@@ -1,13 +1,10 @@
 package com.simpmusic.media_jvm.mpv
 
 import com.maxrave.logger.Logger
-import com.sun.jna.Callback
 import com.sun.jna.Library
-import com.sun.jna.Memory
 import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
-import com.sun.jna.ptr.PointerByReference
 
 private const val TAG = "MpvLibrary"
 
@@ -131,60 +128,6 @@ interface MpvLibrary : Library {
      * waiting out its poll timeout.
      */
     fun mpv_wakeup(ctx: Pointer)
-
-    // ---- render API (render.h) ----
-
-    /**
-     * `int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv,
-     *                                mpv_render_param *params);`
-     *
-     * [params] is a pointer to a `type==0`-terminated array — build it with [buildRenderParams].
-     *
-     * render.h: *"The renderer needs to be created with mpv_render_context_create() before you
-     * start playback (or otherwise cause a VO to be created)"*, and *"Video initialization will
-     * fail if the render context was not initialized yet ... or it will revert to a VO that
-     * creates its own window."*
-     */
-    fun mpv_render_context_create(
-        res: PointerByReference,
-        mpv: Pointer,
-        params: Pointer,
-    ): Int
-
-    /**
-     * `int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params);`
-     *
-     * MUST NOT be called from inside the update callback, and only one `mpv_render_*` call may be
-     * in flight at a time per context.
-     */
-    fun mpv_render_context_render(
-        ctx: Pointer,
-        params: Pointer,
-    ): Int
-
-    /**
-     * `void mpv_render_context_set_update_callback(mpv_render_context *ctx,
-     *      mpv_render_update_fn callback, void *callback_ctx);`
-     *
-     * The callback fires on a foreign thread. render.h forbids calling any `mpv_render_*` (or
-     * other libmpv) function from inside it — it may only signal.
-     */
-    fun mpv_render_context_set_update_callback(
-        ctx: Pointer,
-        callback: MpvRenderUpdateFn?,
-        callbackCtx: Pointer?,
-    )
-
-    /** `uint64_t mpv_render_context_update(mpv_render_context *ctx);` — bitmask of [MpvRenderUpdateFlag]. */
-    fun mpv_render_context_update(ctx: Pointer): Long
-
-    /**
-     * `void mpv_render_context_free(mpv_render_context *ctx);`
-     *
-     * render.h: *"You must free the context with mpv_render_context_free() before the mpv core is
-     * destroyed. If this doesn't happen, undefined behavior will result."*
-     */
-    fun mpv_render_context_free(ctx: Pointer)
 
     // ---- misc ----
 
@@ -578,124 +521,4 @@ open class MpvEventEndFile(
     @JvmField var reason: Int = 0
 
     @JvmField var error: Int = 0
-}
-
-/**
- * `enum mpv_render_param_type` — render.h. Values read literally; the SW block is 17..20.
- */
-object MpvRenderParamType {
-    const val INVALID = 0
-    const val API_TYPE = 1
-    const val ADVANCED_CONTROL = 10
-    const val SW_SIZE = 17
-    const val SW_FORMAT = 18
-    const val SW_STRIDE = 19
-    const val SW_POINTER = 20
-}
-
-/** `#define MPV_RENDER_API_TYPE_SW "sw"` — render.h. */
-const val MPV_RENDER_API_TYPE_SW = "sw"
-
-/** `enum mpv_render_update_flag` — render.h. */
-object MpvRenderUpdateFlag {
-    const val FRAME = 1 shl 0
-}
-
-/**
- * `typedef void (*mpv_render_update_fn)(void *cb_ctx);` — render.h.
- *
- * Fires on a foreign thread. render.h's Threading section states the `mpv_render_*` functions
- * "never can be called from within the callbacks set with mpv_set_wakeup_callback() or
- * mpv_render_context_set_update_callback()". Implementations may therefore only signal.
- *
- * Instances must be kept strongly referenced for as long as they are registered — JNA holds
- * callbacks weakly, and a collected callback leaves native code holding a dangling function
- * pointer (the same hazard `VlcVideoSurfacePanel` documents for its vlcj callbacks).
- */
-fun interface MpvRenderUpdateFn : Callback {
-    fun invoke(cbCtx: Pointer?)
-}
-
-/**
- * Size of one `struct mpv_render_param { enum mpv_render_param_type type; void *data; }`.
- *
- * LP64 layout: `type` is an int at offset 0, `data` is 8-byte aligned at offset 8, total 16.
- */
-private const val RENDER_PARAM_SIZE = 16L
-private const val RENDER_PARAM_DATA_OFFSET = 8L
-
-/**
- * Pack [params] into the contiguous, `type == 0`-terminated array that the render API expects.
- *
- * render.h: *"As a convention, parameter arrays are always terminated by type==0."*
- *
- * Built as raw [Memory] rather than a JNA `Structure.toArray()` because the render-param array is
- * rebuilt on every frame: an explicit layout avoids per-element `Structure.write()` reflection on
- * the hot path, and keeps the block's lifetime obviously owned by the caller.
- *
- * The caller MUST keep both the returned [Memory] and every [Pointer] referenced by it alive for
- * the duration of the native call.
- */
-internal fun buildRenderParams(params: List<Pair<Int, Pointer?>>): Memory {
-    val block = Memory(RENDER_PARAM_SIZE * (params.size + 1))
-    block.clear()
-    params.forEachIndexed { i, (type, data) ->
-        val base = RENDER_PARAM_SIZE * i
-        block.setInt(base, type)
-        block.setPointer(base + RENDER_PARAM_DATA_OFFSET, data)
-    }
-    // Trailing entry stays zeroed by clear() — that is the MPV_RENDER_PARAM_INVALID terminator.
-    return block
-}
-
-/**
- * Build an mpv `edl://` URL that plays [videoUrl] and [audioUrl] SIMULTANEOUSLY.
- *
- * This is the mpv equivalent of vlcj's `:input-slave=<audioUrl>` media option, and of
- * Android's MergingMediaSource: YouTube serves adaptive audio and video as separate URLs.
- *
- * Format verified against mpv master:
- *  - `DOCS/edl-mpv.rst` "Syntax of EDL URIs": *"mpv accepts inline EDL data in form of `edl://`
- *    URIs. Other than the header, the syntax is exactly the same."* — i.e. the `# mpv EDL v0`
- *    header line is omitted for the URI form, and `;` replaces line breaks.
- *  - `DOCS/edl-mpv.rst` "Separate files for tracks": *"Upon playback, the tracks will be played
- *    at the same time, instead of appending them"*, and *"`!new_stream` must be the first
- *    header"*.
- *  - `player/lua/ytdl_hook.lua`: `hdr[#hdr + 1] = edl_escape(url) .. params`,
- *    `streams[#streams + 1] = table.concat(hdr, ";")`, and finally
- *    `res.url = "edl://" .. table.concat(streams, ";")`.
- *
- * Resulting shape:
- * ```
- * edl://!new_stream;%<len>%<videoUrl>;!new_stream;%<len>%<audioUrl>
- * ```
- *
- * ytdl_hook additionally prefixes `!no_clip;!no_chapters` to every stream, but both exist to
- * serve its DASH-fragment path — edl-mpv.rst says `no_clip` *"exists solely to support internal
- * ytdl requirements"* and that both headers are *"not part of the core EDL format"* and *"may be
- * changed or removed at any time"*. Our entries are single whole-file URLs with no declared
- * length, so clipping is a no-op; this uses the bare `!new_stream` form from the spec's own
- * example instead. Add the two headers here if chapter-marker artifacts ever show up.
- */
-internal fun buildEdlUrl(
-    videoUrl: String,
-    audioUrl: String,
-): String =
-    listOf(videoUrl, audioUrl).joinToString(separator = ";", prefix = "edl://") { url ->
-        "!new_stream;${edlEscape(url)}"
-    }
-
-/**
- * Length-prefixed EDL quoting: `%<len>%<value>`.
- *
- * Mandatory for googlevideo URLs — `DOCS/edl-mpv.rst` reserves `,` `;` `\n` `!` inside parameter
- * values, and stream URLs contain `;` and `,` in their query strings. Port of ytdl_hook.lua's
- * `edl_escape`: `return "%" .. string.len(url) .. "%" .. url`.
- *
- * Note `string.len` in Lua counts BYTES, so the length is measured over the UTF-8 encoding
- * rather than over Kotlin's UTF-16 char count.
- */
-internal fun edlEscape(value: String): String {
-    val byteLength = value.toByteArray(Charsets.UTF_8).size
-    return "%$byteLength%$value"
 }

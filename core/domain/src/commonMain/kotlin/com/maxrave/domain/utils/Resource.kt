@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.withContext
 
 sealed class Resource<T>(
     val data: T? = null,
@@ -148,9 +147,3 @@ fun <T> wrapResultResource(
             }
     }.flowOn(dispatcher)
 
-suspend fun forceNoReturn(
-    dispatcher: CoroutineDispatcher = Dispatchers.IO,
-    block: suspend () -> Unit,
-) = withContext(dispatcher) {
-    block.invoke()
-}

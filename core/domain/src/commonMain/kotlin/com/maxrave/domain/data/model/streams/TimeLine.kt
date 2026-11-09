@@ -5,5 +5,4 @@ data class TimeLine(
     val total: Long,
     val bufferedPercent: Int,
     val loading: Boolean = true,
-    val isCrossfading: Boolean = false,
 )

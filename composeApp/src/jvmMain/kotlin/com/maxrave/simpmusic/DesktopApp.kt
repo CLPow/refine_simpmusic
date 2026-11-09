@@ -44,12 +44,10 @@ import com.maxrave.simpmusic.extension.DesktopWindowChrome
 import com.maxrave.simpmusic.ui.component.CustomTitleBar
 import com.maxrave.simpmusic.ui.component.simpMusicScrollbarStyle
 import com.maxrave.simpmusic.ui.component.applyWorkAreaMaximizedBounds
-import com.maxrave.simpmusic.ui.theme.isDarkTheme
 import com.maxrave.simpmusic.utils.NetworkFirstInterceptor
 import com.maxrave.simpmusic.utils.VersionManager
 import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
-import com.maxrave.simpmusic.viewModel.changeLanguageNative
 import io.sentry.Sentry
 import io.sentry.SentryLevel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -165,11 +163,8 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
     // Handle URI passed as command-line argument (Windows/Linux, or explicit invocation)
     // Note: macOS does NOT pass URI as args — it uses Apple Events via setOpenURIHandler
     //
-    // Matched by shape rather than against a fixed list of schemes. The list used to be
-    // simpmusic:// + http:// + https://, which silently dropped the Last.fm callback
-    // (wordbyword://lastfm-auth?token=…): the OS launched us with the token, this filter
-    // discarded it, and the app merely came to the foreground while the login sat there
-    // waiting forever. Any scheme we register with the OS must survive this line.
+    // Matched by shape rather than against a fixed list of schemes: any scheme we register with
+    // the OS must survive this line.
     val deepLinkArg = args.firstOrNull()?.takeIf { DEEP_LINK_ARG.matches(it) }
     // Single-instance guard — MUST run before startKoin. The DataStore Koin
     // singleton is `createdAtStart`, so a second Windows instance would touch
@@ -202,17 +197,6 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
         loadAllModules()
         loadKoinModules(viewModelModule)
     }
-
-    val language =
-        runBlocking {
-            getKoin()
-                .get<DataStoreManager>()
-                .language
-                .first()
-                .take(2)
-                .ifEmpty { "en" }
-        }
-    changeLanguageNative(language)
 
     VersionManager.initialize()
     if (BuildKonfig.sentryDsn.isNotEmpty()) {
@@ -248,10 +232,6 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
     WindowsProtocolRegistrar.register()
 
     val sharedViewModel = getKoin().get<SharedViewModel>()
-    if (sharedViewModel.shouldCheckForUpdate()) {
-        sharedViewModel.checkForUpdate()
-    }
-
     // Connect deep link handler to SharedViewModel
     DesktopDeepLinkHandler.listener = { intent ->
         sharedViewModel.setIntent(intent)
@@ -462,20 +442,15 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                         ),
             ) {
                 if (!isVM) {
-                    // The bar sits outside AppTheme, so the colours are resolved here from the
-                    // same stored setting AppTheme uses and handed down. Pure black / pure white
-                    // to match the window colour the shell paints behind the panels.
-                    val themeMode by sharedViewModel
-                        .getThemeMode()
-                        .collectAsState(DataStoreManager.THEME_MODE_DARK)
-                    val isDark = isDarkTheme(themeMode)
+                    // The bar sits outside AppTheme, so its colours are given here: pure black to
+                    // match the window colour the shell paints behind the panels.
                     CustomTitleBar(
                         title = windowTitle,
                         windowState = windowState,
                         window = window,
                         onCloseRequest = closeWindow,
-                        containerColor = if (isDark) Color.Black else Color.White,
-                        titleColor = if (isDark) Color.White else Color.Black,
+                        containerColor = Color.Black,
+                        titleColor = Color.White,
                     )
                 }
 

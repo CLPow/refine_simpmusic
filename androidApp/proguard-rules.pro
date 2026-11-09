@@ -201,7 +201,6 @@
 -dontwarn java.beans.PropertyDescriptor
 
 -dontwarn com.maxrave.data.di.loader.LoaderKt
--dontwarn com.maxrave.media3.ui.MediaPlayerViewKt
 
 -keep class com.maxrave.data.di.loader.LoaderKt { *; }
 -keep class com.maxrave.data.mapping.MappingKt { *; }

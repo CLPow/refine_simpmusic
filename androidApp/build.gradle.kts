@@ -33,36 +33,8 @@ android {
 
         @Suppress("UnstableApiUsage")
         androidResources {
-            localeFilters +=
-                listOf(
-                    "en",
-                    "vi",
-                    "it",
-                    "de",
-                    "ru",
-                    "tr",
-                    "fi",
-                    "pl",
-                    "pt",
-                    "fr",
-                    "es",
-                    "zh-rCN",
-                    "id",
-                    "in",
-                    "ar",
-                    "ja",
-                    "zh-rTW",
-                    "uk",
-                    "iw",
-                    "az",
-                    "hi",
-                    "th",
-                    "nl",
-                    "ko",
-                    "ca",
-                    "fa",
-                    "bg",
-                )
+            // English only: also drops the translations bundled inside libraries.
+            localeFilters += listOf("en")
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -158,7 +130,6 @@ dependencies {
     implementation(libs.easypermissions)
 
     // Legacy Support
-    implementation(libs.legacy.support.v4)
     // Coroutines
     implementation(libs.coroutines.android)
 

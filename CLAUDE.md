@@ -96,21 +96,14 @@ Contains core modules organized by functionality:
 - Data mappers
 
 ##### **core/media/**
-- **media3/**: Media3 ExoPlayer integration (includes `CrossfadeExoPlayerAdapter` for DJ-style crossfade on Android, and `audio/EnhanceAudioProcessor` + `audio/EnhanceDsp.kt` for "Enhance audio")
-- **media3-ui/**: Media3 UI components
-- **media-jvm/**: JVM media playback (libmpv via JNA — replaced VLCJ, which replaced GStreamer post-1.0.4)
-- **media-jvm-ui/**: JVM media UI components
+- **media3/**: Media3 ExoPlayer integration (`ExoPlayerAdapter`: one ExoPlayer per track, precaching, `SleepFadeAudioProcessor`)
+- **media-jvm/**: JVM media playback (libmpv via JNA — replaced VLCJ, which replaced GStreamer post-1.0.4); audio-only
 
 ##### **core/service/**
 Service modules:
 
 - **kotlinYtmusicScraper/**: YouTube Music API scraper
-- **spotify/**: Spotify Web API integration (Canvas, Lyrics)
-- **aiService/**: AI features (OpenAI, Gemini integration)
-- **autoEqService/**: AutoEq headphone correction profiles (index + fixed-band curves)
 - **lyricsService/**: Lyrics fetching (LRCLIB, SimpMusic Lyrics, BetterLyrics)
-- **listenTogether/**: shared listening rooms, wire-compatible with Metrolist (`MetrolistGroup/metroproto`)
-- **kizzy/**: Discord Rich Presence
 - **ktorExt/**: Ktor extensions for networking
 
 #### 4. **crashlytics/** & **crashlytics-empty/**
@@ -118,18 +111,10 @@ Service modules:
 - **crashlytics-empty/**: FOSS version without tracking
 
 #### 5. **cast/** & **cast-empty/**
-#### 6. **lastfm/** & **lastfm-empty/**
-- **lastfm/**: direct Last.fm scrobbling for the Full build. KMP (android + jvm + ios), package `org.simpmusic.lastfm`. Signs `api_sig` with okio's MD5; talks to `ws.audioscrobbler.com/2.0/` over form-urlencoded POST
-- **lastfm-empty/**: FOSS no-op stub with the identical public API — `isLastfmAvailable()` returns `false`, which hides the whole settings block. A FOSS build ships no API secret, so it ships no Last.fm code either
-- Selected via `isFullBuild` in `core/data/build.gradle.kts` (playback hooks) and `composeApp/build.gradle.kts` (UI); credentials come from `LASTFM_API_KEY`/`LASTFM_SECRET` in `local.properties` via BuildKonfig, and are handed in with `configLastfm(key, secret)` at startup — the same shape as `configCrashlytics(context, dsn)`
-- Auth is Last.fm's **web flow** on every platform: open `last.fm/api/auth/?api_key=X` with **no token**, the user approves in their own browser, Last.fm redirects to the callback with `?token=`, then `auth.getSession`. The app never sees a password. **Do not switch to the desktop flow** (`auth.getToken` first, then open the same URL with `&token=` on it): that tells Last.fm the app already holds the token, so it renders a "return to the application" page and the callback is never called — which looks exactly like a broken redirect
-- The callback registered on the API account is `wordbyword://lastfm-auth`, handled by an intent-filter on Android and by Conveyor `url-schemes` + `WindowsProtocolRegistrar` on Desktop; the login screen also accepts the callback URL pasted by hand, for hosts where no scheme handler exists
-
-#### 7. **cast/** & **cast-empty/**
 - **cast/**: Google Cast support for the Full build (`media3-cast` + `play-services-cast-framework`, `CastOptionsProvider`, `CastIconButton` Compose wrapper for `MediaRouteButton`)
 - **cast-empty/**: FOSS no-op stub with identical public API (package `org.simpmusic.cast`), keeping GMS out of F-Droid builds
 - Selected via the `isFullBuild` Gradle property (same pattern as crashlytics) in `core/media/media3/build.gradle.kts` and `composeApp/build.gradle.kts` androidMain
-- Playback handoff lives in `core/media/media3` (`cast/CastHandoffManager.kt` + `cast/CastStreamResolver.kt`): the session player is `CastPlayer.Builder().setLocalPlayer(forwardingPlayer).build()`; while remote, `CrossfadeExoPlayerAdapter` routes transport/getters to the receiver and pushes a resolved-URL queue window (googlevideo URLs resolved up-front via `StreamRepository`); crossfade/EQ/precache are force-disabled while casting
+- Playback handoff lives in `core/media/media3` (`cast/CastHandoffManager.kt` + `cast/CastStreamResolver.kt`): the session player is `CastPlayer.Builder().setLocalPlayer(forwardingPlayer).build()`; while remote, `ExoPlayerAdapter` routes transport/getters to the receiver and pushes a resolved-URL queue window (googlevideo URLs resolved up-front via `StreamRepository`); precache is force-disabled while casting
 
 ## 🛠️ Key Technologies
 
@@ -269,7 +254,7 @@ Before implementing code, researching code, or answering technical questions, th
 
 ### 5. Work with Media Playback
 **Location**: `core/media/media3/` (Android) or `core/media/media-jvm/` (Desktop)
-- Media3/ExoPlayer + CrossfadeExoPlayerAdapter for Android
+- Media3/ExoPlayer + ExoPlayerAdapter for Android
 - libmpv (MpvPlayerAdapter / MpvPlayer / MpvLibrary) for Desktop
 - Queue management in `core/data/src/.../mediaservice/`
 - Playback controls
@@ -280,14 +265,7 @@ Before implementing code, researching code, or answering technical questions, th
 - Add fallback logic
 - Handle synced/unsynced lyrics
 
-### 7. AI Features
-**Location**: `core/service/aiService/`
-- OpenAI integration
-- Gemini integration
-- AI lyrics translation
-- Song recommendations
-
-### 8. Add a New Icon
+### 7. Add a New Icon
 
 **Location**: `composeApp/src/commonMain/kotlin/com/maxrave/simpmusic/ui/icon/`
 
@@ -349,13 +327,12 @@ filled states render identically.
 
 ### Network
 - `core/service/kotlinYtmusicScraper/`: YouTube Music API
-- `core/service/spotify/`: Spotify API
 - `core/service/ktorExt/`: Ktor utilities
 
 ### Resources
 - `composeApp/src/commonMain/composeResources/`: Shared resources
 - `composeApp/src/androidMain/res/`: Android resources
-- Crowdin integration for translations
+- English only: there are no other locales (removed in 2.3.10); add no translations
 
 ## 🔧 Build Variants
 
@@ -409,28 +386,13 @@ filled states render identically.
 **Location**: `core/media/media-jvm/src/main/java/com/simpmusic/media_jvm/mpv/`
 
 - `MpvLibrary.kt` — JNA binding for libmpv's C client API, hand-mapped against client API 2.x. Struct layouts are read by raw offset, so a MAJOR client-API bump needs them re-verified
-- `MpvPlayer.kt` — one handle per media item; `vo=libmpv` + software render context
-- `MpvVideoFrameSource.kt` — mpv SW render API → immutable `BufferedImage` snapshots published via `StateFlow`, drawn by plain Compose `Image` (`MpvVideoFrames` in `media-jvm-ui`); replaced the `SwingPanel`-embedded `MpvVideoSurfacePanel` on 2026-08-01
-- `MpvPlayerAdapter.kt` — the `MediaPlayerInterface` implementation; separate YouTube audio/video URLs are merged into ONE source with an `edl://...;!new_stream;...` URL (mpv's equivalent of Android's `MergingMediaSource`)
+- `MpvPlayer.kt` — one audio-only handle per media item (`vid=no`, `vo=null`); pitch via a `rubberband` `af` entry
+- `MpvPlayerAdapter.kt` — the `MediaPlayerInterface` implementation; plays the audio URL (or a downloaded file)
 - Natives bundled per platform in `mpv-natives/<os>-<arch>/`, staged by `mpvSetupAll` (Linux slice is compiled from source — `scripts/mpv-linux/`)
-- Supports crossfade transition with dual-player approach
-
-#### Crossfade Transition (Desktop)
-- Configurable duration: 1-15 seconds (default: 5 seconds)
-- Skipped when the NEXT track will play as video (`isVideo()` + watch-video setting on) — same rule as Android since 2026-08-01
-- Settings persisted via DataStore
 
 ### Android Player (Media3/ExoPlayer)
 
-#### Crossfade & DJ-style Transition (added in v1.0.4)
-
-**Location**: `core/media/media3/src/main/java/com/maxrave/media3/exoplayer/CrossfadeExoPlayerAdapter.kt`
-
-- DJ-style crossfade with adjustable duration
-- Requires 320kbps stream preference to enable DJ mode
-- Auto crossfade mode (like AutoMix)
-- `CrossfadeFilterAudioProcessor` for audio processing
-- Edge cases: disabled for video, repeat one, last track
+**Location**: `core/media/media3/src/main/java/com/maxrave/media3/exoplayer/ExoPlayerAdapter.kt` — one ExoPlayer per track behind a `DelegatingForwardingPlayer`, next tracks precached. No crossfade (removed in 2.3.10).
 
 ## 🤝 Contributing
 
@@ -444,10 +406,6 @@ See `CODE_OF_CONDUCT.md`
 4. Update documentation if needed
 5. PR title: Clear and descriptive
 6. PR description: Explain changes and reasoning
-
-### Translation
-- Use Crowdin: https://crowdin.com/project/simpmusic
-- Don't edit translation files directly
 
 ## 📚 References
 
@@ -652,6 +610,7 @@ if (getPlatform() == Platform.Android) {
 
 - **Compose Hot Reload + MCP (2026-08-17)**: `org.jetbrains.compose.hot-reload` 1.2.0 is applied in `desktopApp` (root has `apply false`; `foojay-resolver-convention` in settings provisions the JBR). Run with `./gradlew :desktopApp:hotRunJvm --auto` — plain `jvmRun` does NOT hot-reload; the plugin creates separate tasks. `mainClass` resolves automatically from `compose.desktop.application.mainClass`, and the existing `tasks.withType<JavaExec>` block already covers `ComposeHotRun` (it extends JavaExec), so `mpv.bundled.path` reaches hot runs. The MCP server (`:desktopApp:hotMcpServerJvm`, registered in Claude Code local scope) exposes `status`/`reload`/`await_reload`/`take_screenshot`/`get_semantic_tree`/`click`/… — **measure UI with the semantic tree instead of guessing**: it returns exact bounds (it is how the capsule's 2px column overflow was found), while `take_screenshot` captures the window's screen rect, so an occluded window photographs whatever covers it. No hover tool exists: to see hover-only UI, temporarily force the state in code, reload, measure, revert. CHR cannot invalidate global state (Koin singletons, player adapters) — restart the app after touching those.
 
+- **Refine 2.3.10 — dead code out, one lock-screen notification (2026-11-09)**: The lock screen showed the song twice: with the old `keep_service_alive` key TRUE (no Settings row since 2.2.0, so only older installs had it) `SimpleMediaService` added a second `PlayerNotificationManager` notification (id 2026, channel `media_playback_channel`) next to Media3's own; that path, the key and the stale channel are removed (the channel is deleted on start). Removed at the user's request: the whole Enhance audio engine and the phone's-equalizer link (the user could not hear a difference; P2 AI plan dropped), lyrics translation (server, YouTube `tlang`, AI) and every non-English UI locale plus the App language picker (YouTube `hl` is pinned to `en`, `gl` still follows Location; a stale per-app locale is cleared on start). Dead code removed: modules `:spotify`, `:aiService`, `:media3-ui`, `:media-jvm-ui`; the crossfade/DJ/AutoMix engine on both platforms (`CrossfadeExoPlayerAdapter` is now `ExoPlayerAdapter`); desktop video playback (`MpvVideoFrameSource`, EDL merging; nothing rendered it); the Car App Library screens (the service was disabled since 2.2.1); romanization; the updater; liquid glass and the non-YTM themes (Booming, wallpaper, custom colour, light; `AppTheme {}` takes no mode); auto backup (its WorkManager job is cancelled on start); podcasts, local analytics, release notifications, AutoEq, sync tombstones; proxy; TIDAL config fetch; Discord WebView and the Last.fm `wordbyword://` callback; ~110 DataStore members and their keys; ~880 unused strings, unused drawables, fonts and dependencies. Room 30 → 31 drops 11 dead tables (`AutoMigration30_31`, `@DeleteTable`). SponsorBlock was kept (the user's choice), still pinned off. The romanization dictionary (`files/kuromoji-ipadic`) is deleted on start.
 - **Enhance audio replaced the ten-band equalizer (2.3.9, 2026-11-09)**: one stored value, `enhance_settings` (JSON `EnhanceSettings`), master switch OFF by default — Off is a bit-exact byte copy on Android and no `af` entry on desktop, i.e. identical to 2.3.8. One parameter table, `domain/audio/EnhanceChain.kt` (fixed 16-stage biquad layout: style 2, car 2, Advanced EQ 10, low-volume 2), rendered twice: Android runs `EnhanceAudioProcessor` first in each player's sink chain (static gain → biquads → crossfeed → car leveller → 8-phase true-peak limiter at −1.1 dBTP internal); desktop renders the same table as one mpv `af` lavfi entry (`MpvEnhance.kt`: volume, equalizer/lowshelf/highshelf width_type=q, crossfeed level_in=1, alimiter at 192 kHz). Normalization = turn-down-only −loudnessDb, same sign on both platforms (desktop used to boost). Tests: `core/domain/src/commonTest/.../EnhanceChainTest.kt`, `core/media/media3/src/test/.../audio/*`; local gate `tools/enhance-eval/gate.ps1`. The old `EqualizerAudioProcessor`, the equalizer DataStore keys and the pinned-off `normalize_volume` setting are gone; the AutoEq Room tables remain (dropping them needs a migration).
   - **mpv's `af` has two owners, and neither may write it directly.** Crossfade installs its own entries and clears them at the end of *every* transition, so anything else parked in `af` used to vanish with them. `MpvPlayer` now keeps `eqEntry` and `crossfadeEntries` apart and `applyAudioFilters()` is the single writer; `clearAudioFilters()` drops the crossfade tier alone. The symptom this prevents is "EQ works, then randomly doesn't" — the same shape as the crossfade guard that was dead on one of two trigger paths.
   - **Android needs no re-apply; Desktop does.** The processor reads the curve through a supplier bound to a `@Volatile` field on **every buffer**, and `ExoPlayer.Builder` appears in exactly one factory, so any player — initial, next-track, crossfade, precache — is already correct with no push. mpv is the opposite: a fresh handle starts with an empty `af`, so `applyPlaybackLevels()` re-asserts the curve on all four creation sites. **`secondaryPlayer` is the one to miss**: while being promoted it belongs to neither `currentPlayer` nor `precachedPlayers`.

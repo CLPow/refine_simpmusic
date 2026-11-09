@@ -57,8 +57,6 @@ internal class StreamRepositoryImpl(
     private val localDataSource: LocalDataSource,
     private val youTube: YouTube,
 ) : StreamRepository {
-    override fun accountGuardCooldownMs(): Long = youTube.accountGuard.cooldownRemainingMs
-
     /**
      * Last playback-tracking outcome. Written from the playback path, read from Settings; a plain
      * volatile field because it is one immutable value and the reader only ever wants the latest.

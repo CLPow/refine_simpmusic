@@ -1,110 +1,27 @@
 package org.simpmusic.lyrics
 
 import com.maxrave.domain.lyrics.TrackMatch
-import com.maxrave.ktorext.crypto.Hmac
-import com.maxrave.ktorext.crypto.HmacUri
 import com.maxrave.logger.Logger
 import io.ktor.client.call.body
 import io.ktor.client.statement.HttpResponse
 import org.simpmusic.lyrics.am.AMArtistResource
 import org.simpmusic.lyrics.am.AMSearchResponse
-import org.simpmusic.lyrics.models.request.LyricsBody
-import org.simpmusic.lyrics.models.request.TranslatedLyricsBody
 import org.simpmusic.lyrics.models.response.BaseResponse
 import org.simpmusic.lyrics.models.response.BetterLyricsResponse
 import org.simpmusic.lyrics.models.response.LrclibObject
 import org.simpmusic.lyrics.models.response.LyricsResponse
-import org.simpmusic.lyrics.models.response.TranslatedLyricsResponse
 import org.simpmusic.lyrics.parser.parseSyncedLyrics
 import org.simpmusic.lyrics.parser.parseUnsyncedLyrics
 
 private const val TAG = "SimpMusicLyricsClient"
 
 class SimpMusicLyricsClient {
-    private val algorithm = ""
-
-    private val hmacService = Hmac("HmacSHA256", "simpmusic-lyrics")
     private val lyricsService = SimpMusicLyrics()
-    private var insertingLyrics: Pair<String?, Boolean> = (null to false)
-    private val isInsertingLyrics: Boolean
-        get() = insertingLyrics.second
-
     private var tooManyRequest: Boolean = false
-
-    private var insertingTranslatedLyrics: Pair<String?, Boolean> = (null to false)
-    private val isInsertingTranslatedLyrics: Boolean
-        get() = insertingTranslatedLyrics.second
 
     suspend fun getLyrics(videoId: String): Result<List<LyricsResponse>> =
         runCatching {
             lyricsService.findLyricsByVideoId(videoId).bodyOrThrow<List<LyricsResponse>>()
-        }
-
-    suspend fun getTranslatedLyrics(
-        videoId: String,
-        language: String,
-    ): Result<TranslatedLyricsResponse> =
-        runCatching {
-            if (language.length != 2) {
-                throw IllegalArgumentException("Language code must be a 2-letter code")
-            }
-            lyricsService.findTranslatedLyrics(videoId, language).bodyOrThrow<TranslatedLyricsResponse>()
-        }
-
-    suspend fun insertLyrics(lyricsBody: LyricsBody): Result<LyricsResponse> =
-        runCatching {
-            if (tooManyRequest) {
-                throw IllegalStateException("Too many requests, please wait before trying again.")
-            }
-            if (isInsertingLyrics && insertingLyrics.first == lyricsBody.videoId) {
-                throw IllegalStateException("Already inserting lyrics, please wait until the current operation is complete.")
-            }
-            insertingLyrics = lyricsBody.videoId to true
-            val hmacTimestamp =
-                hmacService.getMacTimestampPair(
-                    HmacUri.BASE_HMAC_URI,
-                )
-            lyricsService.insertLyrics(lyricsBody, hmacTimestamp).bodyOrThrow<LyricsResponse>()
-        }
-
-    suspend fun insertTranslatedLyrics(translatedLyricsBody: TranslatedLyricsBody): Result<TranslatedLyricsResponse> =
-        runCatching {
-            if (translatedLyricsBody.language.length != 2) {
-                throw IllegalArgumentException("Language code must be a 2-letter code")
-            }
-            if (isInsertingTranslatedLyrics && insertingTranslatedLyrics.first == translatedLyricsBody.videoId) {
-                throw IllegalStateException("Already inserting translated lyrics, please wait until the current operation is complete.")
-            }
-            insertingTranslatedLyrics = translatedLyricsBody.videoId to true
-            val hmacTimestamp =
-                hmacService.getMacTimestampPair(
-                    HmacUri.TRANSLATED_HMAC_URI,
-                )
-            lyricsService.insertTranslatedLyrics(translatedLyricsBody, hmacTimestamp).bodyOrThrow<TranslatedLyricsResponse>()
-        }
-
-    suspend fun voteLyrics(
-        lyricsId: String,
-        upvote: Boolean,
-    ): Result<LyricsResponse> =
-        runCatching {
-            val hmacTimestamp =
-                hmacService.getMacTimestampPair(
-                    HmacUri.VOTE_HMAC_URI,
-                )
-            lyricsService.voteLyrics(lyricsId, upvote, hmacTimestamp).bodyOrThrow<LyricsResponse>()
-        }
-
-    suspend fun voteTranslatedLyrics(
-        translatedLyricsId: String,
-        upvote: Boolean,
-    ): Result<TranslatedLyricsResponse> =
-        runCatching {
-            val hmacTimestamp =
-                hmacService.getMacTimestampPair(
-                    HmacUri.VOTE_TRANSLATED_HMAC_URI,
-                )
-            lyricsService.voteTranslatedLyrics(translatedLyricsId, upvote, hmacTimestamp).bodyOrThrow<TranslatedLyricsResponse>()
         }
 
     /**

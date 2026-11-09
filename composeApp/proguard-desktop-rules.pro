@@ -295,7 +295,6 @@
 -dontwarn java.beans.PropertyDescriptor
 
 -dontwarn com.maxrave.data.di.loader.LoaderKt
--dontwarn com.maxrave.media3.ui.MediaPlayerViewKt
 
 -keep class com.maxrave.data.di.loader.LoaderKt { *; }
 -keep class com.maxrave.data.mapping.MappingKt { *; }
@@ -370,13 +369,6 @@
 # Compottie's skiko shader helper references org.jetbrains.skia.GradientStyle, removed in the current
 # Skiko. Class is gone (can't be kept/added), so suppress the unresolved-reference warning.
 -dontwarn io.github.alexzhirkevich.compottie.**
-
-# com.kyant.backdrop (liquid glass) was compiled against Skiko 0.144.x and references
-# RuntimeShaderBuilder.makeShader$default, whose signature changed in Skiko 0.148.2 (pulled by
-# compose-bom 2026.06 / coil3 3.5.0 / compottie 2.2.4). The method is gone, so ProGuard can't
-# resolve it and aborts. Liquid glass is not rendered on desktop, so the code path is never hit —
-# suppress the unresolved-reference warning. (Same approach as compottie/haze above.)
--dontwarn com.kyant.backdrop.**
 
 # JNA references the signature-polymorphic java.lang.invoke.MethodHandle.invoke(...) overloads, which
 # ProGuard can't resolve as concrete methods. JNA itself is kept above; suppress these warnings.

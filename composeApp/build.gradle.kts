@@ -74,7 +74,6 @@ kotlin {
             val koinBom = project.dependencies.platform(libs.koin.bom)
             implementation(composeBom)
             implementation(koinBom)
-            implementation(libs.commons.io)
         }
         androidMain.dependencies {
             api(project.dependencies.platform(libs.koin.bom))
@@ -82,7 +81,6 @@ kotlin {
             implementation(libs.koin.androidx.compose)
 
             implementation(libs.jetbrains.ui.tooling.preview)
-            implementation(libs.constraintlayout.compose)
 
             api(libs.work.runtime.ktx)
 
@@ -93,7 +91,6 @@ kotlin {
             api(libs.startup.runtime)
 
             api(projects.media3)
-            api(projects.media3Ui)
 
             // Google Cast (gated: real SDK for full builds, no-op stub for FOSS builds)
             if (isFullBuild) {
@@ -134,8 +131,6 @@ kotlin {
             api(libs.coil.network.okhttp)
             api(libs.kmpalette.core)
             api(libs.kmpalette.network)
-            implementation(libs.materialkolor)
-            implementation(libs.ktor.client.cio)
 
             // DataStore
             implementation(libs.datastore.preferences)
@@ -159,18 +154,14 @@ kotlin {
             implementation(libs.koin.compose.viewmodel)
 
             // Jetbrains Markdown
-            api(libs.markdown)
 
             // Blur Haze
             implementation(libs.haze)
             implementation(libs.haze.material)
 
             api(libs.cmptoast)
-            implementation(libs.file.picker)
 
             // Liquid glass
-            implementation(libs.liquid.glass)
-            implementation(libs.liquid.glass.shape)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -184,7 +175,6 @@ kotlin {
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.sentry.jvm)
             implementation(libs.native.tray)
-            implementation(projects.mediaJvmUi)
             // Windows taskbar buttons and progress, media keys, start on boot (WindowsIntegration).
             implementation(libs.jna)
             implementation(libs.jna.platform)

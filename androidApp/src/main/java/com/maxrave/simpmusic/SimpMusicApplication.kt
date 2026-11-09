@@ -16,10 +16,8 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.CachePolicy
 import coil3.request.crossfade
 import com.maxrave.data.di.loader.loadAllModules
-import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.di.viewModelModule
-import com.maxrave.simpmusic.service.backup.AutoBackupScheduler
 import com.maxrave.simpmusic.ui.widget.TurntableWidget
 import androidx.glance.appwidget.updateAll
 import com.maxrave.simpmusic.utils.NetworkFirstInterceptor
@@ -33,7 +31,6 @@ import okio.FileSystem
 import org.koin.android.ext.koin.androidContext
 import org.koin.android.ext.koin.androidLogger
 import org.koin.core.component.KoinComponent
-import org.koin.core.component.inject
 import org.koin.core.context.loadKoinModules
 import org.koin.core.context.startKoin
 import org.koin.core.logger.Level
@@ -46,8 +43,6 @@ class SimpMusicApplication :
     SingletonImageLoader.Factory {
 
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val dataStoreManager: DataStoreManager by inject()
-    private lateinit var autoBackupScheduler: AutoBackupScheduler
 
     override fun onCreate() {
         super.onCreate()
@@ -71,16 +66,16 @@ class SimpMusicApplication :
         // initialize WorkManager
         WorkManager.initialize(this, workConfig)
 
-        // Initialize and start AutoBackupScheduler
-        autoBackupScheduler = AutoBackupScheduler(this, dataStoreManager)
-        applicationScope.launch {
-            autoBackupScheduler.observeAndSchedule()
-        }
-
         // Redraw the Now Playing widgets already on the home screen once per process start, so an
         // app update shows the new widget layout straight away instead of after the next track.
         applicationScope.launch {
             runCatching { TurntableWidget().updateAll(this@SimpMusicApplication) }
+        }
+
+        // Lyrics romanization was removed in 2.3.10; free the ~13 MB Japanese dictionary an older
+        // install may have downloaded for it.
+        applicationScope.launch {
+            runCatching { java.io.File(filesDir, "kuromoji-ipadic").deleteRecursively() }
         }
 
         CaocConfig.Builder
