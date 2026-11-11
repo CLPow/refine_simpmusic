@@ -301,10 +301,10 @@ object ITAG {
 object QUALITY {
     val items: Array<CharSequence> =
         arrayOf(
-            "Low - 66kps",
-            "Medium - 129kps",
-            "High Opus - 256kps (YT Premium)",
-            "High AAC - 256kps (YT Premium)",
+            "Low - 66 kbps",
+            "Medium - 129 kbps",
+            "High Opus - 256 kbps (YT Premium)",
+            "High AAC - 256 kbps (YT Premium)",
         )
 
     /**
@@ -336,6 +336,11 @@ object QUALITY {
         mapOf(
             // Split into the Opus and AAC families; the plain "High" was always the Opus one.
             "High - 256kps (YT Premium)" to items[2].toString(),
+            // 2.3.11 corrected the unit ("kps" to "kbps").
+            "Low - 66kps" to items[0].toString(),
+            "Medium - 129kps" to items[1].toString(),
+            "High Opus - 256kps (YT Premium)" to items[2].toString(),
+            "High AAC - 256kps (YT Premium)" to items[3].toString(),
         )
 
     /**

@@ -68,16 +68,13 @@ internal class LyricsCanvasRepositoryImpl(
 
     override fun getYouTubeCaption(videoId: String): Flow<Resource<Lyrics>> =
         flow {
-            runCatching {
-                youTube
-                    .getYouTubeCaption(videoId)
-                    .onSuccess { lyrics ->
-                        emit(Resource.Success<Lyrics>(lyrics.toLyrics()))
-                    }.onFailure { e ->
-                        Logger.d("Lyrics", "Error: ${e.message}")
-                        emit(Resource.Error<Lyrics>(e.message.toString()))
-                    }
-            }
+            // Always emits. The emit used to sit inside a runCatching: if turning the captions into
+            // lyrics threw, nothing was emitted, the caller never moved on to the next source and
+            // the lyrics search hung without ever saying "no lyrics".
+            val lyrics = youTube.getYouTubeCaption(videoId).mapCatching { it.toLyrics() }
+            val error = lyrics.exceptionOrNull()
+            if (error != null) Logger.d("Lyrics", "Error: ${error.message}")
+            emit(lyrics.fold({ Resource.Success<Lyrics>(it) }, { Resource.Error<Lyrics>(it.message.toString()) }))
         }.flowOn(Dispatchers.IO)
 
     override suspend fun purgeLyricsCacheIfStale(dataStoreManager: DataStoreManager) {

@@ -57,6 +57,17 @@ interface MediaPlayerInterface {
         toIndex: Int,
     )
 
+    /**
+     * Moves an item between two positions of the PLAY order, which is what the Up next list shows
+     * and what the user drags. With shuffle off that is the playlist order, so this is
+     * [moveMediaItem]. With shuffle on only the shuffle order changes: moving playlist indices
+     * there moved other songs than the ones dragged and dealt a new random order.
+     */
+    fun moveMediaItemInPlayOrder(
+        fromPosition: Int,
+        toPosition: Int,
+    ) = moveMediaItem(fromPosition, toPosition)
+
     fun clearMediaItems()
 
     fun replaceMediaItem(

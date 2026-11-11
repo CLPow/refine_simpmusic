@@ -53,4 +53,14 @@ class AudioTrackOrderTest {
         assertEquals(24140597L, contentLengthOf(ORIGINAL))
         assertEquals(25099982L, contentLengthOf(ARABIC))
     }
+
+    @Test
+    fun theUntouchedMixComesBeforeItsStableVolumeVariant() {
+        val drc = url("acont%3Doriginal%3Adrc%3D1%3Alang%3Den-US")
+        val streams = listOf(drc, ORIGINAL).map { 251 to it }
+        assertEquals(ORIGINAL, streams.orderByAudioTrack(null).first().second)
+        // The language choice still comes first: a preferred-language DRC track beats another language.
+        val vietnameseDrc = url("acont%3Ddubbed-auto%3Adrc%3D1%3Alang%3Dvi")
+        assertEquals(vietnameseDrc, listOf(ORIGINAL, vietnameseDrc).map { 251 to it }.orderByAudioTrack("vi").first().second)
+    }
 }

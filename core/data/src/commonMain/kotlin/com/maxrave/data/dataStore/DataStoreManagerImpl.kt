@@ -36,7 +36,9 @@ internal class DataStoreManagerImpl(
 ) : DataStoreManager {
     override val location: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            preferences[LOCATION] ?: "VN"
+            // Until the first-run code stores the device's region. It was "VN", so a fresh desktop
+            // install (which stored nothing) got Vietnam's Home feed.
+            preferences[LOCATION] ?: "US"
         }
 
     override suspend fun setLocation(location: String) {
@@ -282,7 +284,13 @@ internal class DataStoreManagerImpl(
     }
 
     // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
-    override val sponsorBlockEnabled: Flow<String> = flowOf(FALSE)
+    // A new key (v2), off until switched on in Settings > Playback. The old key is not read: an
+    // install from before 2.2.0 may still hold TRUE there, and SponsorBlock must not start
+    // skipping by itself after an update.
+    override val sponsorBlockEnabled: Flow<String> =
+        settingsDataStore.data.map { preferences ->
+            preferences[SPONSOR_BLOCK_ENABLED] ?: FALSE
+        }
 
     override suspend fun setSponsorBlockEnabled(enabled: Boolean) {
         withContext(Dispatchers.IO) {
@@ -300,10 +308,15 @@ internal class DataStoreManagerImpl(
 
     override suspend fun getSponsorBlockCategories(): ArrayList<String> {
         val list: ArrayList<String> = arrayListOf()
+        var anyStored = false
         for (category in SponsorBlockType.toList()) {
-            if (getString(category.value).first() == TRUE) list.add(category.value)
+            val stored = getString(category.value).first()
+            if (stored != null) anyStored = true
+            if (stored == TRUE) list.add(category.value)
         }
-        return list
+        // Nothing chosen yet: the parts of a music video that are not the song. Without a default
+        // a fresh install had no category switched on and skipped nothing.
+        return if (anyStored) list else ArrayList(DEFAULT_SPONSOR_BLOCK_CATEGORIES)
     }
 
     override suspend fun setSponsorBlockCategories(categories: ArrayList<String>) {
@@ -316,7 +329,9 @@ internal class DataStoreManagerImpl(
             }
             SponsorBlockType.toList().filter { !categories.contains(it.value) }.forEach { category ->
                 settingsDataStore.edit { settings ->
-                    settings[stringPreferencesKey(category.toString())] = FALSE
+                    // `.value`, the stored key ("sponsor"); toString() is the object's name
+                    // ("SPONSOR"), so unticking a category never took effect.
+                    settings[stringPreferencesKey(category.value)] = FALSE
                 }
             }
         }
@@ -591,7 +606,16 @@ internal class DataStoreManagerImpl(
         val LYRICS_PROVIDER = stringPreferencesKey("lyrics_provider")
         val LYRICS_CACHE_GENERATION_KEY = intPreferencesKey("lyrics_cache_generation")
 
-        val SPONSOR_BLOCK_ENABLED = stringPreferencesKey("sponsor_block_enabled")
+        val SPONSOR_BLOCK_ENABLED = stringPreferencesKey("sponsor_block_enabled_v2")
+
+        val DEFAULT_SPONSOR_BLOCK_CATEGORIES: List<String> =
+            listOf(
+                SponsorBlockType.MUSIC_OFF_TOPIC.value,
+                SponsorBlockType.SPONSOR.value,
+                SponsorBlockType.SELF_PROMOTION.value,
+                SponsorBlockType.INTRO.value,
+                SponsorBlockType.OUTRO.value,
+            )
         val MAX_SONG_CACHE_SIZE = intPreferencesKey("maxSongCacheSize")
         val WATCH_VIDEO_INSTEAD_OF_PLAYING_AUDIO =
             stringPreferencesKey("watch_video_instead_of_playing_audio")

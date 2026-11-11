@@ -11,11 +11,14 @@ import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import java.io.IOException
 import java.net.Proxy
 
+/**
+ * Audio is all that is required: the app plays songs only. This also asked for a video itag, so a
+ * signed-in extraction that returned good audio but no matching video was thrown away for the
+ * anonymous fallback.
+ */
 internal fun List<Pair<Int, String>>.hasRequiredItags(): Boolean {
     val itags = this.mapTo(HashSet()) { it.first }
-    val hasAudio = ITAG.AUDIO.any { it in itags }
-    val hasVideo = ITAG.VIDEO.any { it in itags }
-    return hasAudio && hasVideo
+    return ITAG.AUDIO.any { it in itags }
 }
 
 private val streamHealthCheckClient: OkHttpClient by lazy {
@@ -25,12 +28,12 @@ private val streamHealthCheckClient: OkHttpClient by lazy {
 }
 
 /**
- * Pick one random URL whose itag belongs to [ITAG.AUDIO] or [ITAG.VIDEO] and HEAD it. Returns true
- * only when the response code is in the 200..299 range. We only health-check those URLs because
- * they are the ones the player will actually use; lower-quality extras can stay unverified.
+ * Pick one random URL whose itag belongs to [ITAG.AUDIO] and HEAD it. Returns true only when the
+ * response code is in the 200..299 range. Only audio URLs are checked because they are the ones
+ * the player will actually use.
  */
 internal fun List<Pair<Int, String>>.headCheckRandomStream(): Boolean {
-    val required = ITAG.AUDIO + ITAG.VIDEO
+    val required = ITAG.AUDIO
     val candidate = this.filter { it.first in required }.randomOrNull() ?: return false
     return runCatching {
         val request =

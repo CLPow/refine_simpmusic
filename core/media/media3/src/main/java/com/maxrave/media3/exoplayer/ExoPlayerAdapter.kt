@@ -45,6 +45,15 @@ import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "ExoPlayerAdapter"
 
+/** A precached player older than this may hold an expired stream URL (they last about six hours). */
+private const val PRECACHE_MAX_AGE_MS = 3 * 60 * 60 * 1000L
+
+/** Audio buffered before playback resumes after a stall. */
+private const val REBUFFER_RESUME_MS = 2_000
+
+/** Error recoveries (reload on a fresh URL) allowed for one track before the error is reported. */
+private const val MAX_RECOVERIES_PER_TRACK = 4
+
 /**
  * ExoPlayer implementation of [MediaPlayerInterface].
  *
@@ -226,7 +235,19 @@ internal class ExoPlayerAdapter(
     private data class PrecachedPlayer(
         val player: ExoPlayer,
         val mediaItem: GenericMediaItem,
-    )
+        /** `elapsedRealtime` when it was prepared: its stream URL expires, so an old one is not reused. */
+        val createdAtMs: Long = android.os.SystemClock.elapsedRealtime(),
+    ) {
+        /**
+         * Nothing listens to a precached player, so one whose load failed (a dead spot, a Wi-Fi-only
+         * refusal, an extraction error) sits in STATE_IDLE with an error nobody saw. Playing it
+         * showed the track at 0:00 forever, with no error and no skip.
+         */
+        fun isUsable(): Boolean =
+            player.playerError == null &&
+                player.playbackState != Player.STATE_IDLE &&
+                android.os.SystemClock.elapsedRealtime() - createdAtMs < PRECACHE_MAX_AGE_MS
+    }
 
     // VideoId -> PrecachedPlayer
     private val precachedPlayers = ConcurrentHashMap<String, PrecachedPlayer>()
@@ -239,6 +260,11 @@ internal class ExoPlayerAdapter(
     private var retryCount = 0
     private var retryVideoId: String? = null
     private val maxRetryCount = 2
+
+    // retryCount starts again each time the track plays, so a URL that keeps failing after its
+    // first bytes recovered without end. This one only starts again on another track.
+    private var recoveryCount = 0
+    private var recoveryVideoId: String? = null
 
     // ========== Playlist Management ==========
 
@@ -408,8 +434,11 @@ internal class ExoPlayerAdapter(
                         .setBufferDurationsMs(
                             DefaultLoadControl.DEFAULT_MIN_BUFFER_MS * 4,
                             DefaultLoadControl.DEFAULT_MAX_BUFFER_MS * 4,
+                            // A track starts on its first bytes...
                             0,
-                            0,
+                            // ...but after a stall it waits for two seconds of audio: resuming on
+                            // the first bytes stuttered in and out on a weak connection.
+                            REBUFFER_RESUME_MS,
                         ).build(),
                 ).setWakeMode(C.WAKE_MODE_NETWORK)
                 .setHandleAudioBecomingNoisy(true)
@@ -457,6 +486,19 @@ internal class ExoPlayerAdapter(
                 InternalState.PLAYING -> {
                     internalPlayWhenReady = true
                     cachedIsLoading = false
+                }
+
+                InternalState.ERROR -> {
+                    // After a failed track the player holds nothing playable, so Play used to do
+                    // nothing at all. Load the track again where it stopped, on a fresh URL.
+                    val index = localCurrentMediaItemIndex
+                    val videoId = playlist.getOrNull(index)?.mediaId
+                    if (videoId != null) {
+                        Logger.d(TAG, "Play: reloading $videoId after an error")
+                        internalPlayWhenReady = true
+                        streamRepository.invalidateFormat(videoId)
+                        loadAndPlayTrackInternal(index, cachedPosition.coerceAtLeast(0L), shouldPlay = true, announce = false)
+                    }
                 }
 
                 else -> {
@@ -782,6 +824,31 @@ internal class ExoPlayerAdapter(
         }
     }
 
+    override fun moveMediaItemInPlayOrder(
+        fromPosition: Int,
+        toPosition: Int,
+    ) {
+        if (!internalShuffleModeEnabled || shuffleOrder.isEmpty()) {
+            moveMediaItem(fromPosition, toPosition)
+            return
+        }
+        coroutineScope.launch {
+            if (fromPosition !in shuffleOrder.indices || toPosition !in shuffleOrder.indices) return@launch
+            val moved = shuffleOrder.removeAt(fromPosition)
+            shuffleOrder.add(toPosition, moved)
+            shuffleIndices.clear()
+            shuffleIndices.addAll(List(playlist.size) { 0 })
+            shuffleOrder.forEachIndexed { shuffledPos, originalIndex ->
+                if (originalIndex < shuffleIndices.size) shuffleIndices[originalIndex] = shuffledPos
+            }
+
+            notifyTimelineChanged("TIMELINE_CHANGE_REASON_PLAYLIST_CHANGED")
+
+            clearPrecacheExceptCurrentInternal()
+            triggerPrecachingInternal()
+        }
+    }
+
     override fun clearMediaItems() {
         coroutineScope.launch {
             playlist.clear()
@@ -800,9 +867,11 @@ internal class ExoPlayerAdapter(
         if (index !in playlist.indices) return
 
         coroutineScope.launch {
+            val replaced = playlist[index]
             playlist[index] = mediaItem
 
-            precachedPlayers.remove(mediaItem.mediaId)?.let { cached ->
+            // The player prepared for the item that was here, not for the one replacing it.
+            precachedPlayers.remove(replaced.mediaId)?.let { cached ->
                 cleanupPlayerInternal(cached.player)
             }
 
@@ -898,9 +967,16 @@ internal class ExoPlayerAdapter(
 
     // ========== Navigation ==========
 
+    /**
+     * Repeat-one loops a song that ends by itself; it does not trap Next and Previous on it.
+     * Navigation treats it as repeat off, as Media3's own players do. It used to make Next, a
+     * thumbs-down and the explicit-content skip replay the same song.
+     */
+    private val navigationRepeatMode: Int
+        get() = if (internalRepeatMode == PlayerConstants.REPEAT_MODE_ONE) PlayerConstants.REPEAT_MODE_OFF else internalRepeatMode
+
     override fun hasNextMediaItem(): Boolean =
-        when (internalRepeatMode) {
-            PlayerConstants.REPEAT_MODE_ONE -> true
+        when (navigationRepeatMode) {
             PlayerConstants.REPEAT_MODE_ALL -> true
             else ->
                 if (internalShuffleModeEnabled && shuffleOrder.isNotEmpty()) {
@@ -913,8 +989,7 @@ internal class ExoPlayerAdapter(
         }
 
     override fun hasPreviousMediaItem(): Boolean =
-        when (internalRepeatMode) {
-            PlayerConstants.REPEAT_MODE_ONE -> true
+        when (navigationRepeatMode) {
             PlayerConstants.REPEAT_MODE_ALL -> true
             else ->
                 if (internalShuffleModeEnabled && shuffleOrder.isNotEmpty()) {
@@ -927,10 +1002,7 @@ internal class ExoPlayerAdapter(
         }
 
     private fun getNextMediaItemIndex(): Int =
-        when (internalRepeatMode) {
-            PlayerConstants.REPEAT_MODE_ONE -> {
-                localCurrentMediaItemIndex
-            }
+        when (navigationRepeatMode) {
             PlayerConstants.REPEAT_MODE_ALL -> {
                 if (internalShuffleModeEnabled && shuffleOrder.isNotEmpty()) {
                     val currentShufflePos = shuffleIndices.getOrNull(localCurrentMediaItemIndex) ?: 0
@@ -960,10 +1032,7 @@ internal class ExoPlayerAdapter(
         }
 
     private fun getPreviousMediaItemIndex(): Int =
-        when (internalRepeatMode) {
-            PlayerConstants.REPEAT_MODE_ONE -> {
-                localCurrentMediaItemIndex
-            }
+        when (navigationRepeatMode) {
             PlayerConstants.REPEAT_MODE_ALL -> {
                 if (internalShuffleModeEnabled && shuffleOrder.isNotEmpty()) {
                     val currentShufflePos = shuffleIndices.getOrNull(localCurrentMediaItemIndex) ?: 0
@@ -1220,11 +1289,18 @@ internal class ExoPlayerAdapter(
         index: Int,
         startPositionMs: Long,
         shouldPlay: Boolean,
+        // False when the same track is loaded again to recover from an error: announcing it as a
+        // new item counted every recovery as another listen.
+        announce: Boolean = true,
     ) {
         if (index !in playlist.indices) return
 
         val mediaItem = playlist[index]
         val videoId = mediaItem.mediaId
+        if (announce && recoveryVideoId != videoId) {
+            recoveryVideoId = videoId
+            recoveryCount = 0
+        }
 
         // While casting, playback starts on the receiver — never on a local ExoPlayer.
         castPlaybackRouter?.takeIf { isCastActive }?.let { router ->
@@ -1245,20 +1321,26 @@ internal class ExoPlayerAdapter(
                     transitionToState(InternalState.PREPARING)
 
                     // Notify media item transition
-                    listeners.forEach {
-                        it.onMediaItemTransition(
-                            mediaItem,
-                            PlayerConstants.MEDIA_ITEM_TRANSITION_REASON_AUTO,
-                        )
+                    if (announce) {
+                        listeners.forEach {
+                            it.onMediaItemTransition(
+                                mediaItem,
+                                PlayerConstants.MEDIA_ITEM_TRANSITION_REASON_AUTO,
+                            )
+                        }
                     }
 
-                    // Use precached player if available
+                    // Use the precached player if it is still good
                     val cachedPlayerEntry = precachedPlayers.remove(videoId)
                     val player: ExoPlayer
-                    if (cachedPlayerEntry?.player != null) {
+                    if (cachedPlayerEntry != null && cachedPlayerEntry.isUsable()) {
                         Logger.d(TAG, "Using precached player for $videoId")
                         player = cachedPlayerEntry.player
                     } else {
+                        if (cachedPlayerEntry != null) {
+                            Logger.w(TAG, "Precached player for $videoId failed or is too old; loading it again")
+                            cleanupPlayerInternal(cachedPlayerEntry.player)
+                        }
                         Logger.d(TAG, "Creating new player for $videoId")
                         player = createExoPlayerInstance()
                         player.setMediaItem(mediaItem.toMedia3MediaItem())
@@ -1360,7 +1442,7 @@ internal class ExoPlayerAdapter(
                     when (playbackState) {
                         Player.STATE_ENDED -> {
                             Logger.d(TAG, "End of stream reached")
-                            if (hasNextMediaItem()) {
+                            if (hasNextMediaItem() || internalRepeatMode == PlayerConstants.REPEAT_MODE_ONE) {
                                 forwardingPlayer.suppressPlaybackEnded = true
                                 transitionToState(InternalState.PREPARING)
                             } else {
@@ -1382,6 +1464,7 @@ internal class ExoPlayerAdapter(
                             // Reset retry counter on successful playback
                             retryCount = 0
                             retryVideoId = null
+                            if (player == currentPlayer) listeners.forEach { it.onPlaybackConfirmed() }
                         }
 
                         Player.STATE_BUFFERING -> {
@@ -1452,8 +1535,9 @@ internal class ExoPlayerAdapter(
                             retryVideoId = currentVideoId
                             retryCount = 0
                         }
-                        if (retryCount < maxRetryCount) {
+                        if (retryCount < maxRetryCount && recoveryCount < MAX_RECOVERIES_PER_TRACK) {
                             retryCount++
+                            recoveryCount++
                             Logger.w(TAG, "Retryable source error (attempt $retryCount/$maxRetryCount) for $currentVideoId: ${error.errorCodeName}")
                             // Snapshot the current position so the retry resumes where playback
                             // failed instead of restarting the track from the beginning.
@@ -1466,7 +1550,7 @@ internal class ExoPlayerAdapter(
                                     // Evict from precache (it may hold a stale player)
                                     precachedPlayers.remove(currentVideoId)?.player?.release()
                                     // Reload the track at the saved position
-                                    loadAndPlayTrackInternal(localCurrentMediaItemIndex, resumePositionMs, shouldPlay = true)
+                                    loadAndPlayTrackInternal(localCurrentMediaItemIndex, resumePositionMs, shouldPlay = true, announce = false)
                                 } catch (e: Exception) {
                                     if (e is CancellationException) throw e
                                     Logger.e(TAG, "Retry failed: ${e.message}", e)
@@ -1625,43 +1709,17 @@ internal class ExoPlayerAdapter(
         precacheJob =
             coroutineScope.launch {
                 try {
-                    val indicesToPrecache = mutableListOf<Int>()
-
-                    val index = localCurrentMediaItemIndex
-                    for (i in 1..maxPrecacheCount) {
-                        val nextIndex =
-                            when (internalRepeatMode) {
-                                PlayerConstants.REPEAT_MODE_ALL -> {
-                                    (index + i) % playlist.size
-                                }
-                                else -> {
-                                    val next = index + i
-                                    if (next < playlist.size) next else break
-                                }
-                            }
-
-                        if (nextIndex != localCurrentMediaItemIndex &&
-                            !precachedPlayers.containsKey(playlist.getOrNull(nextIndex)?.mediaId)
-                        ) {
-                            indicesToPrecache.add(nextIndex)
-                        }
-                    }
+                    // What plays next, in the order it will play: with shuffle on, index + 1 is
+                    // almost never the next track, so those players were built and thrown away.
+                    val upcoming = upcomingIndices(maxPrecacheCount)
+                    val indicesToPrecache = upcoming.filter { !precachedPlayers.containsKey(playlist.getOrNull(it)?.mediaId) }
 
                     // Players precached for tracks that are no longer next (a skip, a queue edit,
-                    // shuffle) are released here. Each holds a decoder and buffers; left alone
-                    // they piled up for the whole session.
-                    val wanted =
-                        (1..maxPrecacheCount)
-                            .mapNotNull { offset ->
-                                val i = index + offset
-                                when {
-                                    i < playlist.size -> playlist[i].mediaId
-                                    internalRepeatMode == PlayerConstants.REPEAT_MODE_ALL -> playlist.getOrNull(i % playlist.size)?.mediaId
-                                    else -> null
-                                }
-                            }.toSet()
+                    // shuffle), that failed, or whose URL has aged out are released here. Each holds
+                    // a decoder and buffers; left alone they piled up for the whole session.
+                    val wanted = upcoming.mapNotNull { playlist.getOrNull(it)?.mediaId }.toSet()
                     precachedPlayers.entries.removeIf { (videoId, cached) ->
-                        val stale = videoId !in wanted && videoId != currentMediaItem?.mediaId
+                        val stale = (videoId !in wanted && videoId != currentMediaItem?.mediaId) || !cached.isUsable()
                         if (stale) cleanupPlayerInternal(cached.player)
                         stale
                     }
@@ -1691,6 +1749,26 @@ internal class ExoPlayerAdapter(
                     }
                 }
             }
+    }
+
+    /** The next [count] playlist indices in play order (shuffle and repeat-all included). */
+    private fun upcomingIndices(count: Int): List<Int> {
+        val current = localCurrentMediaItemIndex
+        val shuffled = internalShuffleModeEnabled && shuffleOrder.isNotEmpty()
+        val order = if (shuffled) shuffleOrder.toList() else playlist.indices.toList()
+        val position = if (shuffled) shuffleIndices.getOrNull(current) ?: return emptyList() else current
+        if (position !in order.indices) return emptyList()
+        val result = mutableListOf<Int>()
+        for (offset in 1..count) {
+            var next = position + offset
+            if (next >= order.size) {
+                if (internalRepeatMode != PlayerConstants.REPEAT_MODE_ALL) break
+                next %= order.size
+            }
+            val index = order[next]
+            if (index != current && index !in result) result += index
+        }
+        return result
     }
 
     private fun cancelPrecaching() {

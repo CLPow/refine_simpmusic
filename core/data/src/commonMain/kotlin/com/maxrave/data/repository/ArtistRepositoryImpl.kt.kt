@@ -78,6 +78,9 @@ internal class ArtistRepositoryImpl(
             if (dataStoreManager.syncFollowToYouTube.first() != DataStoreManager.TRUE) {
                 return@withContext null
             }
+            // Signed out there is no account to mirror to. The call was made anyway, failed, and
+            // every follow showed "Couldn't update your YouTube subscription".
+            if (dataStoreManager.cookie.first().isEmpty()) return@withContext null
             withContext(Dispatchers.IO) {
                 setSubscription(channelId, followedStatus == 1)
             }

@@ -108,6 +108,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 private const val TAG = "YouTubeScraper"
 
+/** Pause before the second attempt at a failed player request. */
+private const val PLAYER_RETRY_DELAY_MS = 700L
+
 /**
  * Special thanks to [z-huang/InnerTune](https://github.com/z-huang/InnerTune)
  * This library is from [z-huang/InnerTune] and I just modified it to comply with SimpMusic
@@ -1112,11 +1115,32 @@ class YouTube {
     fun isManifestUrl(url: String): Boolean = url.contains(".m3u8") || url.contains(".mpd") || url.contains("manifest")
 
     @OptIn(ExperimentalTime::class)
+    /**
+     * Resolves the playable streams of [videoId].
+     *
+     * One failed attempt used to be final: a single timeout or 5xx on the player request, or a
+     * response that was not playable yet, failed the track. It is tried once more after a short
+     * pause. A rate limit (429) is not retried: another request would only extend it.
+     */
     suspend fun player(
         videoId: String,
         playlistId: String? = null,
         noLogIn: Boolean = false,
         preferredAudioLanguage: String? = null,
+    ): Result<Triple<String?, PlayerResponse, MediaType>> {
+        val first = playerOnce(videoId, playlistId, preferredAudioLanguage)
+        val failure = first.exceptionOrNull() ?: return first
+        if (failure is kotlinx.coroutines.CancellationException) return first
+        if ((failure as? io.ktor.client.plugins.ResponseException)?.response?.status?.value == 429) return first
+        Logger.w(TAG, "player($videoId) failed (${failure.message}); trying once more")
+        kotlinx.coroutines.delay(PLAYER_RETRY_DELAY_MS)
+        return playerOnce(videoId, playlistId, preferredAudioLanguage)
+    }
+
+    private suspend fun playerOnce(
+        videoId: String,
+        playlistId: String?,
+        preferredAudioLanguage: String?,
     ): Result<Triple<String?, PlayerResponse, MediaType>> =
         runCatching {
             val cpn =
@@ -1140,6 +1164,7 @@ class YouTube {
                     ytMusic.getNewPipePlayer(videoId)
                 }
             val tempRes =
+                runCatching {
                 ytMusic
                     .player(
                         WEB_REMIX,
@@ -1209,6 +1234,12 @@ class YouTube {
                                 ),
                         )
                     }
+                }.getOrElse {
+                    // The extraction started above is only cancelled further down; a failed player
+                    // request used to leave it running with nobody waiting for it.
+                    extraction.cancel()
+                    throw it
+                }
 
             val response =
                 try {

@@ -88,6 +88,8 @@ import simpmusic.composeapp.generated.resources.ytm_double_tap_seek
 import simpmusic.composeapp.generated.resources.ytm_n_seconds
 import simpmusic.composeapp.generated.resources.ytm_allow_external_start
 import simpmusic.composeapp.generated.resources.ytm_allow_external_start_summary
+import simpmusic.composeapp.generated.resources.ytm_sponsorblock
+import simpmusic.composeapp.generated.resources.ytm_sponsorblock_summary
 import simpmusic.composeapp.generated.resources.ytm_stream_wifi_only
 import simpmusic.composeapp.generated.resources.ytm_stream_wifi_only_summary
 import simpmusic.composeapp.generated.resources.ytm_cache
@@ -201,10 +203,12 @@ fun SettingScreen(
     val cacheSize by viewModel.cacheSize.collectAsStateWithLifecycle()
     val downloadedSize by viewModel.downloadedCacheSize.collectAsStateWithLifecycle()
     val autoplay by dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }.collectAsStateWithLifecycle(false)
-    val qualityMobile by dataStoreManager.qualityMobile.collectAsStateWithLifecycle(null)
+    // Normalized like the Wi-Fi row: a label stored by an older build still shows as selected.
+    val qualityMobile by dataStoreManager.qualityMobile.map { QUALITY.normalize(it) }.collectAsStateWithLifecycle(null)
     val streamOverWifiOnly by dataStoreManager.streamOverWifiOnly.collectAsStateWithLifecycle(false)
     val doubleTapSeekSeconds by dataStoreManager.doubleTapSeekSeconds.collectAsStateWithLifecycle(10)
     val allowExternalStart by dataStoreManager.allowExternalStartPlayback.collectAsStateWithLifecycle(true)
+    val sponsorBlock by dataStoreManager.sponsorBlockEnabled.map { it == DataStoreManager.TRUE }.collectAsStateWithLifecycle(false)
     val signInExpired by accountRepository.signInExpired.collectAsStateWithLifecycle()
     var choice by remember { mutableStateOf<ChoiceDialog?>(null) }
     var confirm by remember { mutableStateOf<ConfirmDialog?>(null) }
@@ -293,6 +297,11 @@ fun SettingScreen(
                             checked = allowExternalStart,
                         ) { enabled -> scope.launch { dataStoreManager.setAllowExternalStartPlayback(enabled) } }
                     }
+                    SwitchRow(
+                        title = stringResource(Res.string.ytm_sponsorblock),
+                        summary = stringResource(Res.string.ytm_sponsorblock_summary),
+                        checked = sponsorBlock,
+                    ) { enabled -> scope.launch { dataStoreManager.setSponsorBlockEnabled(enabled) } }
                 }
                 SettingsCategory.DataSaving -> {
                     val isPhone = getPlatform() != Platform.Desktop

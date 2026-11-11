@@ -31,7 +31,9 @@ internal class CastStreamResolver(
         val videoId = mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO)
         streamRepository.getNewFormat(videoId).lastOrNull()?.let { format ->
             val cachedUrl = format.audioUrl
-            if (cachedUrl != null && format.expiredTime > now()) {
+            // A stored URL of another quality (resolved on mobile data, say) is not reused.
+            val wantedQuality = streamRepository.deliversQuality(format.itag, streamRepository.wantedAudioItag(dataStoreManager))
+            if (cachedUrl != null && wantedQuality && format.expiredTime > now()) {
                 val is403 = streamRepository.is403Url(cachedUrl).firstOrNull() != false
                 if (!is403) {
                     Logger.d(TAG, "Resolved $videoId from cached format")

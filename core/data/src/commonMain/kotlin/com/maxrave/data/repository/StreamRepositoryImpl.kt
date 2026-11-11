@@ -46,12 +46,42 @@ import kotlin.random.Random
  */
 private fun Int.tierRank(): Int =
     when (this) {
-        ITAG.AUDIO_OPUS_LOW -> 0
-        ITAG.AUDIO_OPUS_MEDIUM -> 1
-        ITAG.AUDIO_AAC_HIGH -> 2
-        ITAG.AUDIO_OPUS_HIGH -> 3
+        139 -> 0 // AAC ~48 kbps
+        249 -> 1 // Opus ~50 kbps
+        ITAG.AUDIO_OPUS_LOW -> 2
+        // AAC 128 kbps: the step below Opus Medium, so a response without 251 lands here and not
+        // on the ~70 kbps stream.
+        140 -> 3
+        ITAG.AUDIO_OPUS_MEDIUM -> 4
+        ITAG.AUDIO_AAC_HIGH -> 5
+        ITAG.AUDIO_OPUS_HIGH -> 6
         else -> Int.MAX_VALUE
     }
+
+private val EXPIRE_PARAM = Regex("[?&]expire=(\\d+)")
+
+/** Used when neither the URL nor the response says how long a stream URL lives. */
+private const val UNKNOWN_EXPIRY_SECONDS = 60 * 60L
+
+/**
+ * Seconds until a stream URL stops working.
+ *
+ * The URL carries its own deadline (`expire=<epoch seconds>`), which is the one googlevideo
+ * enforces; the response's `expiresInSeconds` belongs to the WEB_REMIX answer, while the URL may
+ * come from another extractor. With neither, a short life is assumed: storing 0 made the row
+ * expired from the start, so every 5 MiB chunk resolved the stream again.
+ */
+@OptIn(ExperimentalTime::class)
+internal fun secondsUntilExpiry(
+    url: String?,
+    expiresInSeconds: Long?,
+): Long {
+    val fromUrl =
+        url
+            ?.let { EXPIRE_PARAM.find(it)?.groupValues?.get(1)?.toLongOrNull() }
+            ?.let { it - Clock.System.now().epochSeconds }
+    return (fromUrl ?: expiresInSeconds ?: UNKNOWN_EXPIRY_SECONDS).coerceAtLeast(0L)
+}
 
 internal class StreamRepositoryImpl(
     private val localDataSource: LocalDataSource,
@@ -118,9 +148,15 @@ internal class StreamRepositoryImpl(
             val watchtime = tracking?.videostatsWatchtimeUrl?.baseUrl?.toMusicHost()
             if (playback == null || atr == null || watchtime == null) return@withContext null
             stored?.let {
+                // The stored stream URL is not replaced here, so an expired one must not inherit
+                // the new expiry: it is dropped, and the next play resolves a fresh one. Extending
+                // the expiry over a dead URL sent playback to it without the usual check.
+                val urlExpired = it.expiredTime.isBefore(now())
                 localDataSource.updateNewFormat(
                     it.copy(
-                        expiredTime = now().plusSeconds(response.streamingData?.expiresInSeconds?.toLong() ?: 0L),
+                        expiredTime = if (urlExpired) now().plusSeconds(secondsUntilExpiry(null, response.streamingData?.expiresInSeconds?.toLong())) else it.expiredTime,
+                        audioUrl = if (urlExpired) null else it.audioUrl,
+                        videoUrl = if (urlExpired) null else it.videoUrl,
                         playbackTrackingVideostatsPlaybackUrl = playback,
                         playbackTrackingAtrUrl = atr,
                         playbackTrackingVideostatsWatchtimeUrl = watchtime,
@@ -151,7 +187,11 @@ internal class StreamRepositoryImpl(
                         val response = triple.second
                         localDataSource.updateNewFormat(
                             oldFormat.copy(
-                                expiredTime = now().plusSeconds(response.streamingData?.expiresInSeconds?.toLong() ?: 0L),
+                                // This row had expired, so its stream URL is dead; only the
+                                // tracking URLs are renewed. See getPlaybackTracking.
+                                expiredTime = now().plusSeconds(secondsUntilExpiry(null, response.streamingData?.expiresInSeconds?.toLong())),
+                                audioUrl = null,
+                                videoUrl = null,
                                 playbackTrackingVideostatsPlaybackUrl =
                                     response.playbackTracking?.videostatsPlaybackUrl?.baseUrl?.replace(
                                         "https://s.youtube.com",
@@ -282,6 +322,9 @@ internal class StreamRepositoryImpl(
                             playableAudio.joinToString { "${it.itag}/${it.bitrate / 1000}k" } +
                             " | requested $itag | chose ${audioFormat?.itag}",
                     )
+                    // Only a request by quality setting says what that setting delivers; one pinned
+                    // to a cached copy's format says nothing.
+                    if (audioItag == null && audioFormat != null) noteDelivered(itag, audioFormat.itag)
                     var format =
                         if (isVideo) {
                             videoFormat
@@ -359,7 +402,7 @@ internal class StreamRepositoryImpl(
                                     "https://music.youtube.com",
                                 ),
                             cpn = data.first,
-                            expiredTime = now().plusSeconds(response.streamingData?.expiresInSeconds?.toLong() ?: 0L),
+                            expiredTime = now().plusSeconds(secondsUntilExpiry(format?.url, response.streamingData?.expiresInSeconds?.toLong())),
                             audioUrl = if (muxed) response.streamingData?.hlsManifestUrl else format?.url,
                             videoUrl = if (muxed) response.streamingData?.hlsManifestUrl else videoFormat?.url,
                         ),
@@ -480,6 +523,43 @@ internal class StreamRepositoryImpl(
         }.flowOn(Dispatchers.IO)
 
     override fun is403Url(url: String) = flow { emit(youTube.is403Url(url)) }.flowOn(Dispatchers.IO)
+
+    /**
+     * Best tier each requested itag has actually been answered with since the app started. An
+     * account that is never offered the requested format (a free account asking for 256 kbps)
+     * settles one tier down, and that is then what "the wanted quality" means for it; without this
+     * its cached copies would look too low for ever and be fetched again on every play.
+     */
+    @kotlin.concurrent.Volatile
+    private var bestTierDelivered: Map<Int, Int> = emptyMap()
+
+    private fun noteDelivered(
+        requestedItag: Int,
+        chosenItag: Int,
+    ) {
+        val tier = chosenItag.tierRank()
+        if (tier == Int.MAX_VALUE) return
+        val known = bestTierDelivered[requestedItag]
+        if (known == null || tier > known) bestTierDelivered = bestTierDelivered + (requestedItag to tier)
+    }
+
+    private fun deliveredTier(wantedItag: Int): Int = minOf(wantedItag.tierRank(), bestTierDelivered[wantedItag] ?: wantedItag.tierRank())
+
+    override fun deliversQuality(
+        storedItag: Int,
+        wantedItag: Int,
+    ): Boolean =
+        storedItag == wantedItag ||
+            storedItag == ITAG.highQualityTwinOf(wantedItag) ||
+            storedItag.tierRank() in deliveredTier(wantedItag)..wantedItag.tierRank()
+
+    override fun isLowerQuality(
+        storedItag: Int,
+        wantedItag: Int,
+    ): Boolean =
+        storedItag != wantedItag &&
+            storedItag != ITAG.highQualityTwinOf(wantedItag) &&
+            storedItag.tierRank() < deliveredTier(wantedItag)
 
     override suspend fun wantedAudioItag(dataStoreManager: DataStoreManager): Int =
         // YouTube Music's separate "Audio quality on Wi-Fi" / "on mobile network".

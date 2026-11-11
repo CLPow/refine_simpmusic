@@ -19,6 +19,7 @@ import coil3.ImageLoader
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import com.maxrave.common.MERGING_DATA_TYPE
+import com.maxrave.common.QUALITY
 import com.maxrave.domain.data.entities.DownloadState
 import com.maxrave.domain.extension.now
 import com.maxrave.domain.manager.DataStoreManager
@@ -33,6 +34,7 @@ import kotlinx.coroutines.Runnable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.flow.update
@@ -120,7 +122,16 @@ internal class DownloadUtils(
                             resolved = true
                         }
                 } else {
-                    streamRepository.getNewFormat(mediaId).lastOrNull()?.let {
+                    val stored = streamRepository.getNewFormat(mediaId).lastOrNull()
+                    val wantedItag = QUALITY.itagOf(dataStoreManager.downloadQuality.first())
+                    val startOfTrack = dataSpec.position == 0L
+                    val sameQuality = stored != null && streamRepository.deliversQuality(stored.itag, wantedItag)
+                    // A download that continues part-way stays in the format its first bytes are
+                    // in; only a download starting from zero may pick the download quality.
+                    val keptItag = stored?.itag?.takeIf { !startOfTrack }
+                    // The stored URL is the STREAMING quality's. It was reused whatever the
+                    // download quality setting said, so the setting did nothing.
+                    stored?.takeIf { sameQuality || keptItag != null }?.let {
                         val audioUrl = it.audioUrl
                         if (audioUrl != null && it.expiredTime > now()) {
                             Logger.d("Stream", audioUrl)
@@ -133,12 +144,17 @@ internal class DownloadUtils(
                             }
                         }
                     }
+                    // This source reads through the player cache. Bytes cached there in the
+                    // streaming format would be stitched onto the rest in the download format,
+                    // and the file would not decode.
+                    if (startOfTrack && !sameQuality) playerCache.removeResource(mediaId)
                     streamRepository
                         .getStream(
                             dataStoreManager,
                             mediaId,
                             isDownloading = true,
                             isVideo = false,
+                            audioItag = keptItag,
                         ).lastOrNull()
                         ?.let {
                             if (it.contains("MPD")) {
@@ -171,7 +187,9 @@ internal class DownloadUtils(
             dataSourceFactory,
             Executor(Runnable::run),
         ).apply {
-            maxParallelDownloads = 20
+            // Each download makes a signed-in stream request; 20 at once drew a rate limit (429) that
+            // then blocked playback too.
+            maxParallelDownloads = 3
             minRetryCount = 3
             addListener(
                 MusicDownloadService.TerminalStateNotificationHelper(

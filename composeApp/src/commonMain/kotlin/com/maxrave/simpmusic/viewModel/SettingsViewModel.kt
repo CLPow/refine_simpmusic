@@ -19,6 +19,7 @@ import com.maxrave.domain.utils.LocalResource
 import com.maxrave.logger.LogLevel
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,7 +30,6 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.flow.singleOrNull
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.koin.core.component.inject
 import org.jetbrains.compose.resources.getString as formatString
@@ -63,6 +63,21 @@ class SettingsViewModel(
     private val _downloadQuality = MutableStateFlow<String?>(null)
     val downloadQuality: StateFlow<String?> = _downloadQuality
 
+    private val collectors = mutableMapOf<String, Job>()
+
+    /**
+     * Runs [block] (a collector that never ends) as the only one under [key]. The getters below are
+     * called again by every setter and every time a Settings page opens, and each call used to
+     * start one more endless collector on top of the earlier ones.
+     */
+    private fun collectOnce(
+        key: String,
+        block: suspend () -> Unit,
+    ) {
+        collectors.remove(key)?.cancel()
+        collectors[key] = viewModelScope.launch { block() }
+    }
+
     fun getData() {
         getLocation()
         getQuality()
@@ -75,7 +90,7 @@ class SettingsViewModel(
     }
 
     private fun getDownloadQuality() {
-        viewModelScope.launch {
+        collectOnce("getDownloadQuality") {
             dataStoreManager.downloadQuality.collect { quality ->
                 _downloadQuality.emit(QUALITY.normalize(quality))
             }
@@ -90,7 +105,7 @@ class SettingsViewModel(
     }
 
     private fun getExplicitContentEnabled() {
-        viewModelScope.launch {
+        collectOnce("getExplicitContentEnabled") {
             dataStoreManager.explicitContentEnabled.collect { enabled ->
                 _explicitContentEnabled.value = enabled == DataStoreManager.TRUE
             }
@@ -105,7 +120,7 @@ class SettingsViewModel(
     }
 
     fun getLocation() {
-        viewModelScope.launch {
+        collectOnce("getLocation") {
             dataStoreManager.location.collect { location ->
                 _location.emit(location)
             }
@@ -113,7 +128,7 @@ class SettingsViewModel(
     }
 
     fun getLoggedIn() {
-        viewModelScope.launch {
+        collectOnce("getLoggedIn") {
             dataStoreManager.loggedIn.collect { loggedIn ->
                 _loggedIn.emit(loggedIn)
             }
@@ -131,7 +146,7 @@ class SettingsViewModel(
     val quality: StateFlow<String?> = _quality
 
     fun getQuality() {
-        viewModelScope.launch {
+        collectOnce("getQuality") {
             dataStoreManager.quality.collect { quality ->
                 _quality.emit(QUALITY.normalize(quality))
             }
@@ -221,7 +236,7 @@ class SettingsViewModel(
     }
 
     fun getSendBackToGoogle() {
-        viewModelScope.launch {
+        collectOnce("getSendBackToGoogle") {
             dataStoreManager.sendBackToGoogle.collect { sendBackToGoogle ->
                 _sendBackToGoogle.emit(sendBackToGoogle)
             }
@@ -241,7 +256,7 @@ class SettingsViewModel(
 
     fun getAllGoogleAccount() {
         Logger.w("getAllGoogleAccount", "getAllGoogleAccount: Go to function")
-        viewModelScope.launch {
+        collectOnce("getAllGoogleAccount") {
             _googleAccounts.emit(LocalResource.Loading())
             accountRepository.getGoogleAccounts().collectLatest { accounts ->
                 Logger.w("getAllGoogleAccount", "getAllGoogleAccount: $accounts")
@@ -306,10 +321,8 @@ class SettingsViewModel(
         val currentAuthUser = dataStoreManager.authUser.first()
         val currentLoggedIn = dataStoreManager.loggedIn.first() == DataStoreManager.TRUE
         try {
-            runBlocking {
-                dataStoreManager.setCookie(cookie, "")
-                dataStoreManager.setLoggedIn(true)
-            }
+            dataStoreManager.setCookie(cookie, "")
+            dataStoreManager.setLoggedIn(true)
             return accountRepository
                 .getAccountInfo(
                     cookie,
@@ -380,19 +393,20 @@ class SettingsViewModel(
                     true
                 } ?: run {
                 Logger.w("getAllGoogleAccount", "addAccount: Account info is null")
-                runBlocking {
-                    dataStoreManager.setCookie(currentCookie, currentPageId, currentAuthUser)
-                    dataStoreManager.setLoggedIn(currentLoggedIn)
-                }
+                dataStoreManager.setCookie(currentCookie, currentPageId, currentAuthUser)
+                dataStoreManager.setLoggedIn(currentLoggedIn)
                 false
             }
         } catch (e: Exception) {
             e.printStackTrace()
             Logger.e("getAllGoogleAccount", "addAccount: ${e.message}")
-            runBlocking {
+            // Put the previous sign-in back even when this call was cancelled (the screen closed),
+            // then let the cancellation through instead of reporting it as a failed sign-in.
+            withContext(NonCancellable) {
                 dataStoreManager.setCookie(currentCookie, currentPageId, currentAuthUser)
                 dataStoreManager.setLoggedIn(currentLoggedIn)
             }
+            if (e is CancellationException) throw e
             return false
         }
     }

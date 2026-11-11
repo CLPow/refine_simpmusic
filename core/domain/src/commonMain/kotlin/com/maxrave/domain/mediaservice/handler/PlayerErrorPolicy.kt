@@ -9,6 +9,8 @@ sealed interface PlayerErrorAction {
 
     data class Pause(
         val toast: ToastType,
+        /** The connection is the likely cause, so playback may resume by itself once it is back. */
+        val network: Boolean = false,
     ) : PlayerErrorAction
 }
 
@@ -43,7 +45,7 @@ fun playerErrorAction(
         error.errorCodeName == WIFI_ONLY_ERROR_CODE_NAME -> PlayerErrorAction.Pause(ToastType.WifiOnly)
         error.errorCode == PlayerConstants.ERROR_CODE_TIMEOUT ||
             error.errorCode in NETWORK_ERROR_CODES ||
-            !online -> PlayerErrorAction.Pause(ToastType.PlayerError(error.errorCodeName))
+            !online -> PlayerErrorAction.Pause(ToastType.PlayerError(error.errorCodeName), network = true)
         hasNext && skips < MAX_UNAVAILABLE_SKIPS -> PlayerErrorAction.Skip
         else -> PlayerErrorAction.Pause(ToastType.PlayerError(error.errorCodeName))
     }

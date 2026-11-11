@@ -240,6 +240,9 @@ private fun provideResolvingDataSourceFactory(
     // Tracks that started streaming from the network, so leaving Wi-Fi does not cut them off
     // mid-song. A few, not one: the next tracks are precached through this same resolver.
     val streamingIds = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
+    // Tracks whose cached copy was already replaced by a better one in this run: one try each, so
+    // a track that only exists in a lower format is not fetched again on every play.
+    val upgradedIds = java.util.Collections.synchronizedSet(HashSet<String>())
     return ResolvingDataSource.Factory(cacheDataSourceFactory) { dataSpec ->
         // Songs only: a legacy VIDEO-prefixed id (a queue restored from an older build) resolves
         // to the same recording's audio.
@@ -254,6 +257,26 @@ private fun provideResolvingDataSourceFactory(
                 coroutineScope.launch(Dispatchers.IO) { streamRepository.updateFormat(mediaId) }
             }
             return@Factory dataSpec.subrange(dataSpec.uriPositionOffset, chunkLength)
+        }
+        // A copy cached at a lower quality than the settings now ask for (cached on mobile data at
+        // Low, played again on Wi-Fi) used to be played for as long as it stayed in the cache.
+        // At the start of a play, on an unmetered connection, it is dropped and fetched again at
+        // the wanted quality. Never on mobile data, and never mid-song.
+        if (dataSpec.position == 0L &&
+            context.hasUnmeteredNetwork() &&
+            mediaId !in upgradedIds &&
+            playerCache.getCachedSpans(mediaId).isNotEmpty()
+        ) {
+            val lowerQuality =
+                runBlocking(Dispatchers.IO) {
+                    val storedItag = streamRepository.getNewFormat(mediaId).lastOrNull()?.itag
+                    storedItag != null && streamRepository.isLowerQuality(storedItag, streamRepository.wantedAudioItag(dataStoreManager))
+                }
+            if (lowerQuality) {
+                Logger.w("Stream", "Cached copy of $mediaId is below the wanted quality; fetching it again")
+                upgradedIds.add(mediaId)
+                playerCache.removeResource(mediaId)
+            }
         }
         if (playerCache.isFullyCached(mediaId, dataSpec.position)) {
             // See the note above: once per track, not once per chunk.
@@ -297,8 +320,13 @@ private fun provideResolvingDataSourceFactory(
             val hasCachedBytes = playerCache.getCachedSpans(mediaId).isNotEmpty()
             val keptItag = stored?.itag?.takeIf { hasCachedBytes }
             if (hasCachedBytes && keptItag == null) playerCache.removeResource(mediaId)
-            // Nothing cached: a URL resolved for the other network's quality is not reused.
-            val networkChanged = !hasCachedBytes && stored != null && stored.itag != streamRepository.wantedAudioItag(dataStoreManager)
+            // Nothing cached: a URL resolved for the other network's quality is not reused. Compared
+            // by what the setting delivers, not by itag: an account that is not offered the
+            // requested format never matched it, and resolved the stream again on every play.
+            val networkChanged =
+                !hasCachedBytes &&
+                    stored != null &&
+                    !streamRepository.deliversQuality(stored.itag, streamRepository.wantedAudioItag(dataStoreManager))
             stored?.takeUnless { networkChanged }?.let {
                 val audioUrl = it.audioUrl
                 if (audioUrl != null && it.expiredTime > now()) {
@@ -499,8 +527,17 @@ fun setServiceActivitySession(
     (musicService as? SimpleMediaService.MusicBinder)?.setActivitySession(context, cls)
 }
 
-private fun Context.isActiveNetworkMetered(): Boolean =
-    (getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager)?.isActiveNetworkMetered == true
+/** A connection that is there and is not metered: the only kind a cached copy is replaced on. */
+private fun Context.hasUnmeteredNetwork(): Boolean {
+    val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
+    return manager.activeNetwork != null && !manager.isActiveNetworkMetered
+}
+
+/** False with no network at all: Android reports "metered" then, which showed a Wi-Fi-only refusal while offline. */
+private fun Context.isActiveNetworkMetered(): Boolean {
+    val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
+    return manager.activeNetwork != null && manager.isActiveNetworkMetered
+}
 
 private const val STREAMING_IDS_KEPT = 8
 

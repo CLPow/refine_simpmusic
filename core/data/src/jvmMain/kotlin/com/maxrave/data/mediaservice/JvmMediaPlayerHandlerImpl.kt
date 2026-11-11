@@ -250,6 +250,9 @@ class JvmMediaPlayerHandlerImpl(
      */
     private var unavailableSkips = 0
 
+    /** Resumes by itself after a pause the connection caused; see [NetworkResumeWatcher]. */
+    private val networkResume = NetworkResumeWatcher(coroutineScope) { player.play() }
+
     private fun startReporting(videoId: String) {
         playbackReporter.start(
             videoId = videoId,
@@ -280,6 +283,16 @@ class JvmMediaPlayerHandlerImpl(
     private val sleepFadeTailMs = 800L
 
     private var getSkipSegmentsJob: Job? = null
+
+    /** The SponsorBlock switch, kept warm: it is checked on every progress tick. */
+    private val sponsorBlockOn =
+        dataStoreManager.sponsorBlockEnabled
+            .map { it == TRUE }
+            .stateIn(coroutineScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, false)
+
+    /** The categories to skip, read once per track with its segments. */
+    @Volatile
+    private var sponsorBlockCategories: List<String> = emptyList()
 
     private var getFormatJob: Job? = null
 
@@ -395,6 +408,14 @@ class JvmMediaPlayerHandlerImpl(
                         updateNotification()
                     }
                 }
+            // Switched on (or off) while a song plays: fetch its segments now instead of from the
+            // next song on, or drop them.
+            launch {
+                sponsorBlockOn.collect { on ->
+                    val videoId = _nowPlaying.value?.mediaId?.removePrefix(MERGING_DATA_TYPE.VIDEO)
+                    if (on && videoId != null) getSkipSegments(videoId) else if (!on) _skipSegments.value = null
+                }
+            }
             val skipSegmentsJob =
                 launch {
                     simpleMediaState
@@ -410,10 +431,10 @@ class JvmMediaPlayerHandlerImpl(
                         }.filter { it >= 0f }
                         .distinctUntilChanged()
                         .collect { current ->
-                            if (dataStoreManager.sponsorBlockEnabled.first() == TRUE) {
+                            if (sponsorBlockOn.value) {
                                 if (player.duration > 0L) {
                                     val skipSegments = skipSegments.value
-                                    val listCategory = dataStoreManager.getSponsorBlockCategories()
+                                    val listCategory = sponsorBlockCategories
                                     if (skipSegments != null) {
                                         for (skip in skipSegments) {
                                             if (listCategory.contains(skip.category)) {
@@ -575,7 +596,7 @@ class JvmMediaPlayerHandlerImpl(
                             }
                         }
                     }
-                if (dataStoreManager.sponsorBlockEnabled.first() == TRUE) {
+                if (sponsorBlockOn.value) {
                     getSkipSegments(videoId)
                 }
                 getFormat(videoId)
@@ -584,7 +605,12 @@ class JvmMediaPlayerHandlerImpl(
 
     private fun getSkipSegments(videoId: String) {
         _skipSegments.value = null
-        coroutineScope.launch {
+        // One fetch at a time: the previous song's is cancelled, so a slow answer for it cannot
+        // land after this song started and skip parts of the wrong track.
+        getSkipSegmentsJob?.cancel()
+        getSkipSegmentsJob =
+            coroutineScope.launch {
+            sponsorBlockCategories = dataStoreManager.getSponsorBlockCategories()
             streamRepository.getSkipSegments(videoId).collect { response ->
                 when (response) {
                     is Resource.Success -> {
@@ -646,6 +672,15 @@ class JvmMediaPlayerHandlerImpl(
             player.playWhenReady = true
         }
         updateNextPreviousTrackAvailability()
+    }
+
+    /** A move the user made in the Up next list: positions are those of the play order. */
+    private fun moveInPlayOrder(
+        fromPosition: Int,
+        toPosition: Int,
+    ) {
+        player.moveMediaItemInPlayOrder(fromPosition, toPosition)
+        _currentSongIndex.value = player.currentMediaItemIndex
     }
 
     private fun moveMediaItem(
@@ -764,6 +799,8 @@ class JvmMediaPlayerHandlerImpl(
     }
 
     override suspend fun onPlayerEvent(playerEvent: PlayerEvent) {
+        // Anything the user does to playback takes over from waiting for the connection.
+        if (playerEvent !is PlayerEvent.UpdateVolume) networkResume.disarm()
         when (playerEvent) {
             is PlayerEvent.UpdateVolume -> {
                 Logger.w(TAG, "onPlayerEvent: UpdateVolume ${playerEvent.newVolume}")
@@ -789,17 +826,14 @@ class JvmMediaPlayerHandlerImpl(
             }
 
             PlayerEvent.Next -> {
-                resetCrossfade()
                 player.seekToNext()
             }
 
             PlayerEvent.Previous -> {
-                resetCrossfade()
                 player.seekToPrevious()
             }
 
             PlayerEvent.SkipToPrevious -> {
-                resetCrossfade()
                 player.seekToPreviousMediaItem()
             }
 
@@ -970,21 +1004,25 @@ class JvmMediaPlayerHandlerImpl(
                         _sleepTimerState.update {
                             it.copy(isDone = false, timeRemaining = -1)
                         }
-                        // Poll until player duration is available (may be -1 initially)
-                        var duration = player.duration
-                        while (duration <= 0L) {
-                            delay(500)
-                            duration = player.duration
+                        // Watched, not timed once: the wait used to be worked out a single time from
+                        // the position, so at 1.5x speed, or after a pause, a seek or a skip, it
+                        // fired at the wrong moment -- often part-way into the next song. The song
+                        // playing now is followed until what is left of it (in real time, at the
+                        // current speed) fits the fade.
+                        var remaining: Long
+                        while (true) {
+                            val duration = player.duration
+                            val speed = player.playbackParameters.speed.coerceAtLeast(0.1f)
+                            remaining =
+                                if (duration > 0L) ((duration - player.currentPosition).coerceAtLeast(0L) / speed).toLong() else Long.MAX_VALUE
+                            if (remaining <= sleepFadeDurationMs + sleepFadeTailMs) break
+                            delay(250)
                         }
-                        val remaining = (duration - player.currentPosition).coerceAtLeast(0L)
                         // Fade over the tail of the track rather than after it, so the song is
                         // already silent by the time it ends. A track with less time left than the
                         // fade gets a shorter one instead of bleeding into whatever plays next.
-                        // Fade and tail together must fit inside what is left, or the timer would
-                        // run past the end of the track and pause somewhere inside the next one.
                         val fadeMs = sleepFadeDurationMs.coerceAtMost(remaining)
                         val tailMs = sleepFadeTailMs.coerceAtMost(remaining - fadeMs)
-                        delay(remaining - fadeMs - tailMs)
                         fadeOutForSleep(fadeMs)
                         delay(tailMs)
                         player.pause()
@@ -1135,13 +1173,6 @@ class JvmMediaPlayerHandlerImpl(
             for (i in from downTo to + 1) {
                 moveItemUp(i)
             }
-        }
-    }
-
-    override fun resetCrossfade() {
-        _controlState.update {
-            it.copy(
-            )
         }
     }
 
@@ -1498,7 +1529,7 @@ class JvmMediaPlayerHandlerImpl(
     override fun getCurrentMediaItem(): GenericMediaItem? = player.currentMediaItem
 
     override suspend fun moveItemUp(position: Int) {
-        moveMediaItem(position, position - 1)
+        moveInPlayOrder(position, position - 1)
         queueData.value.data.listTracks.toMutableList().let { list ->
             val temp = list[position]
             list[position] = list[position - 1]
@@ -1513,7 +1544,7 @@ class JvmMediaPlayerHandlerImpl(
     }
 
     override suspend fun moveItemDown(position: Int) {
-        moveMediaItem(position, position + 1)
+        moveInPlayOrder(position, position + 1)
         queueData.value.data.listTracks.toMutableList().let { list ->
             val temp = list[position]
             list[position] = list[position + 1]
@@ -2197,7 +2228,6 @@ class JvmMediaPlayerHandlerImpl(
             addMediaItem(currentPlayingTrack.toGenericMediaItem(), playWhenReady = playWhenReady)
             loadPlaylistOrAlbum(index = index)
             loadJob?.join()
-            resetCrossfade()
             player.seekTo(index, savedPosition)
             // Announce the restored position once. Nothing plays after a restore
             // (playWhenReady = false above), and startProgressUpdate only runs while
@@ -2310,10 +2340,17 @@ class JvmMediaPlayerHandlerImpl(
         }
     }
 
+    // Reset here, not in onIsPlayingChanged: that one is sent when a track starts LOADING, so each
+    // skipped track cleared the count before its own error arrived and the cap of three
+    // consecutive skips never held -- one fault could skip through the whole queue.
+    override fun onPlaybackConfirmed() {
+        unavailableSkips = 0
+        networkResume.disarm()
+    }
+
     override fun onIsPlayingChanged(isPlaying: Boolean) {
         _controlState.value = _controlState.value.copy(isPlaying = isPlaying)
         if (isPlaying) {
-            unavailableSkips = 0
             startProgressUpdate()
         } else {
             stopProgressUpdate()
@@ -2338,7 +2375,6 @@ class JvmMediaPlayerHandlerImpl(
     ) {
         Logger.w(TAG, "Checking current state before transition ${simpleMediaState.value}")
         Logger.w(TAG, "Smooth Switching Transition Current Position: ${player.currentPosition}")
-        player.volume = 1f
         Logger.w(TAG, "REASON onMediaItemTransition: $reason")
         Logger.d(TAG, "Media Item Transition Media Item: ${mediaItem?.metadata?.title}")
         if (mediaItem?.mediaId != _nowPlaying.value?.mediaId) {
@@ -2371,9 +2407,6 @@ class JvmMediaPlayerHandlerImpl(
         }
         updateNextPreviousTrackAvailability()
         updateNotification()
-        if (player.currentMediaItemIndex == 0) {
-            resetCrossfade()
-        }
         mayBeSaveRecentSong()
     }
 
@@ -2399,6 +2432,7 @@ class JvmMediaPlayerHandlerImpl(
             is PlayerErrorAction.Pause -> {
                 showToast(action.toast)
                 player.pause()
+                if (action.network) networkResume.arm()
             }
         }
     }

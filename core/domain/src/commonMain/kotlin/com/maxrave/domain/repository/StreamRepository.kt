@@ -81,6 +81,22 @@ interface StreamRepository {
     /** The audio itag streaming would ask for right now: the Wi-Fi or mobile quality setting's. */
     suspend fun wantedAudioItag(dataStoreManager: DataStoreManager): Int
 
+    /**
+     * Whether a stream stored as [storedItag] is what asking for [wantedItag] delivers. Not plain
+     * equality: an account that is not offered the requested format gets the next one down, and
+     * that copy is the right one to keep using.
+     */
+    fun deliversQuality(
+        storedItag: Int,
+        wantedItag: Int,
+    ): Boolean
+
+    /** Whether [storedItag] is a lower quality than asking for [wantedItag] delivers. */
+    fun isLowerQuality(
+        storedItag: Int,
+        wantedItag: Int,
+    ): Boolean
+
     fun initPlayback(
         playback: String,
         atr: String,

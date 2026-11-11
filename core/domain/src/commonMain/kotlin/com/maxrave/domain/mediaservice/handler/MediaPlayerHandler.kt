@@ -79,8 +79,6 @@ interface MediaPlayerHandler {
         to: Int,
     )
 
-    fun resetCrossfade()
-
     // Queue management
     fun shufflePlaylist(randomTrackIndex: Int = 0)
 

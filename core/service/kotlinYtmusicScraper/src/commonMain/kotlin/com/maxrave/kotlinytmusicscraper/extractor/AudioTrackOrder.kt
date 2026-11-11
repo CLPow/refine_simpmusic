@@ -33,14 +33,18 @@ internal fun audioTrackRank(
             .orEmpty()
     val acont = tags["acont"]
     val lang = tags["lang"]?.substringBefore('-')
-    return when {
-        // "descriptive" is narration for blind viewers — never what a language preference means.
-        !preferredLanguage.isNullOrBlank() &&
-            acont != "descriptive" &&
-            lang.equals(preferredLanguage.substringBefore('-'), ignoreCase = true) -> 0
-        acont == null || acont == "original" -> 1
-        else -> 2
-    }
+    val rank =
+        when {
+            // "descriptive" is narration for blind viewers — never what a language preference means.
+            !preferredLanguage.isNullOrBlank() &&
+                acont != "descriptive" &&
+                lang.equals(preferredLanguage.substringBefore('-'), ignoreCase = true) -> 0
+            acont == null || acont == "original" -> 1
+            else -> 2
+        }
+    // `drc=1` is YouTube's "stable volume" rendition: the same track, dynamically compressed.
+    // Within one language choice the untouched mix comes first.
+    return rank * 2 + if (tags["drc"] == "1") 1 else 0
 }
 
 /**

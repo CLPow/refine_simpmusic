@@ -36,6 +36,7 @@ import coil3.request.crossfade
 import com.kdroid.composetray.tray.api.Tray
 import com.kdroid.composetray.utils.SingleInstanceManager
 import com.maxrave.data.di.loader.loadAllModules
+import com.maxrave.common.SUPPORTED_LOCATION
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.mediaservice.handler.ToastType
@@ -196,6 +197,16 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
     startKoin {
         loadAllModules()
         loadKoinModules(viewModelModule)
+    }
+
+    // First run: take the region from the system, as the phone app does. Without this the
+    // desktop app kept the built-in default region for good.
+    runBlocking {
+        val dataStore = getKoin().get<DataStoreManager>()
+        if (dataStore.getString("location").first() == null) {
+            val country = java.util.Locale.getDefault().country
+            dataStore.setLocation(if (SUPPORTED_LOCATION.items.contains(country)) country else "US")
+        }
     }
 
     VersionManager.initialize()
