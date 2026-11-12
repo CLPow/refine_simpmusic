@@ -1,5 +1,6 @@
 package com.maxrave.simpmusic.ui.component.ytm
 
+import com.maxrave.simpmusic.ui.component.RefineControlButton
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -240,6 +241,9 @@ fun YtmTopBar(
                     Icon(SimpIcons.Search, contentDescription = stringResource(Res.string.ytm_search), tint = Color.White)
                 }
             }
+            // Where YouTube Music has its Cast button. Here too, so another device can be
+            // controlled while nothing is loaded on this one (no mini player to hold the button).
+            RefineControlButton()
             AccountAvatar(size = 28.dp, modifier = Modifier.padding(end = 4.dp)) { showAccount = true }
         }
     }

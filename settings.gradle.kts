@@ -60,6 +60,7 @@ include(
     ":ktorExt",
     ":kotlinYtmusicScraper",
     ":lyricsService",
+    ":refineControl",
     ":media-jvm",
     ":media3",
     ":crashlytics",
@@ -77,6 +78,7 @@ project(":domain").projectDir = File(coreDir, "domain")
 project(":ktorExt").projectDir = File(serviceDir, "ktorExt")
 project(":lyricsService").projectDir = File(serviceDir, "lyricsService")
 project(":kotlinYtmusicScraper").projectDir = File(serviceDir, "kotlinYtmusicScraper")
+project(":refineControl").projectDir = File(serviceDir, "refineControl")
 
 // media modules
 project(":media-jvm").projectDir = File(mediaDir, "media-jvm")

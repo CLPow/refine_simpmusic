@@ -5,8 +5,8 @@
 # made here. Upstream 2.0.0 -> 2.0.1 for the first fork release, 2.0.2 for the next, and so on.
 # When upstream moves (say to 2.1.0) the count restarts against the new base: 2.1.1, 2.1.2, ...
 # version-code must also rise on every release or Android refuses the install as a downgrade.
-version-name = "2.3.11"
-version-code = "138"
+version-name = "2.4.0"
+version-code = "139"
 
 android = "9.2.1"
 kotlin = "2.4.10"
@@ -127,6 +127,7 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines-android" }
 coroutines-guava = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-guava", version.ref = "coroutines-guava" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines-android" }
 navigation-compose = { group = "org.jetbrains.androidx.navigation", name = "navigation-compose", version.ref = "navigation" }
 easypermissions = { group = "pub.devrel", name = "easypermissions", version.ref = "easypermissions" }
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore-preferences" }

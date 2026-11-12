@@ -217,7 +217,11 @@ internal class SongRepositoryImpl(
      * Lazy for the same reason as [downloadHandler], and here it also breaks a cycle: the handler
      * already depends on this repository (it calls [recoverQueue] whenever it saves the queue).
      */
-    private val mediaPlayerHandler: MediaPlayerHandler by lazy { getKoin().get() }
+    // The local player by name: the queue saved here is this device's, also while the screens
+    // show another device's (Refine Control).
+    private val mediaPlayerHandler: MediaPlayerHandler by lazy {
+        getKoin().get(org.koin.core.qualifier.named(com.maxrave.common.Config.LOCAL_PLAYER))
+    }
 
     /**
      * Note the side effect: liking a song can start a download, when the user has asked for that.

@@ -99,12 +99,16 @@ kotlin {
         }
 
         androidMain {
+            // Refine Control runs on java.net and javax.crypto, which Android and the desktop
+            // both have and iOS does not. Its code is one directory compiled into both targets.
+            kotlin.srcDir("src/jvmShared/kotlin")
             dependencies {
                 // Add Android-specific dependencies here. Note that this source set depends on
                 // commonMain by default and will correctly pull the Android artifacts of any KMP
                 // dependencies declared in commonMain.
                 implementation(libs.koin.android)
                 implementation(projects.media3)
+                implementation(projects.refineControl)
                 implementation(libs.room.ktx)
             }
         }
@@ -120,8 +124,10 @@ kotlin {
         }
 
         jvmMain {
+            kotlin.srcDir("src/jvmShared/kotlin")
             dependencies {
                 implementation(projects.mediaJvm)
+                implementation(projects.refineControl)
                 implementation(libs.nowplaying)
                 implementation(libs.jna)
                 implementation(libs.jna.platform)

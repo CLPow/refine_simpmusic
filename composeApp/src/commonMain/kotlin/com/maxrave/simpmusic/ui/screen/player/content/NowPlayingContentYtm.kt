@@ -1,5 +1,7 @@
 package com.maxrave.simpmusic.ui.screen.player.content
 
+import com.maxrave.simpmusic.ui.component.RefineControlPlayingOn
+import com.maxrave.simpmusic.ui.component.RefineControlButton
 import com.maxrave.simpmusic.ui.component.ytm.YtmChip
 import com.maxrave.domain.data.model.queue.RadioChip
 import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
@@ -344,7 +346,9 @@ private fun TopBar(
         IconButton(onClick = actions.onDismiss) {
             Icon(state.dismissIcon, contentDescription = stringResource(Res.string.ytm_close_player), tint = Color.White)
         }
-        Spacer(Modifier.weight(1f))
+        // "Playing on <device>" while Refine Control is controlling another device.
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { RefineControlPlayingOn() }
+        RefineControlButton()
         PlatformCastButton(tint = Color.White)
         IconButton(onClick = actions.onShowMoreSheet) {
             Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Color.White)

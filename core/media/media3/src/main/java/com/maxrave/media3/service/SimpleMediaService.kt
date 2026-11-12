@@ -41,7 +41,7 @@ internal class SimpleMediaService :
 
     private val simpleMediaSessionCallback: MediaLibrarySession.Callback by inject<MediaLibrarySession.Callback>()
 
-    private val simpleMediaServiceHandler: MediaPlayerHandler by inject<MediaPlayerHandler>()
+    private val simpleMediaServiceHandler: MediaPlayerHandler by inject<MediaPlayerHandler>(org.koin.core.qualifier.named(com.maxrave.common.Config.LOCAL_PLAYER))
 
     private val binder = MusicBinder()
 

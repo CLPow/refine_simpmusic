@@ -1,5 +1,7 @@
 package com.maxrave.simpmusic.ui.screen
 
+import com.maxrave.simpmusic.ui.component.RefineControlPlayingOn
+import com.maxrave.simpmusic.ui.component.RefineControlButton
 import com.maxrave.simpmusic.ui.icon.MoreVert
 import com.maxrave.simpmusic.ui.component.NowPlayingBottomSheet
 import androidx.compose.ui.draw.rotate
@@ -187,6 +189,7 @@ fun MiniPlayer(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+            RefineControlButton(idleTint = TextSecondary)
             PlayPauseButton(controllerState.isPlaying, sharedViewModel)
             IconButton(
                 onClick = { sharedViewModel.onUIEvent(UIEvent.Next) },
@@ -299,6 +302,8 @@ fun DesktopPlayerBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.End,
             ) {
+                RefineControlPlayingOn(Modifier.padding(end = 4.dp))
+                RefineControlButton(idleTint = TextSecondary)
                 VolumeControl(controllerState.volume) { sharedViewModel.onUIEvent(UIEvent.UpdateVolume(it)) }
                 IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.Repeat) }) {
                     Icon(

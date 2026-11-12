@@ -1,5 +1,19 @@
 package com.maxrave.simpmusic.ui.screen.home
 
+import simpmusic.composeapp.generated.resources.ytm_save
+import simpmusic.composeapp.generated.resources.ytm_rc_forget_body
+import simpmusic.composeapp.generated.resources.ytm_rc_forget_title
+import simpmusic.composeapp.generated.resources.ytm_rc_forget
+import simpmusic.composeapp.generated.resources.ytm_rc_not_available
+import simpmusic.composeapp.generated.resources.ytm_rc_available
+import simpmusic.composeapp.generated.resources.ytm_rc_paired_devices
+import simpmusic.composeapp.generated.resources.ytm_rc_device_name
+import simpmusic.composeapp.generated.resources.ytm_rc_summary
+import simpmusic.composeapp.generated.resources.ytm_rc_title
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.OutlinedTextField
+import com.maxrave.domain.repository.ControlDevice
+import com.maxrave.domain.repository.RefineControlRepository
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -191,6 +205,7 @@ fun SettingScreen(
     sharedViewModel: SharedViewModel = koinInject(),
     dataStoreManager: DataStoreManager = koinInject(),
     accountRepository: AccountRepository = koinInject(),
+    refineControl: RefineControlRepository = koinInject(),
 ) {
     LaunchedEffect(Unit) { viewModel.getData() }
     val platformContext = LocalPlatformContext.current
@@ -210,6 +225,11 @@ fun SettingScreen(
     val allowExternalStart by dataStoreManager.allowExternalStartPlayback.collectAsStateWithLifecycle(true)
     val sponsorBlock by dataStoreManager.sponsorBlockEnabled.map { it == DataStoreManager.TRUE }.collectAsStateWithLifecycle(false)
     val signInExpired by accountRepository.signInExpired.collectAsStateWithLifecycle()
+    val refineControlOn by refineControl.enabled.collectAsStateWithLifecycle()
+    val refineControlName by refineControl.deviceName.collectAsStateWithLifecycle()
+    val refineControlDevices by refineControl.devices.collectAsStateWithLifecycle()
+    var renameDevice by remember { mutableStateOf(false) }
+    var forgetDevice by remember { mutableStateOf<ControlDevice?>(null) }
     var choice by remember { mutableStateOf<ChoiceDialog?>(null) }
     var confirm by remember { mutableStateOf<ConfirmDialog?>(null) }
     var showLicenses by remember { mutableStateOf(false) }
@@ -238,6 +258,24 @@ fun SettingScreen(
                         summary = stringResource(Res.string.ytm_restricted_mode_summary),
                         checked = !explicit,
                     ) { viewModel.setExplicitContentEnabled(!it) }
+                    if (refineControl.isSupported) {
+                        SwitchRow(
+                            title = stringResource(Res.string.ytm_rc_title),
+                            summary = stringResource(Res.string.ytm_rc_summary),
+                            checked = refineControlOn,
+                        ) { refineControl.setEnabled(it) }
+                        if (refineControlOn) {
+                            SettingRow(title = stringResource(Res.string.ytm_rc_device_name), summary = refineControlName) { renameDevice = true }
+                            refineControlDevices.filter { it.paired }.forEach { device ->
+                                SettingRow(
+                                    title = device.name,
+                                    summary =
+                                        stringResource(Res.string.ytm_rc_paired_devices) + " • " +
+                                            stringResource(if (device.connected) Res.string.ytm_rc_available else Res.string.ytm_rc_not_available),
+                                ) { forgetDevice = device }
+                            }
+                        }
+                    }
                     SettingRow(title = locationTitle, summary = location.orEmpty()) {
                         val codes = SUPPORTED_LOCATION.items.map { it.toString() }
                         choice =
@@ -392,6 +430,51 @@ fun SettingScreen(
         }
     }
 
+    if (renameDevice) {
+        var name by remember { mutableStateOf(refineControlName) }
+        AlertDialog(
+            containerColor = Ytm.Surface,
+            onDismissRequest = { renameDevice = false },
+            title = { Text(stringResource(Res.string.ytm_rc_device_name), color = Color.White) },
+            text = {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it.take(40) },
+                    singleLine = true,
+                    colors =
+                        OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White,
+                            cursorColor = Color.White,
+                            focusedBorderColor = Color.White,
+                            unfocusedBorderColor = Ytm.TextSecondary,
+                        ),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    refineControl.setDeviceName(name)
+                    renameDevice = false
+                }) { Text(stringResource(Res.string.ytm_save), color = Color.White) }
+            },
+            dismissButton = { TextButton(onClick = { renameDevice = false }) { Text(stringResource(Res.string.cancel), color = Ytm.TextSecondary) } },
+        )
+    }
+    forgetDevice?.let { device ->
+        AlertDialog(
+            containerColor = Ytm.Surface,
+            onDismissRequest = { forgetDevice = null },
+            title = { Text(stringResource(Res.string.ytm_rc_forget_title, device.name), color = Color.White) },
+            text = { Text(stringResource(Res.string.ytm_rc_forget_body), color = Ytm.TextSecondary) },
+            confirmButton = {
+                TextButton(onClick = {
+                    refineControl.forget(device.id)
+                    forgetDevice = null
+                }) { Text(stringResource(Res.string.ytm_rc_forget), color = Color.White) }
+            },
+            dismissButton = { TextButton(onClick = { forgetDevice = null }) { Text(stringResource(Res.string.cancel), color = Ytm.TextSecondary) } },
+        )
+    }
     choice?.let { dialog ->
         AlertDialog(
             containerColor = Ytm.Surface,

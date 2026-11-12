@@ -202,7 +202,9 @@ private val mediaServiceModule =
             SimpleMediaSessionCallback(
                 androidApplication(),
                 get<CoroutineScope>(named(SERVICE_SCOPE)),
-                get<MediaPlayerHandler>(),
+                // Media buttons, Android Auto and the notification act on this phone's player,
+                // also while the app is controlling another device.
+                get<MediaPlayerHandler>(named(com.maxrave.common.Config.LOCAL_PLAYER)),
                 get<SearchRepository>(),
                 get<SongRepository>(),
                 get<LocalPlaylistRepository>(),

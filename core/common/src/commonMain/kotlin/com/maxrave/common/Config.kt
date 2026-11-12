@@ -29,6 +29,9 @@ object Config {
     const val CANVAS_CACHE = "canvasCache"
     const val SERVICE_SCOPE = "serviceScope"
     const val MAIN_PLAYER = "mainPlayer"
+
+    /** Koin name of this device's own player; the unnamed one is routed by Refine Control. */
+    const val LOCAL_PLAYER = "localPlayer"
     const val SECONDARY_PLAYER = "secondaryPlayer"
 
     val REMOVED_SONG_DATE_TIME: LocalDateTime = LocalDateTime(LocalDate(2003, Month.AUGUST, 26), LocalTime(3, 0))

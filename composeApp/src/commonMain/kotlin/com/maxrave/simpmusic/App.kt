@@ -1,5 +1,6 @@
 package com.maxrave.simpmusic
 
+import com.maxrave.simpmusic.ui.component.RefineControlHost
 import com.maxrave.simpmusic.ui.component.ytm.LocalWideLayout
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.foundation.layout.padding
@@ -84,6 +85,8 @@ import simpmusic.composeapp.generated.resources.yes
 fun App(viewModel: SharedViewModel = koinInject()) {
     val windowSize = currentWindowAdaptiveInfo().windowSizeClass
     val navController = rememberNavController()
+    // Refine Control's pairing code and toasts, wherever the user is in the app.
+    RefineControlHost(onToast = { viewModel.makeToast(it) })
 
     val sleepTimerState by viewModel.sleepTimerState.collectAsStateWithLifecycle()
     val nowPlayingData by viewModel.nowPlayingState.collectAsStateWithLifecycle()

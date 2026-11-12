@@ -49,6 +49,7 @@ import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.mediaservice.handler.NowPlayingTrackState
 import com.maxrave.domain.mediaservice.handler.PlayerEvent
 import com.maxrave.domain.mediaservice.handler.PlaylistType
+import com.maxrave.domain.mediaservice.handler.PlaybackSnapshot
 import com.maxrave.domain.mediaservice.handler.QueueData
 import com.maxrave.domain.mediaservice.handler.RepeatState
 import com.maxrave.domain.mediaservice.handler.SimpleMediaState
@@ -2234,6 +2235,41 @@ class JvmMediaPlayerHandlerImpl(
             // isPlaying — so no state is ever published and the UI sits at 0:00 on a
             // queue the user left half-finished, until they press play.
             _simpleMediaState.value = SimpleMediaState.Progress(savedPosition)
+            true
+        }
+
+    /**
+     * Playback moved here from another device (Refine Control). The same steps as restoring the
+     * saved queue, with three differences: it loads over whatever is already in the player, it
+     * keeps the queue's own playlist id and continuation (so a radio keeps paging here), and the
+     * position is set on the first track before the rest of the queue is loaded, so a transfer
+     * that plays never starts from 0:00 and jumps.
+     */
+    override suspend fun loadSnapshot(snapshot: PlaybackSnapshot): Boolean =
+        restoreQueueMutex.withLock {
+            val tracks = snapshot.queue.listTracks
+            val index = snapshot.index.takeIf { it in tracks.indices } ?: return@withLock false
+            val current = tracks[index]
+            loadJob?.cancel()
+            networkResume.disarm()
+            // The queue arrives in the order it was being played, so it is loaded unshuffled.
+            if (player.shuffleModeEnabled) player.shuffleModeEnabled = false
+            songRepository.insertSong(current.toSongEntity()).lastOrNull()
+            current.durationSeconds?.let { songRepository.updateDurationSeconds(it, current.videoId) }
+            setQueueData(snapshot.queue.copy(listTracks = ArrayList(tracks), firstPlayedTrack = current))
+            addMediaItem(current.toGenericMediaItem(), playWhenReady = snapshot.playWhenReady)
+            if (snapshot.positionMs > 0L) player.seekTo(0, snapshot.positionMs)
+            loadPlaylistOrAlbum(index = index)
+            loadJob?.join()
+            // Loading rebuilds the list and forgets where Autoplay's part began.
+            snapshot.queue.autoplayStartIndex?.let { start ->
+                _queueData.update { it.copy(data = it.data.copy(autoplayStartIndex = start)) }
+            }
+            if (!snapshot.playWhenReady) {
+                // Paused, nothing reports a position: say it once (see restoreSavedQueue).
+                player.seekTo(index, snapshot.positionMs)
+                _simpleMediaState.value = SimpleMediaState.Progress(snapshot.positionMs)
+            }
             true
         }
 

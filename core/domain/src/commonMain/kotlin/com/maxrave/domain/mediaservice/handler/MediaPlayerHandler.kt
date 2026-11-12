@@ -176,6 +176,15 @@ interface MediaPlayerHandler {
      */
     suspend fun restoreQueueAndPlay(): Boolean
 
+    /**
+     * Replaces whatever is loaded with [snapshot]: its queue, the track at its index, and the
+     * position inside that track. Used when playback moves here from another device (Refine
+     * Control), so unlike [mayBeRestoreQueue] it loads over a queue that is already there.
+     *
+     * Returns once the queue is in the player; false when the snapshot has no track to play.
+     */
+    suspend fun loadSnapshot(snapshot: PlaybackSnapshot): Boolean
+
     // Lifecycle
     fun shouldReleaseOnTaskRemoved(): Boolean
 
@@ -190,6 +199,15 @@ sealed class RepeatState {
 
     data object One : RepeatState()
 }
+
+/** A queue and the place in it: everything another device needs to carry on playing. */
+data class PlaybackSnapshot(
+    /** [QueueData.Data.listTracks] in play order. */
+    val queue: QueueData.Data,
+    val index: Int,
+    val positionMs: Long,
+    val playWhenReady: Boolean,
+)
 
 sealed class PlayerEvent {
     data object PlayPause : PlayerEvent()
