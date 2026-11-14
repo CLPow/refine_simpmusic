@@ -127,8 +127,6 @@
     <string name="processing">Processing</string>
     <string name="no_playlist_found">No local playlists found, please create one first</string>
     <string name="explicit_content_blocked">Explicit content is skipped</string>
-    <string name="desktop_webview_description">Because of the limitations of Compose Multiplatform, I can not implement WebView on desktop.\nRead this to learn more how to log in in desktop:\n</string>
-    <string name="open_blog_post">Open blog post</string>
     <string name="open_app">Open Refine Music</string>
     <string name="close_miniplayer">Close Mini-player</string>
     <string name="open_miniplayer">Open Mini-player</string>

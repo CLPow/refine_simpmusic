@@ -267,4 +267,11 @@
     <string name="ytm_song_search_mic_blocked">Microphone access is off for Refine. Turn it on in Settings to search by sound.</string>
     <string name="ytm_song_search_allow">Allow</string>
     <string name="ytm_song_search_open_settings">Open settings</string>
+    <string name="ytm_desktop_sign_in_title">Sign in to YouTube Music</string>
+    <string name="ytm_desktop_sign_in_body">A separate Microsoft Edge window opens with Google\'s sign-in page. Sign in there, and Refine takes the session and closes the window. Your own Edge and Chrome profiles aren\'t opened or read.</string>
+    <string name="ytm_desktop_sign_in_button">Open sign-in window</string>
+    <string name="ytm_desktop_sign_in_waiting">Waiting for you to sign in in the Edge window…</string>
+    <string name="ytm_desktop_sign_in_cancelled">The sign-in window was closed before you signed in.</string>
+    <string name="ytm_desktop_sign_in_no_browser">Microsoft Edge or Google Chrome is needed to sign in.</string>
+    <string name="ytm_desktop_sign_in_failed">Couldn\'t open the sign-in window. Try again.</string>
 </resources>
