@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Text of the crash screen (CustomActivityOnCrash). The library reads Android resources, so these
+  live here; copies in composeResources had no effect.
+-->
+<resources>
+    <string name="customactivityoncrash_error_activity_error_occurred_explanation">Refine Music stopped unexpectedly. Sorry about that.</string>
+    <string name="customactivityoncrash_error_activity_restart_app">Restart Refine Music</string>
+    <string name="customactivityoncrash_error_activity_close_app">Close</string>
+    <string name="customactivityoncrash_error_activity_error_details">Details</string>
+    <string name="customactivityoncrash_error_activity_error_details_title">Crash details</string>
+    <string name="customactivityoncrash_error_activity_error_details_close">Close</string>
+    <string name="customactivityoncrash_error_activity_error_details_copy">Copy</string>
+    <string name="customactivityoncrash_error_activity_error_details_copied">Copied</string>
+    <string name="customactivityoncrash_error_activity_error_details_clipboard_label">Refine Music crash details</string>
+</resources>

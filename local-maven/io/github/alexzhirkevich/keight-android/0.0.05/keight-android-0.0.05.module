@@ -1,0 +1,198 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "url": "../../keight/0.0.05/keight-0.0.05.module",
+    "group": "io.github.alexzhirkevich",
+    "module": "keight",
+    "version": "0.0.05",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.14.3"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseApiElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.usage": "java-api",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.7.1"
+          }
+        },
+        {
+          "group": "io.github.alexzhirkevich",
+          "module": "keight-core",
+          "version": {
+            "requires": "0.0.05"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.3.0"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "keight-release.aar",
+          "url": "keight-android-0.0.05.aar",
+          "size": 1655828,
+          "sha512": "74533c67a379319149b3a52fec2a22299655989631537eac8e50ab13bf338d9d52bb978ed6d30d49f528ca9cca8f2ee79a2fc0a827379ff69a9d87d0af27d241",
+          "sha256": "dccfc03d4dbd02f7cb9345dc7df087a3ae1d8e5ce48586dd86c994ec7a588a5b",
+          "sha1": "27c8a3996ad38ca39482db2db2611175fca05fbc",
+          "md5": "17e5dae4e786cbd2fe8fc15efac7a0a0"
+        }
+      ]
+    },
+    {
+      "name": "releaseRuntimeElements-published",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "dependencies": [
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-core",
+          "version": {
+            "requires": "1.9.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-datetime",
+          "version": {
+            "requires": "0.7.1"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "io.github.alexzhirkevich",
+          "module": "keight-core",
+          "version": {
+            "requires": "0.0.05"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.3.0"
+          },
+          "excludes": [
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-stdlib-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-common"
+            },
+            {
+              "group": "org.jetbrains.kotlin",
+              "module": "kotlin-test-annotations-common"
+            }
+          ]
+        }
+      ],
+      "files": [
+        {
+          "name": "keight-release.aar",
+          "url": "keight-android-0.0.05.aar",
+          "size": 1655828,
+          "sha512": "74533c67a379319149b3a52fec2a22299655989631537eac8e50ab13bf338d9d52bb978ed6d30d49f528ca9cca8f2ee79a2fc0a827379ff69a9d87d0af27d241",
+          "sha256": "dccfc03d4dbd02f7cb9345dc7df087a3ae1d8e5ce48586dd86c994ec7a588a5b",
+          "sha1": "27c8a3996ad38ca39482db2db2611175fca05fbc",
+          "md5": "17e5dae4e786cbd2fe8fc15efac7a0a0"
+        }
+      ]
+    },
+    {
+      "name": "releaseSourcesElements-published",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.jvm.environment": "android",
+        "org.gradle.libraryelements": "jar",
+        "org.gradle.usage": "java-runtime",
+        "org.jetbrains.kotlin.platform.type": "androidJvm"
+      },
+      "files": [
+        {
+          "name": "keight-android-0.0.05-sources.jar",
+          "url": "keight-android-0.0.05-sources.jar",
+          "size": 110600,
+          "sha512": "4164beb948c53dd8dd5f80f69f58d3184ea83a3766d8c0f1ad7e02842354a4668b9c95f2d5b924883f50de1404579db40b0c53a83dca4285d2e6804856cfcfd4",
+          "sha256": "dc0255022ff5ef34490f33c7c2e5a92fbdca8e64fb09e9da0f071e145ab530a2",
+          "sha1": "1a699d347062010f1b9fe4103ac58537ef9ec952",
+          "md5": "73e4ef300ec6873624b979b1cf8cdbba"
+        }
+      ]
+    }
+  ]
+}

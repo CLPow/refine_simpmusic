@@ -1,0 +1,146 @@
+package com.maxrave.simpmusic
+
+import android.annotation.SuppressLint
+import android.app.Application
+import android.database.CursorWindow
+import android.util.Log
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.work.Configuration
+import androidx.work.WorkManager
+import cat.ereza.customactivityoncrash.config.CaocConfig
+import coil3.ImageLoader
+import coil3.PlatformContext
+import coil3.SingletonImageLoader
+import coil3.disk.DiskCache
+import coil3.network.okhttp.OkHttpNetworkFetcherFactory
+import coil3.request.CachePolicy
+import coil3.request.crossfade
+import com.maxrave.data.di.loader.loadAllModules
+import com.maxrave.logger.Logger
+import com.maxrave.simpmusic.di.viewModelModule
+import com.maxrave.simpmusic.ui.widget.TurntableWidget
+import androidx.glance.appwidget.updateAll
+import com.maxrave.simpmusic.utils.NetworkFirstInterceptor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import multiplatform.network.cmptoast.AppContext
+import okhttp3.OkHttpClient
+import okio.FileSystem
+import org.koin.android.ext.koin.androidContext
+import org.koin.android.ext.koin.androidLogger
+import org.koin.core.component.KoinComponent
+import org.koin.core.context.loadKoinModules
+import org.koin.core.context.startKoin
+import org.koin.core.logger.Level
+import org.simpmusic.crashlytics.configCrashlytics
+import java.lang.reflect.Field
+
+class SimpMusicApplication :
+    Application(),
+    KoinComponent,
+    SingletonImageLoader.Factory {
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    override fun onCreate() {
+        super.onCreate()
+        if (!BuildConfig.DEBUG) Logger.setMinLevel(com.maxrave.logger.LogLevel.WARN)
+        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+        configCrashlytics(this, BuildKonfig.sentryDsn)
+        startKoin {
+            // DEBUG logged every injection on the main thread, release builds included.
+            androidLogger(level = Level.ERROR)
+            androidContext(this@SimpMusicApplication)
+            loadAllModules()
+            loadKoinModules(viewModelModule)
+        }
+        // provide custom configuration
+        val workConfig =
+            Configuration
+                .Builder()
+                .setMinimumLoggingLevel(Log.INFO)
+                .build()
+
+        // initialize WorkManager
+        WorkManager.initialize(this, workConfig)
+
+        // Redraw the Now Playing widgets already on the home screen once per process start, so an
+        // app update shows the new widget layout straight away instead of after the next track.
+        applicationScope.launch {
+            runCatching { TurntableWidget().updateAll(this@SimpMusicApplication) }
+        }
+
+        // Lyrics romanization was removed in 2.3.10; free the ~13 MB Japanese dictionary an older
+        // install may have downloaded for it.
+        applicationScope.launch {
+            runCatching { java.io.File(filesDir, "kuromoji-ipadic").deleteRecursively() }
+        }
+
+        CaocConfig.Builder
+            .create()
+            .backgroundMode(CaocConfig.BACKGROUND_MODE_SILENT) // default: CaocConfig.BACKGROUND_MODE_SHOW_CUSTOM
+            .enabled(true) // default: true
+            .showErrorDetails(true) // default: true
+            .showRestartButton(true) // default: true
+            .errorDrawable(R.mipmap.ic_launcher_round)
+            .logErrorOnRestart(false) // default: true
+            .trackActivities(true) // default: false
+            .minTimeBetweenCrashesMs(2000) // default: 3000 //default: bug image
+            .restartActivity(MainActivity::class.java) // default: null (your app's launch activity)
+            .apply()
+
+        // Wraps the crash handler already installed: the crash is written to a file the user can
+        // export from Settings › About (the FOSS build has no Sentry), then handled as before.
+        CrashLog.install(this)
+
+        // A hidden-API tweak (bigger CursorWindow for large queue rows). Newer Android versions
+        // may refuse the reflection; that must cost the tweak, not the app start.
+        try {
+            @SuppressLint("DiscouragedPrivateApi")
+            val field: Field = CursorWindow::class.java.getDeclaredField("sCursorWindowSize")
+            field.isAccessible = true
+            field.set(null, 100 * 1024 * 1024)
+        } catch (e: Exception) {
+            Logger.w("Startup", "CursorWindow size not raised: ${e.message}")
+        }
+
+        AppContext.apply {
+            set(applicationContext)
+        }
+    }
+
+    override fun onTerminate() {
+        super.onTerminate()
+
+        Logger.w("Terminate", "Checking")
+    }
+
+    override fun newImageLoader(context: PlatformContext): ImageLoader {
+        lateinit var imageLoader: ImageLoader
+        imageLoader =
+            ImageLoader
+                .Builder(context)
+                .components {
+                    add(NetworkFirstInterceptor { imageLoader })
+                    add(
+                        OkHttpNetworkFetcherFactory(
+                            callFactory = {
+                                OkHttpClient()
+                            },
+                        ),
+                    )
+                }.diskCachePolicy(CachePolicy.ENABLED)
+                .networkCachePolicy(CachePolicy.ENABLED)
+                .diskCache(
+                    DiskCache
+                        .Builder()
+                        .directory(FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "image_cache")
+                        .maxSizeBytes(512L * 1024 * 1024)
+                        .build(),
+                ).crossfade(true)
+                .build()
+        return imageLoader
+    }
+}

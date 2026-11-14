@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Widget picker preview of the Now Playing widget at its 4x2 target size, drawn as the widget
+  draws it: the header row (cover, title, artist, thumbs-up, play) above the strip of recently
+  played covers. Colours follow the wallpaper on Android 12+ (see widget_preview_colors).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_preview_round28"
+    android:backgroundTint="@color/wp_strip"
+    android:clipToOutline="true"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="92dp"
+        android:background="@color/wp_background"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp">
+
+        <ImageView
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:background="@drawable/widget_preview_round16"
+            android:backgroundTint="@color/wp_art" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="8dp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="Bloom"
+                android:textColor="@color/wp_on_surface"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:text="RESCENE"
+                android:textColor="@color/wp_on_surface_variant"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <ImageView
+            android:layout_width="48dp"
+            android:layout_height="60dp"
+            android:background="@drawable/widget_preview_round16"
+            android:backgroundTint="@color/wp_tertiary_container"
+            android:contentDescription="@null"
+            android:padding="15dp"
+            android:src="@drawable/widget_thumb_up_24"
+            android:tint="@color/wp_on_tertiary_container" />
+
+        <ImageView
+            android:layout_width="60dp"
+            android:layout_height="60dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/widget_preview_round16"
+            android:backgroundTint="@color/wp_primary"
+            android:contentDescription="@null"
+            android:padding="15dp"
+            android:src="@drawable/rounded_play_arrow_24"
+            android:tint="@color/wp_on_primary" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+        <ImageView android:contentDescription="@null" android:layout_width="56dp" android:layout_height="56dp" android:background="@drawable/widget_preview_round16" android:backgroundTint="@color/wp_art" />
+        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+        <ImageView android:contentDescription="@null" android:layout_width="56dp" android:layout_height="56dp" android:background="@drawable/widget_preview_round16" android:backgroundTint="@color/wp_art" />
+        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+        <ImageView android:contentDescription="@null" android:layout_width="56dp" android:layout_height="56dp" android:background="@drawable/widget_preview_round16" android:backgroundTint="@color/wp_art" />
+        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+        <ImageView android:contentDescription="@null" android:layout_width="56dp" android:layout_height="56dp" android:background="@drawable/widget_preview_round16" android:backgroundTint="@color/wp_art" />
+        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+        <ImageView android:contentDescription="@null" android:layout_width="56dp" android:layout_height="56dp" android:background="@drawable/widget_preview_round16" android:backgroundTint="@color/wp_art" />
+        <FrameLayout android:layout_width="0dp" android:layout_height="0dp" android:layout_weight="1" />
+    </LinearLayout>
+</LinearLayout>
