@@ -7,7 +7,7 @@ This repository is **not** the upstream project. It is maintained by [CLPow](htt
 for one person's use, and its changes have not been submitted upstream. If you are looking for
 SimpMusic itself, go to [maxrave-dev/SimpMusic](https://github.com/maxrave-dev/SimpMusic).
 
-**Current version: 2.4.1**
+**Current version: 2.4.2**
 
 ## Install and updates
 
@@ -36,6 +36,10 @@ is kept as an option and is off by default.
 to your YouTube history, so recommendations follow what you play (Settings › Privacy shows the last
 report). It plays songs only: when a result is a music video, Refine looks for the song version.
 Timed lyrics come from YouTube Music first, then other sources.
+
+**Like the YouTube Music app:** comments under the player (read, reply and like when signed in),
+YouTube's own Home background artwork, and song search on Android: tap the sound-wave button in
+an empty search field and Refine names the song playing nearby.
 
 **Refine Control (2.4.0+).** Move music between your phone and computer, or control one from the
 other, like Spotify Connect but over your own Wi-Fi with no server.

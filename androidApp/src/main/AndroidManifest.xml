@@ -14,6 +14,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- Settings › About › Check for updates: installs a newer release from GitHub. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Search › Song search: asked for the first time it is used. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Only Android 9 and older need this: there MediaStore still writes through shared
          storage. From Android 10 an app writing its own new image needs no permission, and
          SaveImagePermission grants without asking — so the declaration stops at 28 to match. -->

@@ -130,7 +130,8 @@ fun AlbumScreen(
     if (albumMenu) {
         PlaylistBottomSheet(
             onDismiss = { albumMenu = false },
-            playlistId = browseId,
+            // The album's own playlist id, so a shared link opens the album (port of maxrave-dev/SimpMusic 5a5ef03c).
+            playlistId = uiState.audioPlaylistId.ifEmpty { browseId },
             playlistName = uiState.title,
             isYourYouTubePlaylist = false,
             onSaveToLocal = {},

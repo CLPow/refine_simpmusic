@@ -29,6 +29,7 @@ import com.maxrave.domain.data.model.browse.album.Track
 import com.maxrave.domain.data.model.mediaService.SponsorSkipSegments
 import com.maxrave.domain.data.model.searchResult.songs.Artist
 import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
+import com.maxrave.domain.data.player.AppOnScreen
 import com.maxrave.domain.data.player.GenericCastState
 import com.maxrave.domain.data.player.GenericCommandButton
 import com.maxrave.domain.data.player.GenericMediaItem
@@ -742,10 +743,14 @@ class JvmMediaPlayerHandlerImpl(
                 val positionPersistIntervalMs = 5_000L
                 var sinceLastPositionSaveMs = 0L
                 while (true) {
-                    delay(100)
+                    // Off screen (minimized or in the tray) nothing draws the position: tick once a
+                    // second. That still serves SponsorBlock (a skip can land up to a second late),
+                    // the 5 s position save and the listen reports.
+                    val intervalMs = if (AppOnScreen.onScreen.value) 100L else 1_000L
+                    delay(intervalMs)
                     _simpleMediaState.value = SimpleMediaState.Progress(player.currentPosition)
                     updateMacOSElapsedTime()
-                    sinceLastPositionSaveMs += 100
+                    sinceLastPositionSaveMs += intervalMs
                     if (sinceLastPositionSaveMs >= positionPersistIntervalMs) {
                         sinceLastPositionSaveMs = 0
                         mayBeSaveRecentPosition()

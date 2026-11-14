@@ -66,6 +66,10 @@ class HomeViewModel(
         MutableStateFlow(arrayListOf())
     val homeItemList: StateFlow<List<HomeItem>> = _homeItemList
 
+    /** The artwork YouTube sends with Home, drawn behind the top of the page; null when none. */
+    private val _homeBackground = MutableStateFlow<String?>(null)
+    val homeBackground: StateFlow<String?> = _homeBackground
+
     private var _homeListState = MutableStateFlow<ListState>(ListState.IDLE)
     val homeListState: StateFlow<ListState> = _homeListState
 
@@ -233,7 +237,7 @@ class HomeViewModel(
                 // asks again. A failed, empty or slow answer (a cold network, a 429 cooldown, the
                 // cookie arriving late) is retried with a growing pause; only after every attempt
                 // fails does the "Couldn't load" card with its Retry button show.
-                var home: Resource<Pair<String?, List<HomeItem>>>? = null
+                var home: Resource<Triple<String?, List<HomeItem>, String?>>? = null
                 for (attempt in 0 until HOME_MAX_ATTEMPTS) {
                     if (attempt > 0) delay(minOf(1_000L shl (attempt - 1), 15_000L))
                     home =
@@ -249,7 +253,7 @@ class HomeViewModel(
                         } catch (e: CancellationException) {
                             throw e
                         } catch (e: Exception) {
-                            Resource.Error<Pair<String?, List<HomeItem>>>(e.message ?: "Home unavailable")
+                            Resource.Error<Triple<String?, List<HomeItem>, String?>>(e.message ?: "Home unavailable")
                         }
                     if (home is Resource.Success && !home.data?.second.isNullOrEmpty()) break
                     // No connection at all: YouTube Music says so at once instead of spinning for
@@ -273,6 +277,7 @@ class HomeViewModel(
                     _offline.value = false
                     _continuation.value = home.data?.first
                     _homeItemList.value = home.data?.second ?: listOf()
+                    _homeBackground.value = home.data?.third
                     lastLoadedAtMs = currentTimeMs()
                     launch { showSongVersionsOnSpeedDial() }
                     // A dead cookie still gets a feed, only a signed-out one. Ask once per load.

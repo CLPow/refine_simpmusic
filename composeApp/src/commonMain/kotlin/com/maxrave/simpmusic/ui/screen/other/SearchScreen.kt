@@ -1,5 +1,9 @@
 package com.maxrave.simpmusic.ui.screen.other
 
+import simpmusic.composeapp.generated.resources.ytm_song_search
+import com.maxrave.simpmusic.ui.icon.GraphicEq
+import com.maxrave.simpmusic.expect.ui.isSongRecognitionSupported
+import com.maxrave.simpmusic.expect.ui.SongRecognitionSheet
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -155,6 +159,7 @@ fun SearchScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var submitted by rememberSaveable { mutableStateOf<String?>(null) }
     var editing by rememberSaveable { mutableStateOf(true) }
+    var songSearch by remember { mutableStateOf(false) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
     var removeHistory by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
@@ -311,7 +316,21 @@ fun SearchScreen(
                 }) {
                     Icon(SimpIcons.Close, contentDescription = stringResource(Res.string.ytm_clear), tint = Color.White)
                 }
+            } else if (isSongRecognitionSupported) {
+                // YouTube Music's song search: name what is playing nearby.
+                IconButton(onClick = { songSearch = true }) {
+                    Icon(SimpIcons.GraphicEq, contentDescription = stringResource(Res.string.ytm_song_search), tint = Color.White)
+                }
             }
+        }
+        if (songSearch) {
+            SongRecognitionSheet(
+                onFind = { found ->
+                    query = found
+                    search(found)
+                },
+                onDismiss = { songSearch = false },
+            )
         }
 
         if (editing || submitted == null) {

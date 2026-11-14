@@ -1,5 +1,9 @@
 package com.maxrave.simpmusic.ui.screen.player.content
 
+import simpmusic.composeapp.generated.resources.ytm_comments
+import com.maxrave.simpmusic.ui.icon.Comment
+import com.maxrave.simpmusic.ui.component.ytm.rememberCommentsState
+import com.maxrave.simpmusic.ui.component.ytm.CommentsSheet
 import com.maxrave.simpmusic.ui.component.RefineControlPlayingOn
 import com.maxrave.simpmusic.ui.component.RefineControlButton
 import com.maxrave.simpmusic.ui.component.ytm.YtmChip
@@ -509,8 +513,21 @@ private fun ActionPills(
             label = stringResource(Res.string.ytm_dislike),
             onClick = { actions.onUIEvent(UIEvent.Dislike) },
         )
-        Pill(icon = SimpIcons.PlaylistAdd, label = stringResource(Res.string.ytm_save), onClick = actions.onShowAddToPlaylist)
         val videoId = state.artworkQueue.getOrNull(state.currentOrderIndex)?.videoId
+        // YouTube Music's Comments, between the thumbs and Save; the count is the first page's header.
+        if (videoId != null) {
+            val comments = rememberCommentsState(videoId)
+            var showComments by remember { mutableStateOf(false) }
+            if (!comments.turnedOff) {
+                Pill(
+                    icon = SimpIcons.Comment,
+                    label = comments.header?.countShort ?: stringResource(Res.string.ytm_comments),
+                    onClick = { showComments = true },
+                )
+            }
+            if (showComments) CommentsSheet(comments, onDismiss = { showComments = false })
+        }
+        Pill(icon = SimpIcons.PlaylistAdd, label = stringResource(Res.string.ytm_save), onClick = actions.onShowAddToPlaylist)
         if (videoId != null) {
             Pill(
                 icon = SimpIcons.Share,

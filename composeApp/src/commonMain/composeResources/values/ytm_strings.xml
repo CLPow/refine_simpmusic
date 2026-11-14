@@ -248,4 +248,23 @@
     <string name="ytm_update_retry">Retry</string>
     <string name="ytm_update_not_signed">The downloaded file isn\'t signed with Refine\'s key, so it was deleted instead of installed.</string>
     <string name="ytm_update_ok">OK</string>
+    <string name="ytm_comments">Comments</string>
+    <string name="ytm_comments_none">Comments are turned off</string>
+    <string name="ytm_comments_failed">Couldn\'t load comments</string>
+    <string name="ytm_comments_reply">Reply</string>
+    <string name="ytm_comments_replying_to">Replying to %1$s</string>
+    <string name="ytm_comments_placeholder">Add a comment…</string>
+    <string name="ytm_comments_sign_in">Sign in to comment</string>
+    <string name="ytm_comments_pinned">Pinned</string>
+    <string name="ytm_song_search">Song search</string>
+    <string name="ytm_song_search_listening">Listening…</string>
+    <string name="ytm_song_search_identifying">Searching…</string>
+    <string name="ytm_song_search_listening_hint">Play or hum a song near your phone</string>
+    <string name="ytm_song_search_no_match">Couldn\'t find a match</string>
+    <string name="ytm_song_search_failed">Song search isn\'t available right now. Check your connection.</string>
+    <string name="ytm_song_search_results">See results</string>
+    <string name="ytm_song_search_mic_needed">Allow microphone access to search for songs by sound.</string>
+    <string name="ytm_song_search_mic_blocked">Microphone access is off for Refine. Turn it on in Settings to search by sound.</string>
+    <string name="ytm_song_search_allow">Allow</string>
+    <string name="ytm_song_search_open_settings">Open settings</string>
 </resources>

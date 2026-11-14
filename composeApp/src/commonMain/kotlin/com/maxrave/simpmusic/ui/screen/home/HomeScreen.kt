@@ -1,5 +1,8 @@
 package com.maxrave.simpmusic.ui.screen.home
 
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.graphicsLayer
+import coil3.compose.AsyncImage
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -136,6 +139,7 @@ fun HomeScreen(
     val shouldShowLogInAlert by viewModel.showLogInAlert.collectAsStateWithLifecycle()
     val offline by viewModel.offline.collectAsStateWithLifecycle()
     val signInExpired by viewModel.signInExpired.collectAsStateWithLifecycle()
+    val homeBackground by viewModel.homeBackground.collectAsStateWithLifecycle()
     var refreshing by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.scrollToTop.collect { listState.scrollToItem(0) } }
@@ -195,16 +199,54 @@ fun HomeScreen(
         )
     }
 
-    // YouTube Music's Home sits on a dark slate wash that fades into the page from the top.
+    // YouTube Music's Home sits on a dark slate wash that fades into the page from the top. When
+    // YouTube sends Home a background image, YouTube Music draws that instead, behind the chips and
+    // the first shelf, scrolling away with them and fading into the page.
+    Box(Modifier.fillMaxSize().background(Ytm.Background)) {
+    val backdrop = homeBackground
+    if (backdrop != null) {
+        val scrolledAway by remember {
+            derivedStateOf { if (listState.firstVisibleItemIndex == 0) listState.firstVisibleItemScrollOffset.toFloat() else Float.MAX_VALUE }
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(HOME_BACKDROP_HEIGHT)
+                .graphicsLayer {
+                    translationY = -scrolledAway.coerceAtMost(size.height)
+                    alpha = 1f - (scrolledAway / size.height).coerceIn(0f, 1f)
+                },
+        ) {
+            AsyncImage(
+                model = backdrop,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+            Box(
+                Modifier.fillMaxSize().background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        0f to Ytm.Background.copy(alpha = 0.35f),
+                        1f to Ytm.Background,
+                    ),
+                ),
+            )
+        }
+    }
     Column(
         Modifier
             .fillMaxSize()
-            .background(Ytm.Background)
-            .background(
-                androidx.compose.ui.graphics.Brush.verticalGradient(
-                    0f to Color(0xFF1C2B36),
-                    0.45f to Ytm.Background,
-                ),
+            .then(
+                if (backdrop != null) {
+                    Modifier
+                } else {
+                    Modifier.background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            0f to Color(0xFF1C2B36),
+                            0.45f to Ytm.Background,
+                        ),
+                    )
+                },
             ),
     ) {
         YtmTopBar(navController = navController)
@@ -317,6 +359,7 @@ fun HomeScreen(
             }
         }
     }
+    }
 }
 
 /** A notice card at the top of Home, such as an expired sign-in. */
@@ -341,3 +384,6 @@ private fun HomeNotice(
         YtmOutlinedPill(action, onClick = onAction)
     }
 }
+
+/** How far down Home YouTube's background image reaches before it has faded into the page. */
+private val HOME_BACKDROP_HEIGHT = 360.dp

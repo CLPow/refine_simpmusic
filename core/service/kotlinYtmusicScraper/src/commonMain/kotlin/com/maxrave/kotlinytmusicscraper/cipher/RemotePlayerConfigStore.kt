@@ -408,7 +408,10 @@ class RemotePlayerConfigStore(
             ?.takeIf { url ->
                 url.protocol.name == "https" &&
                     when (url.host) {
-                        "raw.githubusercontent.com" -> url.encodedPath.startsWith("/MetrolistGroup/faraday/")
+                        // Metrolist's table, and upstream SimpMusic's registry as the fallback table.
+                        "raw.githubusercontent.com" ->
+                            url.encodedPath.startsWith("/MetrolistGroup/faraday/") ||
+                                url.encodedPath.startsWith("/maxrave-dev/simpmusic-files/")
                         "cdn.jsdelivr.net" -> url.encodedPath.startsWith("/gh/MetrolistGroup/faraday@")
                         "github.com" -> url.encodedPath.startsWith("/MetrolistGroup/faraday/releases/download/")
                         else -> false

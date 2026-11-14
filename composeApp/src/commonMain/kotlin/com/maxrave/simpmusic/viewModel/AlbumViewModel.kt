@@ -56,6 +56,7 @@ class AlbumViewModel(
                             _uiState.update {
                                 it.copy(
                                     browseId = browseId,
+                                    audioPlaylistId = data.audioPlaylistId,
                                     title = data.title,
                                     type = data.type,
                                     thumbnail = data.thumbnails?.lastOrNull()?.url,
@@ -115,6 +116,7 @@ class AlbumViewModel(
                                 _uiState.update {
                                     it.copy(
                                         browseId = browseId,
+                                        audioPlaylistId = albumEntity.audioPlaylistId,
                                         title = albumEntity.title,
                                         thumbnail = albumEntity.thumbnails,
                                         artist =
@@ -282,6 +284,8 @@ class AlbumViewModel(
 
 data class AlbumUIState(
     val browseId: String = "",
+    /** The album's OLAK… playlist: what a shared link must carry to open the album. */
+    val audioPlaylistId: String = "",
     val title: String = "",
     /** YouTube's kind for it: Album, Single, EP. */
     val type: String = "",

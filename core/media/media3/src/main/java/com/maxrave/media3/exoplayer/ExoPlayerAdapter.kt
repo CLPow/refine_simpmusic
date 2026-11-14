@@ -681,6 +681,16 @@ internal class ExoPlayerAdapter(
         }
     }
 
+    /**
+     * An empty playlist that gains an item points at it, as ExoPlayer's own does. clearMediaItems()
+     * leaves the index at -1 and nothing else moves it, so prepare() loaded nothing and Add to queue
+     * with nothing loaded (fresh start, or after closing the mini player) never played.
+     * Port of maxrave-dev/core 9a788aca.
+     */
+    private fun pointAtFirstItemIfUnset() {
+        if (localCurrentMediaItemIndex < 0 && playlist.isNotEmpty()) localCurrentMediaItemIndex = 0
+    }
+
     override fun prepare() {
         if (playlist.isNotEmpty() && localCurrentMediaItemIndex >= 0) {
             coroutineScope.launch {
@@ -713,6 +723,7 @@ internal class ExoPlayerAdapter(
 
     override fun addMediaItem(mediaItem: GenericMediaItem) {
         playlist.add(mediaItem)
+        pointAtFirstItemIfUnset()
 
         if (internalShuffleModeEnabled) {
             createShuffleOrder()
@@ -741,6 +752,7 @@ internal class ExoPlayerAdapter(
             if (index <= localCurrentMediaItemIndex) {
                 localCurrentMediaItemIndex++
             }
+            pointAtFirstItemIfUnset()
 
             // Update shuffle order if enabled
             if (internalShuffleModeEnabled) {

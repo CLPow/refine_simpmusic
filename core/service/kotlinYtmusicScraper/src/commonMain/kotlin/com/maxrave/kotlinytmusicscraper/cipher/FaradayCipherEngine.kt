@@ -44,8 +44,13 @@ class FaradayCipherEngine(
         val nParameters: Map<String, String>,
     )
 
-    private val repository = InMemoryPlayerConfigRepository(PLAYER_CONFIG_URL)
-    private val store = RemotePlayerConfigStore(httpClient, repository, logger)
+    // Metrolist's table first, upstream SimpMusic's to fill the player hashes Metrolist has not
+    // published yet (port of maxrave-dev/core f4de76a8). The two agree on sig/nClass/sts, so the
+    // order only decides which is asked first.
+    private val stores =
+        listOf(PLAYER_CONFIG_URL, SIMPMUSIC_PLAYER_CONFIG_URL).map {
+            RemotePlayerConfigStore(httpClient, InMemoryPlayerConfigRepository(it), logger)
+        }
 
     /**
      * Serialises every public entry point.
@@ -79,7 +84,8 @@ class FaradayCipherEngine(
 
     private suspend fun playerInfoLocked(): PlayerInfo? {
         val playerId = currentPlayerId() ?: return null
-        val timestamp = store.getSignatureTimestamp(playerUrlFor(playerId)) ?: return null
+        val timestamp =
+            stores.firstNotNullOfOrNull { it.getSignatureTimestamp(playerUrlFor(playerId)) } ?: return null
         return PlayerInfo(playerId, timestamp)
     }
 
@@ -128,7 +134,7 @@ class FaradayCipherEngine(
             cachedSolver?.solver?.dispose()
             cachedSolver = null
         }
-        runCatching { store.refreshAfterStreamRejection() }
+        stores.forEach { runCatching { it.refreshAfterStreamRejection() } }
     }
 
     private suspend fun currentPlayerId(): String? {
@@ -176,17 +182,17 @@ class FaradayCipherEngine(
         if (!PLAYER_ID_REGEX.matches(playerId)) return null
         val playerUrl = playerUrlFor(playerId)
 
-        var config = store.getConfig(playerUrl)
+        var config = stores.firstNotNullOfOrNull { it.getConfig(playerUrl) }
         if (config == null) {
-            store.forceRefresh(missingHash = playerId)
-            config = store.getConfig(playerUrl)
+            stores.forEach { it.forceRefresh(missingHash = playerId) }
+            config = stores.firstNotNullOfOrNull { it.getConfig(playerUrl) }
         }
         if (config == null) {
             logger.d(TAG, "player not in remote table", details = mapOf("player" to playerId))
             return null
         }
 
-        val epoch = store.configEpoch
+        val epoch = stores.sumOf { it.configEpoch }
         mutex.withLock {
             cachedSolver
                 ?.takeIf { it.playerId == playerId && it.configEpoch == epoch }
@@ -248,6 +254,10 @@ class FaradayCipherEngine(
          */
         const val PLAYER_CONFIG_URL: String =
             "https://raw.githubusercontent.com/MetrolistGroup/faraday/master/registry/player_configs.json"
+
+        /** Upstream SimpMusic's table: the fallback for hashes Metrolist's has not published. */
+        const val SIMPMUSIC_PLAYER_CONFIG_URL: String =
+            "https://raw.githubusercontent.com/maxrave-dev/simpmusic-files/main/registry/player_configs.json"
 
         private const val IFRAME_API_URL = "https://www.youtube.com/iframe_api"
         private const val USER_AGENT = "okhttp/5.4.0"

@@ -1,5 +1,7 @@
 package com.maxrave.simpmusic
 
+import com.maxrave.domain.data.player.AppOnScreen
+import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -271,6 +273,10 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
                 size = DpSize(1500.dp, 860.dp),
             )
         var isVisible by remember { mutableStateOf(!startHidden) }
+        // Tells the player when nobody can see the window, so it ticks less (AppOnScreen).
+        LaunchedEffect(windowState) {
+            snapshotFlow { isVisible && !windowState.isMinimized }.collect { AppOnScreen.set(it) }
+        }
         // ytmdesktop's "Hide to tray on close". On by default here, which is how this app has
         // always closed; off, closing the window quits.
         val closeToTray by dataStore

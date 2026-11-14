@@ -64,7 +64,7 @@ internal class HomeRepositoryImpl(
         params: String?,
         viewString: String,
         songString: String,
-    ): Flow<Resource<Pair<String?, List<HomeItem>>>> =
+    ): Flow<Resource<Triple<String?, List<HomeItem>, String?>>> =
         flow {
             // Nothing here may throw past the flow: an exception used to be swallowed by a
             // runCatching around it, so the flow ended without emitting and Home sat on its spinner
@@ -189,13 +189,15 @@ internal class HomeRepositoryImpl(
                             list[0] = list[0].copy(isSpeedDial = true)
                         }
                         Logger.d("Repository", "List size: ${list.size}")
-                        continueParam to list.toList()
+                        // The artwork YouTube draws behind the top of Home (port of maxrave-dev/core adac4c90).
+                        val background = result.background?.musicThumbnailRenderer?.getThumbnailUrl()
+                        Triple(continueParam, list.toList(), background)
                     }
             home
                 .onSuccess { emit(Resource.Success(it)) }
                 .onFailure { error ->
                     Logger.e("Repository", "Home failed: ${error.message}")
-                    emit(Resource.Error<Pair<String?, List<HomeItem>>>(error.message ?: "Home unavailable"))
+                    emit(Resource.Error<Triple<String?, List<HomeItem>, String?>>(error.message ?: "Home unavailable"))
                 }
         }.flowOn(Dispatchers.IO)
 
