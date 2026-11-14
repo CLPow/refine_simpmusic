@@ -1,8 +1,5 @@
 package com.maxrave.domain.data.player
 
-/**
- * Generic media metadata wrapper
- */
 data class GenericMediaMetadata(
     val title: String? = null,
     val artist: String? = null,

@@ -19,16 +19,6 @@ private const val IV_BYTES = 12
 private const val KEY_FILE_NAME = ".secret-key"
 private const val KEYCHAIN_SERVICE = "org.simpmusic.secret"
 
-/**
- * Non-Windows desktop protection.
- *
- * - macOS Keychain via the `security` CLI. Each [purpose] is its own generic-password account
- *   under [KEYCHAIN_SERVICE], so the YouTube cookie and Spotify tokens never overwrite each other.
- * - Linux / Keychain-fallback: AES-GCM with a 0600 key file under `~/.simpmusic/`. Better than
- *   cleartext DataStore contents, weaker than a system keyring — explicit, not claimed as DPAPI.
- *
- * Encrypt failure returns `""` so the caller can skip the write rather than store plaintext.
- */
 internal object DesktopFileSecretCodec {
     private val isMac: Boolean
         get() = System.getProperty("os.name", "").contains("Mac", ignoreCase = true)
@@ -71,8 +61,6 @@ internal object DesktopFileSecretCodec {
             ""
         }
     }
-
-    // ---- macOS Keychain ----
 
     private fun macKeychainStore(
         purpose: String,
@@ -119,8 +107,6 @@ internal object DesktopFileSecretCodec {
         }
     }
 
-    // ---- File key (Linux / Keychain fallback) ----
-
     private fun keyFile(): File {
         val home = System.getProperty("user.home") ?: "."
         val dir = File(home, ".simpmusic")
@@ -143,7 +129,6 @@ internal object DesktopFileSecretCodec {
                 setOf(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE),
             )
         } catch (_: UnsupportedOperationException) {
-            // Non-POSIX FS.
         } catch (e: Throwable) {
             Logger.w(TAG, "Could not tighten key file permissions: ${e.message}")
         }

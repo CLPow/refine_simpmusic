@@ -7,13 +7,6 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 
-/**
- * Refine plays songs only, so every item gets a single audio source.
- *
- * This used to merge a separate video stream into items tagged VIDEO when "play video" was on,
- * reading that setting with `runBlocking` on every `createMediaSource`. Both are gone; the name
- * is kept so the adapter and DI wiring stay unchanged.
- */
 @UnstableApi
 internal class MergingMediaSourceFactory(
     private val defaultMediaSourceFactory: DefaultMediaSourceFactory,

@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Colours of the Now Playing widget's picker preview, matching what the widget draws (fixed dark fallback). -->
 <resources>
     <color name="wp_background">#1E1E24</color>
     <color name="wp_strip">#2C2C34</color>

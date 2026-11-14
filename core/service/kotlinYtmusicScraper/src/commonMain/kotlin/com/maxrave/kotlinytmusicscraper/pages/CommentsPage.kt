@@ -10,10 +10,6 @@ import kotlinx.serialization.json.contentOrNull
 
 enum class CommentLikeState { NONE, LIKED, DISLIKED }
 
-/**
- * One comment, or one reply. The four action tokens and [replyParams] are null when YouTube gave this
- * request nothing to act with: signed out, or signed in to an account without a channel.
- */
 data class CommentItem(
     val id: String,
     val author: String,
@@ -24,12 +20,10 @@ data class CommentItem(
     val text: String,
     val publishedTime: String,
     val likeCount: String,
-    /** What the count reads once this account likes it ("4" → "5"); YouTube sends it ready. */
     val likeCountLiked: String,
     val likeState: CommentLikeState,
     val isHearted: Boolean,
     val isPinned: Boolean,
-    /** "41 replies", in the request's language. */
     val repliesLabel: String?,
     val repliesToken: String?,
     val likeAction: String?,
@@ -41,21 +35,13 @@ data class CommentItem(
 )
 
 data class CommentsHeader(
-    /** "24,146 Comments" */
     val countText: String?,
-    /** "24K" */
     val countShort: String?,
-    /** Null when YouTube offers this request no comment box: signed out, or no channel. */
     val createParams: String?,
     val placeholder: String?,
-    /** The signed-in account's own avatar, beside the comment box. */
     val userAvatar: String?,
 )
 
-/**
- * A page of comments or of replies. [header] comes with the first page. [nextToken]
- * loads the next page; on a replies page it is "Show more replies", labelled [nextLabel].
- */
 data class CommentsPage(
     val header: CommentsHeader?,
     val comments: List<CommentItem>,
@@ -64,12 +50,6 @@ data class CommentsPage(
 )
 
 object CommentsPageParser {
-    /**
-     * The token behind the watch page's Comments tab, or null when it has none (comments turned off,
-     * or a live stream that only has its chat). The tab is told apart by type, never by its title,
-     * which is translated: Lyrics and Related carry a browse endpoint with their page type, Up next a
-     * queue, and Comments is the only one holding a section list that reloads from a continuation.
-     */
     fun commentsTabToken(next: NextResponse): String? =
         next.contents.singleColumnMusicWatchNextResultsRenderer
             ?.tabbedRenderer
@@ -99,7 +79,6 @@ object CommentsPageParser {
                         ?.toComment(
                             entities = entities,
                             repliesLabel = replies?.viewReplies.findObject("text").runsText(),
-                            // Inside a thread every continuation is its replies; only a top-level one is the next page.
                             repliesToken =
                                 (replies?.subThreads.orEmpty() + replies?.contents.orEmpty())
                                     .firstNotNullOfOrNull { it.continuationItemRenderer?.token() },
@@ -114,10 +93,6 @@ object CommentsPageParser {
         return CommentsPage(header = header, comments = comments, nextToken = nextToken, nextLabel = nextLabel)
     }
 
-    /**
-     * The comment `comment/create_comment*` just made. Its keys sit somewhere under `actions` and its
-     * data in the mutations; when the keys cannot be found, the first comment in the mutations is it.
-     */
     fun parseCreated(response: CommentsResponse): CommentItem? {
         val entities = response.entities()
         val keys =
@@ -202,7 +177,6 @@ object CommentsPageParser {
 
     private fun JsonObject.string(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
 
-    /** "runs" joined, or "simpleText". */
     private fun JsonObject?.runsText(): String? {
         if (this == null) return null
         (this["simpleText"] as? JsonPrimitive)?.contentOrNull?.let { return it }
@@ -211,7 +185,6 @@ object CommentsPageParser {
             ?.takeIf { it.isNotBlank() }
     }
 
-    /** The first string under [key], at any depth. */
     private fun JsonElement?.findString(key: String): String? {
         when (this) {
             is JsonObject -> {
@@ -224,7 +197,6 @@ object CommentsPageParser {
         return null
     }
 
-    /** The first object under [key], at any depth. */
     private fun JsonElement?.findObject(key: String): JsonObject? {
         when (this) {
             is JsonObject -> {
@@ -237,7 +209,6 @@ object CommentsPageParser {
         return null
     }
 
-    /** The first object that has [key] itself, at any depth. */
     private fun JsonElement?.findObjectWith(key: String): JsonObject? {
         when (this) {
             is JsonObject -> {

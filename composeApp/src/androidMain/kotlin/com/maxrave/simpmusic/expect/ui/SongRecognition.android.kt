@@ -73,7 +73,6 @@ import simpmusic.composeapp.generated.resources.ytm_song_search_results
 
 actual val isSongRecognitionSupported: Boolean = true
 
-/** Full screen, like YouTube Music's song search: a pulsing circle while it listens. */
 @Composable
 actual fun SongRecognitionSheet(
     onFind: (String) -> Unit,

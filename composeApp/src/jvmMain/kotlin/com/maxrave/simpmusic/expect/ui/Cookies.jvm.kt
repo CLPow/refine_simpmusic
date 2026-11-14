@@ -43,10 +43,6 @@ import simpmusic.composeapp.generated.resources.ytm_desktop_sign_in_no_browser
 import simpmusic.composeapp.generated.resources.ytm_desktop_sign_in_title
 import simpmusic.composeapp.generated.resources.ytm_desktop_sign_in_waiting
 
-/**
- * What the sign-in window handed over, until the login screen reads it. The desktop has no web
- * view whose cookie store could hold it; the Edge window's profile is deleted right after.
- */
 private object DesktopSignInCookies {
     @Volatile
     var cookie: String? = null
@@ -61,11 +57,6 @@ actual fun createWebViewCookieManager(): WebViewCookieManager =
         }
     }
 
-/**
- * Desktop sign-in: no embedded browser. "Open sign-in window" opens Google's real page in Microsoft
- * Edge with a throwaway profile (see [EdgeSignIn]); once signed in, the login screen gets the
- * session through [onPageFinished] with YouTube Music's URL, exactly as the Android web view does.
- */
 @Composable
 actual fun PlatformWebView(
     state: MutableState<WebViewState>,

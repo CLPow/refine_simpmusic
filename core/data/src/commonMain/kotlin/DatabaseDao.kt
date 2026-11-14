@@ -27,17 +27,10 @@ import com.maxrave.domain.extension.now
 import kotlinx.coroutines.flow.Flow
 import kotlinx.datetime.LocalDateTime
 
-/**
- * The album name older builds stored when they could not find a real one.
- *
- * Kept in step with the copy in [com.maxrave.data.db.datasource.LocalDataSource] and with the
- * literal baked into [DatabaseDao.refreshAlbumIfPlaceholder]'s WHERE clause.
- */
 private const val PLACEHOLDER_ALBUM_NAME = "Album"
 
 @Dao
 interface DatabaseDao {
-    // Transaction request with multiple queries
     @Transaction
     suspend fun getAllRecentData(): List<RecentlyType> {
         val a = mutableListOf<RecentlyType>()
@@ -73,7 +66,7 @@ interface DatabaseDao {
                             1
                         }
                     }
-                    timeP0.compareTo(timeP1) // Sort in descending order by inLibrary time
+                    timeP0.compareTo(timeP1)
                 },
             )
         return sortedList.takeLast(30)
@@ -140,7 +133,7 @@ interface DatabaseDao {
                             1
                         }
                     }
-                    timeP0.compareTo(timeP1) // Sort in descending order by inLibrary time
+                    timeP0.compareTo(timeP1)
                 },
             )
         return sortedList
@@ -186,7 +179,6 @@ interface DatabaseDao {
         return a
     }
 
-    // Get search history
     @Query("SELECT * FROM search_history")
     suspend fun getSearchHistory(): List<SearchHistory>
 
@@ -199,7 +191,6 @@ interface DatabaseDao {
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun insertSearchHistory(searchHistory: SearchHistory): Long
 
-    // Song
     @Query("SELECT * FROM song ORDER BY inLibrary DESC LIMIT :limit OFFSET :offset")
     suspend fun getRecentSongs(
         limit: Int,
@@ -243,18 +234,6 @@ interface DatabaseDao {
     @Insert(onConflict = OnConflictStrategy.Companion.IGNORE)
     suspend fun insertSong(song: SongEntity): Long
 
-    /**
-     * Fills in an album name that an older parse never had.
-     *
-     * Rows written before the playlist parser read the album column carry the literal string
-     * "Album" — a placeholder invented because the old code took the album's browse id from the
-     * context menu, which has an id but no name. Those rows are never refreshed on their own:
-     * [insertSong] is IGNORE, so every later encounter with the same track is discarded.
-     *
-     * The WHERE clause is the safety catch, not just a filter. A row that already holds a real
-     * album name is untouched no matter who calls this, so a caller holding a sparser entity —
-     * the playback path, say — cannot overwrite good data with worse.
-     */
     @Query(
         "UPDATE song SET albumName = :albumName, albumId = :albumId " +
             "WHERE videoId = :videoId AND (albumName IS NULL OR albumName = '' OR albumName = 'Album')",
@@ -265,18 +244,6 @@ interface DatabaseDao {
         albumId: String?,
     )
 
-    /**
-     * Replaces an artist list that an older parse polluted with the row's trailing metadata.
-     *
-     * The parser used to split the subtitle column on " • " and keep every group, so a row could
-     * be stored as `["JENNIE", "13M plays"]` — the view count read as a second artist. It now
-     * keeps only the first group, but [insertSong] is IGNORE, so a row already in the database
-     * never learns the corrected list on its own.
-     *
-     * The WHERE clause is the safety catch, exactly as in [refreshAlbumIfPlaceholder]: the update
-     * only lands when the stored list actually differs from the fresh one, so repeatedly seeing
-     * the same track costs nothing and a caller cannot rewrite a row with what it already holds.
-     */
     @Query(
         "UPDATE song SET artistName = :artistName, artistId = :artistId " +
             "WHERE videoId = :videoId AND artistName IS NOT :artistName",
@@ -333,7 +300,6 @@ interface DatabaseDao {
     @Query("SELECT * FROM song WHERE canvasThumbUrl IS NOT NULL ORDER BY totalPlayTime DESC LIMIT :max")
     suspend fun getCanvasSong(max: Int): List<SongEntity>
 
-    // Artist
     @Query("SELECT * FROM artist ORDER BY inLibrary DESC LIMIT :limit OFFSET 0")
     suspend fun getAllArtists(limit: Int): List<ArtistEntity>
 
@@ -375,7 +341,6 @@ interface DatabaseDao {
         channelId: String,
     )
 
-    // Album
     @Query("SELECT * FROM album ORDER BY inLibrary DESC LIMIT :limit OFFSET 0")
     suspend fun getAllAlbums(limit: Int): List<AlbumEntity>
 
@@ -426,7 +391,6 @@ interface DatabaseDao {
         offset: Int,
     ): List<AlbumEntity>
 
-    // Playlist
     @Query("SELECT * FROM playlist ORDER BY inLibrary DESC LIMIT :limit OFFSET 0")
     suspend fun getAllPlaylists(limit: Int): List<PlaylistEntity>
 
@@ -480,7 +444,6 @@ interface DatabaseDao {
         offset: Int,
     ): List<PlaylistEntity>
 
-    // Local Playlist
     @Query("SELECT * FROM local_playlist ORDER BY inLibrary DESC LIMIT :limit OFFSET :offset")
     suspend fun getAllLocalPlaylists(
         limit: Int,
@@ -496,12 +459,6 @@ interface DatabaseDao {
     @Query("SELECT * FROM local_playlist WHERE id = :id")
     suspend fun getLocalPlaylist(id: Long): LocalPlaylistEntity?
 
-    /**
-     * Returns the generated `local_playlist.id`, or -1 when IGNORE dropped the row.
-     *
-     * `id` is the autoGenerate primary key, so the rowId Room hands back *is* the playlist id.
-     * Callers that only create a playlist can keep ignoring the value.
-     */
     @Insert(onConflict = OnConflictStrategy.Companion.IGNORE)
     suspend fun insertLocalPlaylist(localPlaylist: LocalPlaylistEntity): Long
 
@@ -564,10 +521,6 @@ interface DatabaseDao {
         raw(RoomRawQuery("pragma wal_checkpoint(full)"))
     }
 
-    // VACUUM deliberately does NOT live here: [raw] is generated as a read-only statement, and
-    // Room's reader connections run under `PRAGMA query_only = 1`, which rejects it. See
-    // `MusicDatabase.vacuum()`.
-
     @Query("SELECT * FROM song WHERE downloadState = 1 OR downloadState = 2 ORDER BY downloadedAt ASC LIMIT :limit OFFSET :offset")
     suspend fun getPreparingSongs(
         limit: Int,
@@ -604,11 +557,6 @@ interface DatabaseDao {
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun insertSetVideoId(setVideoIdEntity: SetVideoIdEntity)
 
-    /**
-     * A setVideoId names one entry of one playlist, so the playlist is part of the key. Looked up by
-     * videoId alone, SQLite returned the row whose playlist id sorts first — an entry of whichever
-     * other playlist also holds the song. Pass every spelling the playlist id is stored under.
-     */
     @Query(
         "SELECT * FROM set_video_id WHERE videoId = :videoId AND youtubePlaylistId IN (:youtubePlaylistIds) " +
             "AND setVideoId IS NOT NULL LIMIT 1",
@@ -624,7 +572,6 @@ interface DatabaseDao {
         youtubePlaylistId: String,
     )
 
-    // PairSongLocalPlaylist
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun insertPairSongLocalPlaylist(pairSongLocalPlaylist: PairSongLocalPlaylist)
 
@@ -640,22 +587,6 @@ interface DatabaseDao {
         positionList: List<Int>,
     ): List<PairSongLocalPlaylist>
 
-    /**
-     * Songs of one local playlist matching a search term, by title or artist.
-     *
-     * Joined rather than filtered in Kotlin: the paged reader walks
-     * `pair_song_local_playlist` fifty rows at a time and only then looks the songs up, so a
-     * filter applied to what it returned would search whatever the user had already scrolled
-     * past and nothing else.
-     *
-     * [query] arrives ready to use — wildcards already wrapped around it and its own `%`, `_`
-     * and `\\` already escaped by the caller, which is what ESCAPE refers to. A term typed as
-     * `%` would otherwise match the entire playlist.
-     *
-     * `artistName` is a converted `List<String>` held as a JSON array, so this matches inside
-     * that text. Good enough for a search box — a name is a name wherever it sits in the array —
-     * unlike the id lookups elsewhere in this file, which have to match quoted tokens exactly.
-     */
     @Query(
         "SELECT p.* FROM pair_song_local_playlist p JOIN song s ON s.videoId = p.songId " +
             "WHERE p.playlistId = :playlistId AND " +
@@ -732,17 +663,6 @@ interface DatabaseDao {
         to: Int,
     )
 
-    /**
-     * Move the song at [fromIndex] to [toIndex] (0-based, in position order) as ONE transaction.
-     *
-     * A move is a read, a range shift and a final placement. Run apart, the table sits between the
-     * shift and the placement with two songs on one position and a gap at the target: a process
-     * death there leaves it that way, and a second move reading it computes its range from
-     * positions that are about to change. As one transaction the three steps commit together or
-     * not at all, and a second move only reads once the first has committed.
-     *
-     * @return false when either index is outside the playlist.
-     */
     @Transaction
     suspend fun moveSongInPlaylist(
         playlistId: Long,
@@ -779,7 +699,6 @@ interface DatabaseDao {
         videoId: String,
     )
 
-    // GoogleAccountEntity
     @Insert(onConflict = OnConflictStrategy.Companion.REPLACE)
     suspend fun insertGoogleAccount(googleAccountEntity: GoogleAccountEntity): Long
 
@@ -804,7 +723,6 @@ interface DatabaseDao {
         inLibrary: LocalDateTime,
     )
 
-    // Your YouTube Playlist list
     @Insert(onConflict = REPLACE)
     suspend fun insertYourYouTubePlaylist(yourYouTubePlaylist: YourYouTubePlaylistList)
 
@@ -814,39 +732,6 @@ interface DatabaseDao {
     @Query("DELETE FROM your_youtube_playlist_list")
     suspend fun deleteAllYourYouTubePlaylist()
 
-    // ===== Clear listening history + drop orphaned songs =====
-    //
-    // "Orphaned" means the videoId appears nowhere else at all. Two of the referencing tables key
-    // on the id directly (pair_song_local_playlist.songId, set_video_id.videoId); the other four
-    // keep ids inside a JSON array column (album.tracks, playlist.tracks, local_playlist.tracks,
-    // queue.listTrack) and are matched as quoted tokens in that text.
-    //
-    // Which is why the containers are swept FIRST — artists, albums, playlists — and the
-    // songs only after. Cached playlists alone were keeping eleven thousand songs alive, so the
-    // song sweep on its own deleted nothing at all.
-    //
-    // Every id interpolated into a LIKE goes through replace() and the pattern declares ESCAPE '\'.
-    // `_` and `%` are wildcards there, and over a thousand videoIds contain `_`, so an unescaped
-    // `abc_def` also matches `abcXdef` and protects a row it has nothing to do with. Room cannot
-    // escape a value that comes from a column rather than a bind parameter, hence the replace().
-    //
-    // Room cannot return a converted list column from a single-column SELECT — it reads the outer
-    // List as "the rows" and then has no way to build the inner one — so pulling these lists into
-    // Kotlin to filter them is not an option anyway.
-
-    /**
-     * Artists cached only because they turned up while browsing.
-     *
-     * `song` carries its own `artistName`/`artistId`, so no track loses the name it displays, and the
-     * artist page refetches everything it shows anyway — except that the artist a kept song belongs
-     * to is spared regardless. Deleting one takes `nameLogoUrl`/`nameLogoColor` with it, which
-     * `updateArtistNameLogo` builds once and no refetch reproduces, and it leaves the page of a song
-     * still in the library with nothing at all to draw offline.
-     *
-     * `song.artistId` is a converted `List<String>`, stored as a JSON array, so the channel id is
-     * matched as a quoted token the same way the `tracks` columns are — with the `replace()` +
-     * ESCAPE '\' treatment, because over a thousand ids contain `_` and it is a LIKE wildcard.
-     */
     @Query(
         "DELETE FROM artist WHERE followed = 0 AND " +
             "NOT EXISTS (SELECT 1 FROM song s WHERE (s.liked = 1 OR s.downloadState != 0) AND s.artistId LIKE " +
@@ -854,32 +739,12 @@ interface DatabaseDao {
     )
     suspend fun deleteUnfollowedArtists(): Int
 
-    /**
-     * Cached albums the user neither liked nor downloaded.
-     *
-     * An album that a kept song points at through `song.albumId` is spared too. The song survives
-     * either way, but its album page would lose the cached track list and thumbnails and could no
-     * longer render offline. Unlike the columns around it `albumId` holds one plain id rather than
-     * JSON, so it is compared directly; where it is NULL the comparison is NULL and the album is
-     * simply not protected, which is the wanted answer.
-     */
     @Query(
         "DELETE FROM album WHERE liked = 0 AND downloadState = 0 AND " +
             "NOT EXISTS (SELECT 1 FROM song s WHERE s.albumId = album.browseId AND (s.liked = 1 OR s.downloadState != 0))",
     )
     suspend fun deleteUnreferencedAlbums(): Int
 
-    /**
-     * Cached YouTube playlists the user neither liked nor downloaded.
-     *
-     * A row in `set_video_id` or a `local_playlist.youtubePlaylistId` means the playlist is synced
-     * with one the user owns, and `your_youtube_playlist_list` is the cached index of their YouTube
-     * library — all three are references, not state.
-     *
-     * `local_playlist.youtubePlaylistId` is nullable and mostly NULL, and `NOT IN` over a subquery
-     * that yields a single NULL is NULL for **every** row: without the IS NOT NULL guard this
-     * statement matches nothing whatsoever. The other two columns are NOT NULL and need no guard.
-     */
     @Query(
         "DELETE FROM playlist WHERE liked = 0 AND downloadState = 0 AND " +
             "id NOT IN (SELECT youtubePlaylistId FROM set_video_id) AND " +
@@ -889,26 +754,6 @@ interface DatabaseDao {
     )
     suspend fun deleteUnreferencedPlaylists(): Int
 
-    /**
-     * Every song the rest of the database has stopped pointing at.
-     *
-     * `set_video_id` counts as a reference on purpose: a row there means the song sits in one of the
-     * user's YouTube playlists, and it carries the `setVideoId` needed to reorder or remove it
-     * there. That holds even for playlists never saved locally, so the `tracks` columns alone would
-     * not catch it.
-     *
-     * `liked` and `downloadState` are not references at all — they are state on the song row itself,
-     * and they are the ONLY storage the Favorites and Downloaded libraries have. A song liked or
-     * downloaded straight from search belongs to no playlist, so without these two predicates the
-     * literal "referenced by nothing" reading would wipe out both libraries. `downloadState = 0`
-     * also covers a download still in flight, which would otherwise be deleted mid-transfer.
-     *
-     * The last five conditions search columns that hold a JSON array rather than an id. Matching the
-     * id **with its surrounding quotes** is what makes that safe: ids live in the JSON as `"abc123"`,
-     * so the quotes pin the match to a whole token and it cannot land inside a longer id. It is a
-     * table scan, but those tables hold tens of rows, not thousands — and it replaces deserialising
-     * every playlist and the entire saved queue into objects just to read one field back out.
-     */
     @Query(
         "SELECT videoId FROM song WHERE " +
             "liked = 0 AND downloadState = 0 AND " +
@@ -925,15 +770,6 @@ interface DatabaseDao {
     )
     suspend fun getOrphanedSongIds(): List<String>
 
-    /**
-     * Deleted in batches by the caller: SQLite caps how many bind parameters one statement takes.
-     *
-     * The orphan conditions from [getOrphanedSongIds] are repeated here rather than trusting the ids
-     * handed in, because the user keeps playing and browsing between the two statements. Re-checking
-     * closes that window, and it matters most for `pair_song_local_playlist`: it cascades on song
-     * deletion, so a song added to a local playlist mid-sweep would otherwise be pulled straight
-     * back out of it.
-     */
     @Query(
         "DELETE FROM song WHERE videoId IN (:videoIds) AND " +
             "liked = 0 AND downloadState = 0 AND " +
@@ -950,8 +786,6 @@ interface DatabaseDao {
     )
     suspend fun deleteSongsByIds(videoIds: List<String>): Int
 
-    // Run AFTER the song delete, and only for ids that actually went: the statement above may spare
-    // a song, and that song must keep its lyrics.
     @Query("DELETE FROM lyrics WHERE videoId IN (:videoIds) AND videoId NOT IN (SELECT videoId FROM song)")
     suspend fun deleteLyricsByIds(videoIds: List<String>)
 
@@ -961,20 +795,12 @@ interface DatabaseDao {
     @Query("DELETE FROM song_info WHERE videoId IN (:videoIds) AND videoId NOT IN (SELECT videoId FROM song)")
     suspend fun deleteSongInfoByIds(videoIds: List<String>)
 
-    // The four deletes above only reach ids that are in flight, so a row whose song vanished in some
-    // earlier build — or never had one — is unreachable to them and has accumulated ever since.
-    // `song.videoId` is the primary key and NOT NULL, so these NOT INs cannot go NULL.
-
     @Query("DELETE FROM new_format WHERE videoId NOT IN (SELECT videoId FROM song)")
     suspend fun deleteStaleNewFormats(): Int
 
     @Query("DELETE FROM lyrics WHERE videoId NOT IN (SELECT videoId FROM song)")
     suspend fun deleteStaleLyrics(): Int
 
-    // Empties the lyrics cache outright, for when the words themselves are suspect rather than
-    // orphaned. A wrong match is indistinguishable from a right one once stored -- correct title,
-    // correct artist, somebody else's words -- so there is nothing to select on, and re-fetching is
-    // cheap.
     @Query("DELETE FROM lyrics")
     suspend fun deleteAllLyrics(): Int
 

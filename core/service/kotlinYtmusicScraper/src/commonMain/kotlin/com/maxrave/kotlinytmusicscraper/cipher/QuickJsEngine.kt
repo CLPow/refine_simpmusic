@@ -6,39 +6,20 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-/**
- * Wrapper around the QuickJS engine for executing JavaScript code.
- * This is used to run the YouTube player cipher deobfuscation logic.
- *
- * Based on yt-dlp's QuickJS integration approach.
- */
 internal class QuickJsEngine(
-    /**
-     * The one thread this runtime lives on. Supplied from outside because it must be created with a
-     * large stack: QuickJS runs YouTube's n-transform on the *native* stack, and the JVM's default
-     * ~1 MB thread is not enough for it.
-     */
     private val jsThread: CoroutineDispatcher,
 ) {
     companion object {
         private const val EVALUATION_TIMEOUT_MS = 10_000L
 
-        // Current ~2.6 MiB player scripts need more than 128 MiB while EJS builds their AST.
         private const val NATIVE_MEMORY_LIMIT_BYTES = 192L * 1024L * 1024L
 
-        /**
-         * QuickJS defaults this to 256 KB and YouTube's n-transform goes deeper, at which point the
-         * engine does NOT reliably raise a JS error — it walks off the stack and the process dies
-         * with SIGSEGV, below the JVM and with no hs_err file. Kept well under the stack the thread
-         * is actually created with, so the limit is hit before the real stack ends.
-         */
         private const val NATIVE_STACK_LIMIT_BYTES = 8L * 1024L * 1024L
         private const val MAX_EVALUATION_RESULT_LENGTH = 16 * 1024 * 1024
         private const val MAX_FUNCTION_INPUT_LENGTH = 64 * 1024
         private const val MAX_FUNCTION_RESULT_LENGTH = 256 * 1024
         private val JS_IDENTIFIER = Regex("[A-Za-z_$][A-Za-z0-9_$]*")
 
-        /** Valid JavaScript double-quoted string literal for passing into evaluated calls. */
         internal fun jsStringLiteral(s: String): String =
             buildString(s.length + 2) {
                 append('"')
@@ -80,10 +61,6 @@ internal class QuickJsEngine(
     private val mutex = Mutex()
     private var quickJs: QuickJs? = null
 
-
-    /**
-     * Initialize the QuickJS runtime.
-     */
     suspend fun initialize() =
         withContext(jsThread) {
             mutex.withLock {
@@ -100,12 +77,6 @@ internal class QuickJsEngine(
             }
         }
 
-    /**
-     * Execute JavaScript code and return the result.
-     *
-     * @param code The JavaScript code to execute
-     * @return The result of the execution as a string
-     */
     suspend fun evaluate(
         code: String,
         maxResultLength: Int,
@@ -127,7 +98,6 @@ internal class QuickJsEngine(
             }
         }
 
-    /** Execute JavaScript for side effects without asking QuickJS to marshal the final value. */
     suspend fun execute(code: String) {
         withContext(jsThread) {
             mutex.withLock {
@@ -137,13 +107,6 @@ internal class QuickJsEngine(
         }
     }
 
-    /**
-     * Execute a JavaScript function with parameters.
-     *
-     * @param functionName The name of the function to call
-     * @param input The string parameter to pass to the function
-     * @return The bounded string result, or null when the input or result is too large
-     */
     suspend fun callFunction(
         functionName: String,
         input: String,
@@ -167,10 +130,6 @@ internal class QuickJsEngine(
             }
         }
 
-    /**
-     * Set up the global environment for YouTube player execution.
-     * This creates necessary globals like XMLHttpRequest, URL, location, etc.
-     */
     suspend fun setupYoutubeGlobals() =
         withContext(jsThread) {
             val setupCode =
@@ -234,23 +193,13 @@ internal class QuickJsEngine(
             execute(setupCode)
         }
 
-    /**
-     * Load the YouTube player JavaScript code into the engine.
-     *
-     * @param playerCode The YouTube player JavaScript code
-     */
     suspend fun loadPlayerScript(playerCode: String) =
         withContext(jsThread) {
-            // First setup globals
             setupYoutubeGlobals()
 
-            // Then load the player code
             execute(playerCode)
         }
 
-    /**
-     * Clean up and release resources.
-     */
     suspend fun dispose() {
         withContext(jsThread) {
             mutex.withLock {

@@ -83,7 +83,7 @@ private const val DOWNLOAD_USER_AGENT =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 private const val DEFAULT_PARALLEL_DOWNLOADS = 4
-private const val CHUNK_SIZE = 1024L * 1024L // 1MB per chunk
+private const val CHUNK_SIZE = 1024L * 1024L
 
 class Ytmusic {
     val normalJson =
@@ -102,14 +102,9 @@ class Ytmusic {
                 checkHttpMethod = false
                 allowHttpsDowngrade = true
             }
-            // Disable logging for download - significantly improves performance
-            // Note: Don't install Logging plugin for download client
+            // Don't install the Logging plugin on the download client: it slows downloads down a lot.
         }.also { downloadClient = it }
 
-    /**
-     * Paces and backs off traffic that carries the user's account. Public so the app can show the
-     * user when it is standing down rather than leaving the app looking broken.
-     */
     val accountGuard = AccountGuard()
 
     var cookiePath: Path? = null
@@ -130,10 +125,6 @@ class Ytmusic {
 
     var pageId: String? = null
 
-    // Index of the Google account inside the browser session the cookie came from
-    // (the `authuser` query param on youtube.com). A brand channel's pageId is only
-    // valid together with the authuser that owns it; sending 0 for a channel of the
-    // second signed-in account makes YouTube answer as if not logged in.
     var authUser: Int = 0
 
     private var cookieMap = emptyMap<String, String>()
@@ -191,10 +182,6 @@ class Ytmusic {
                 url("https://music.youtube.com/youtubei/v1/")
             }
         }.apply {
-            // Every request to YouTube is sent through here, which is the one place a guard can be
-            // applied without trusting each caller to remember. ytClient() attaches the Cookie
-            // header only when setLogin is true, so its presence is exactly the marker for "this
-            // request spends the user's account".
             plugin(HttpSend).intercept { request ->
                 val carriesAccount = request.headers.contains(HttpHeaders.Cookie)
                 if (carriesAccount) accountGuard.awaitTurn()
@@ -210,8 +197,6 @@ class Ytmusic {
         setLogin: Boolean = false,
         isUsingReferer: Boolean = true,
         customCookie: String? = null,
-        // A request made as no one: without the account selectors as well as without the cookie,
-        // since a brand account's Authuser/Pageid on a cookieless request can be refused.
         anonymous: Boolean = false,
     ) {
         contentType(ContentType.Application.Json)
@@ -234,7 +219,6 @@ class Ytmusic {
                 cookie?.let { cookie ->
                     append("Cookie", cookie)
                     if ("SAPISID" !in cookieMap || "__Secure-3PAPISID" !in cookieMap) return@let
-                    // SAPISIDHASH is built from Unix time in seconds (it was divided by 1000 again, giving 1970).
                     val currentTime = now().toInstant(TimeZone.currentSystemDefault()).epochSeconds
                     val sapisidCookie = cookieMap["SAPISID"] ?: cookieMap["__Secure-3PAPISID"]
                     val sapisidHash = sha1("$currentTime $sapisidCookie https://music.youtube.com")
@@ -255,12 +239,6 @@ class Ytmusic {
         track: SongItem,
     ) = extractor.saveAudioWithThumbnail(filePath, track)
 
-    /**
-     * @param setLogin attach the signed-in session. Defaults to true, which is what every
-     * user-facing search wants. The Spotify import passes false: it fires one search per imported
-     * track, and those are not searches the user performed — letting them into the account's search
-     * history would feed thousands of queries into YouTube's personalisation.
-     */
     suspend fun search(
         client: YouTubeClient,
         query: String? = null,
@@ -324,14 +302,6 @@ class Ytmusic {
                                 signatureTimestamp = signatureTimestamp ?: 20073,
                             ),
                     ),
-//                serviceIntegrityDimensions =
-//                    if (poToken != null) {
-//                        PlayerBody.ServiceIntegrityDimensions(
-//                            poToken = poToken,
-//                        )
-//                    } else {
-//                        null
-//                    },
             ),
         )
     }
@@ -429,13 +399,6 @@ class Ytmusic {
         )
     }
 
-    /**
-     * Move a playlist item before another item.
-     * @param playlistId The YouTube playlist ID
-     * @param setVideoId The setVideoId of the item to move
-     * @param movedSetVideoIdSuccessor The setVideoId of the item that should come AFTER the moved item.
-     *        If null, the item is moved to the end of the playlist.
-     */
     suspend fun moveItemYouTubePlaylist(
         playlistId: String,
         setVideoId: String,
@@ -457,11 +420,6 @@ class Ytmusic {
             ),
         )
     }
-
-    /***
-     * SponsorBlock testing
-     * @author maxrave-dev
-     */
 
     suspend fun getSkipSegments(videoId: String) =
         httpClient.get("https://sponsor.ajay.app/api/skipSegments/") {
@@ -503,8 +461,6 @@ class Ytmusic {
         continuation: String? = null,
         countryCode: String? = null,
         setLogin: Boolean = false,
-        // Sends no cookie even when signed in. ANDROID_MUSIC answers a cookie-authenticated
-        // request with 400, but serves public pages (lyrics) without one.
         withoutLogin: Boolean = false,
     ) = httpClient.post("browse") {
         ytClient(client, !withoutLogin && (setLogin || (cookie != "" && cookie != null)), isUsingReferer = false, anonymous = withoutLogin)
@@ -585,7 +541,6 @@ class Ytmusic {
         )
     }
 
-    // Comment writes go out as YouTube Music's own web client does, signed in.
     suspend fun createComment(
         createCommentParams: String,
         text: String,
@@ -791,7 +746,6 @@ class Ytmusic {
             with(getDownloadClient()) {
                 var lastException: Throwable? = null
 
-                // First, check if server supports Range requests
                 val supportsRange =
                     try {
                         val rangeResponse =
@@ -805,7 +759,6 @@ class Ytmusic {
                         false
                     }
 
-                // Get file size
                 val fileSize =
                     try {
                         head(url) {
@@ -815,7 +768,6 @@ class Ytmusic {
                         0L
                     }
 
-                // If server supports Range and file is large enough, use parallel download
                 if (supportsRange && fileSize > CHUNK_SIZE * 2) {
                     parallelDownload(
                         url = url,
@@ -833,7 +785,6 @@ class Ytmusic {
                         },
                     )
                 } else {
-                    // Fallback to single-threaded download
                     singleThreadedDownload(
                         url = url,
                         path = path,
@@ -866,14 +817,12 @@ class Ytmusic {
         val tempDir = path.parent?.let { it / "temp_chunks_${path.name}" } ?: throw IllegalArgumentException("Path has no parent")
 
         try {
-            // Create temp directory
             fileSystem.createDirectories(tempDir)
             val tempFiles =
                 (0 until parallelDownloads).map { index ->
                     tempDir / "chunk_$index.tmp"
                 }
 
-            // Download each chunk in parallel
             coroutineScope {
                 val jobs =
                     (0 until parallelDownloads).map { index ->
@@ -923,10 +872,8 @@ class Ytmusic {
                         }
                     }
 
-                // Wait for all chunks and track progress
                 var completedChunks = 0
 
-                // Simplified progress tracking - emit after each chunk completes
                 jobs.forEach { job ->
                     launch {
                         job.join()
@@ -937,11 +884,9 @@ class Ytmusic {
                     }
                 }
 
-                // Wait for all to complete
                 jobs.forEach { it.join() }
             }
 
-            // Merge all chunks into final file
             Logger.d(TAG, "Merging chunks into $path")
             fileSystem.sink(path).buffer().use { finalSink ->
                 tempFiles.forEach { tempFile ->
@@ -954,20 +899,17 @@ class Ytmusic {
                 }
             }
 
-            // Cleanup temp directory
             fileSystem.delete(tempDir)
 
             Logger.d(TAG, "Parallel download completed: $fileSize bytes")
             onComplete(true, null)
         } catch (e: Exception) {
             Logger.e(TAG, "Parallel download failed: ${e.message}")
-            // Cleanup temp directory
             try {
                 if (fileSystem.exists(tempDir)) {
                     fileSystem.deleteRecursively(tempDir)
                 }
             } catch (ignored: Exception) {
-                // Ignore cleanup errors
             }
             onComplete(false, e)
         }
@@ -1090,19 +1032,11 @@ class Ytmusic {
     }
 
     companion object {
-        /**
-         * The repository this build takes updates from. Deliberately not the upstream project:
-         * this binary carries local patches that an official release would silently revert, so an
-         * upstream release is not an upgrade for it.
-         */
         private const val UPDATE_REPO = "CLPow/refine_simpmusic"
 
         private const val TIDAL_AUTH_URL = "https://auth.tidal.com/v1/oauth2/token"
         private const val TIDAL_SEARCH_URL = "https://tidal.com/v2/client-search/"
 
-        // Remote config (TIDAL credentials) hosted on GitHub raw, fetched on each app launch.
-        // Credentials are NOT hard-coded in source — they live only in this remote file,
-        // kept in a separate repo (simpmusic-files) so the main repo stays credential-free.
         const val TIDAL_REMOTE_CONFIG_URL =
             "https://raw.githubusercontent.com/maxrave-dev/simpmusic-files/refs/heads/main/remote-config.json"
     }

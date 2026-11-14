@@ -43,20 +43,13 @@ class HomeViewModel(
     private val homeRepository: HomeRepository,
     private val accountRepository: AccountRepository,
 ) : BaseViewModel() {
-    /**
-     * True when the saved sign-in no longer works. Home is then YouTube's signed-out feed, which
-     * barely changes, so the screen says so and offers to sign in again instead of looking stuck.
-     */
     val signInExpired: StateFlow<Boolean> = accountRepository.signInExpired
 
-    /** True when the last load failed because there is no connection at all. */
     private val _offline = MutableStateFlow(false)
     val offline: StateFlow<Boolean> = _offline
 
-    /** Asks the screen to scroll back to the top: a different chip is a different feed. */
     val scrollToTop = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
-    /** The chip the shown feed belongs to; a load for another one clears the old feed first. */
     private var shownParams: String? = null
     private var shownAny = false
 
@@ -66,7 +59,6 @@ class HomeViewModel(
         MutableStateFlow(arrayListOf())
     val homeItemList: StateFlow<List<HomeItem>> = _homeItemList
 
-    /** The artwork YouTube sends with Home, drawn behind the top of the page; null when none. */
     private val _homeBackground = MutableStateFlow<String?>(null)
     val homeBackground: StateFlow<String?> = _homeBackground
 
@@ -76,13 +68,6 @@ class HomeViewModel(
     private var _continuation = MutableStateFlow<String?>(null)
     val continuation: StateFlow<String?> = _continuation
 
-    /**
-     * True when YouTube's part of the home feed did not arrive.
-     *
-     * Distinct from an empty [homeItemList]: local shelves keep that non-empty, so without this the
-     * screen cannot tell "nothing to show" from "recommendations failed to load" -- and the empty
-     * state, with its retry, would never appear again.
-     */
     private val _recommendationsFailed = MutableStateFlow(false)
     val recommendationsFailed: StateFlow<Boolean> = _recommendationsFailed
 
@@ -93,20 +78,12 @@ class HomeViewModel(
     val chart: StateFlow<Chart?> = _chart
     var regionCodeChart: MutableStateFlow<String?> = MutableStateFlow(null)
 
-    /** Ceiling on one attempt at the feed; a slower answer counts as a failed attempt. */
     private val HOME_ATTEMPT_TIMEOUT_MS = 20_000L
 
-    /** Attempts before Home gives up and shows its Retry card (about a minute and a half in all). */
     private val HOME_MAX_ATTEMPTS = 6
 
-    /**
-     * When the feed last loaded. The music service keeps the process alive for days, so a feed
-     * fetched once at start went stale: songs played since never showed up in it. YouTube Music
-     * reloads Home when you come back to it; [refreshIfStale] does the same.
-     */
     private var lastLoadedAtMs = 0L
 
-    /** Reloads Home when the shown feed is older than [STALE_AFTER_MS] (YouTube Music's behaviour on return), or when it failed. */
     fun refreshIfStale() {
         if (loading.value) return
         if (_recommendationsFailed.value || (lastLoadedAtMs != 0L && currentTimeMs() - lastLoadedAtMs > STALE_AFTER_MS)) {
@@ -127,10 +104,8 @@ class HomeViewModel(
     private var _params: MutableStateFlow<String?> = MutableStateFlow(null)
     val params: StateFlow<String?> = _params
 
-    /** The chips YouTube sent with the feed, in its order (they differ by account and region). */
     val homeChips: StateFlow<List<HomeChip>> = homeRepository.homeChips
 
-    // For showing alert that should log in to YouTube
     private val _showLogInAlert: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val showLogInAlert: StateFlow<Boolean> = _showLogInAlert
 
@@ -151,9 +126,6 @@ class HomeViewModel(
         homeJob = Job()
         viewModelScope.launch {
             regionCodeChart.value = dataStoreManager.chartKey.first()
-            // One load per change of region, account or chip. These used to be five
-            // collectors, each starting (and cancelling) its own load at launch, one of them only
-            // after a fixed one-second wait whenever a cookie existed: every cold start paid it.
             var lastCookie: String? = null
             val job1 =
                 launch {
@@ -167,8 +139,6 @@ class HomeViewModel(
                             val accountSwitched = lastCookie != null && lastCookie != cookie
                             lastCookie = cookie
                             if (accountSwitched) {
-                                // A sign-in or account switch: the client picks the new cookie up
-                                // from the same store, a moment after this flow sees it.
                                 Logger.w(tag, "Account changed, refreshing home")
                                 loading.value = true
                                 delay(1000)
@@ -218,8 +188,6 @@ class HomeViewModel(
         // A continuation still loading belongs to the old feed and must not land in the new one.
         continuationJob?.cancel()
         if (shownAny && params != shownParams) {
-            // Another chip is another feed: YouTube Music clears the page and starts at the top
-            // rather than leaving the previous chip's shelves up with no sign of loading.
             _homeItemList.value = emptyList()
             _continuation.value = null
             scrollToTop.tryEmit(Unit)
@@ -229,14 +197,10 @@ class HomeViewModel(
         homeJob =
             viewModelScope.launch {
                 regionCode = dataStoreManager.location.first()
-                // A reload of the same feed keeps it on screen while YouTube answers, so the page
-                // is never blank. No local shelves: YouTube Music's Home is YouTube's feed only.
+                // A reload of the same feed keeps it on screen while YouTube answers, so the page is never blank.
                 val previous = _homeItemList.value
 
-                // YouTube Music never parks Home on an error at launch: it keeps the spinner and
-                // asks again. A failed, empty or slow answer (a cold network, a 429 cooldown, the
-                // cookie arriving late) is retried with a growing pause; only after every attempt
-                // fails does the "Couldn't load" card with its Retry button show.
+                // YouTube Music never parks Home on an error at launch: it keeps the spinner and asks again.
                 var home: Resource<Triple<String?, List<HomeItem>, String?>>? = null
                 for (attempt in 0 until HOME_MAX_ATTEMPTS) {
                     if (attempt > 0) delay(minOf(1_000L shl (attempt - 1), 15_000L))
@@ -256,8 +220,6 @@ class HomeViewModel(
                             Resource.Error<Triple<String?, List<HomeItem>, String?>>(e.message ?: "Home unavailable")
                         }
                     if (home is Resource.Success && !home.data?.second.isNullOrEmpty()) break
-                    // No connection at all: YouTube Music says so at once instead of spinning for
-                    // a minute and a half. Two attempts, so a network that is just waking counts.
                     if (home is Resource.Error && isOfflineError(home.message) && attempt >= 1) {
                         _offline.value = true
                         break
@@ -280,7 +242,6 @@ class HomeViewModel(
                     _homeBackground.value = home.data?.third
                     lastLoadedAtMs = currentTimeMs()
                     launch { showSongVersionsOnSpeedDial() }
-                    // A dead cookie still gets a feed, only a signed-out one. Ask once per load.
                     launch { accountRepository.verifySignIn() }
                 } else {
                     _recommendationsFailed.value = true
@@ -327,7 +288,6 @@ class HomeViewModel(
                             is Resource.Success -> {
                                 _continuation.value = home.data?.first
                                 val newItems = home.data?.second ?: listOf()
-                                // YouTube sometimes repeats a shelf across pages.
                                 _homeItemList.update { shown ->
                                     val seen = shown.map { it.title + "|" + it.subtitle.orEmpty() }.toSet()
                                     shown + newItems.filter { (it.title + "|" + it.subtitle.orEmpty()) !in seen }
@@ -340,7 +300,6 @@ class HomeViewModel(
                             }
 
                             is Resource.Error -> {
-                                // Keep the continuation: the screen offers to try the next page again.
                                 Logger.w(tag, "getContinueHomeItem: ${home.message}")
                                 _homeListState.value = ListState.ERROR
                             }
@@ -360,7 +319,6 @@ class HomeViewModel(
     }
 
     private object OfflineHints {
-        /** How the network stack words "there is no network" on Android and the JVM. */
         val ALL =
             listOf(
                 "unable to resolve host",
@@ -380,13 +338,6 @@ class HomeViewModel(
         homeJob?.cancel()
     }
 
-    /**
-     * Speed dial (the web's "Listen again") shows what YouTube sends, and for a song that also has
-     * an official video it sometimes sends the video: A2O's "NEON" came as KGK2KZOFAPE, its tile
-     * a frame of the group, and playing it carried that frame into the player. Each such tile is
-     * swapped for its song once found, so the tile shows the album cover and plays the song.
-     * Tiles with no exact match stay as sent.
-     */
     private suspend fun showSongVersionsOnSpeedDial() {
         val videos =
             _homeItemList.value
@@ -426,7 +377,6 @@ class HomeViewModel(
     }
 
     companion object {
-        // Home params
         const val HOME_PARAMS_RELAX = "ggM8SgQIBxADSgQIBRABSgQICRABSgQIChABSgQIDRABSgQICBABSgQIBBABSgQIDhABSgQIAxABSgQIBhAB"
         const val HOME_PARAMS_SLEEP = "ggM8SgQIBxABSgQIBRADSgQICRABSgQIChABSgQIDRABSgQICBABSgQIBBABSgQIDhABSgQIAxABSgQIBhAB"
         const val HOME_PARAMS_ENERGIZE = "ggM8SgQIBxABSgQIBRABSgQICRADSgQIChABSgQIDRABSgQICBABSgQIBBABSgQIDhABSgQIAxABSgQIBhAB"

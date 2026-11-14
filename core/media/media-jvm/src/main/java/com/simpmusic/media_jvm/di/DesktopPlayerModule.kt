@@ -17,10 +17,7 @@ import org.koin.dsl.module
 private val desktopPlayerModule =
     module {
         single<CoroutineScope>(qualifier = named(SERVICE_SCOPE)) {
-            // Single-thread dispatcher: serializes all player operations onto one thread so the
-            // adapter's state machine never races with itself. libmpv is thread-safe on its own,
-            // but the adapter's playlist/crossfade state still assumes a single writer.
-            // UI listener notifications are dispatched to Dispatchers.Main separately.
+            // Single-thread dispatcher: player operations run on one thread so the state machine never races itself.
             val playerDispatcher = Executors.newSingleThreadExecutor { r ->
                 Thread(r, "Desktop-Player-Thread").apply { isDaemon = true }
             }.asCoroutineDispatcher()
@@ -35,7 +32,6 @@ private val desktopPlayerModule =
             )
         }
 
-        // ---- Active playback backend ----
         single<MediaPlayerInterface> {
             get<MpvPlayerAdapter>()
         }

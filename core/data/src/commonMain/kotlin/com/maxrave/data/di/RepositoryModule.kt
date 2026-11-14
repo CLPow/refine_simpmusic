@@ -47,11 +47,6 @@ val repositoryModule =
             }
         }
 
-        // Lazy: constructing it costs a few File.length() calls, but the kuromoji dictionary
-        // behind it is loaded on first Japanese line and never before — so this must NOT be
-        // createdAtStart, or every launch pays for a feature most listeners leave off. The path
-        // is where Android keeps the downloaded ipadic pack (the APK no longer bundles it);
-        // Desktop and iOS ignore it.
         single<HomeRepository>(createdAtStart = true) {
             HomeRepositoryImpl(get(), get(), get())
         }

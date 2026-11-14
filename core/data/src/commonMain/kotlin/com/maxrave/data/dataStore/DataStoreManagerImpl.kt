@@ -36,8 +36,6 @@ internal class DataStoreManagerImpl(
 ) : DataStoreManager {
     override val location: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            // Until the first-run code stores the device's region. It was "VN", so a fresh desktop
-            // install (which stored nothing) got Vietnam's Home feed.
             preferences[LOCATION] ?: "US"
         }
 
@@ -54,15 +52,6 @@ internal class DataStoreManagerImpl(
             preferences[MOOD_ARTWORK_CACHE]
         }
 
-    /**
-     * Defaults to the best tier YouTube gives every account, not the worst.
-     *
-     * `items[0]` is "Low - 66kps" (itag 250), which is what this defaulted to before: every install
-     * streamed at roughly 66 kbps despite itag 251 being served to Premium and non-Premium accounts
-     * alike. Nothing was gating the better stream -- it simply was not being asked for. That is a
-     * far larger audible difference than anything above it, since the tiers past this one need a
-     * Premium entitlement that no client-side change can supply.
-     */
     override val quality: Flow<String> =
         settingsDataStore.data.map { preferences ->
             preferences[QUALITY] ?: COMMON_QUALITY.items[COMMON_QUALITY.BEST_FREE_QUALITY_INDEX].toString()
@@ -76,7 +65,6 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    /** Same reasoning as [quality]: a download kept at 66 kbps is kept badly, and permanently. */
     override val downloadQuality: Flow<String> =
         settingsDataStore.data.map { preferences ->
             preferences[DOWNLOAD_QUALITY] ?: COMMON_QUALITY.items[COMMON_QUALITY.BEST_FREE_QUALITY_INDEX].toString()
@@ -119,11 +107,6 @@ internal class DataStoreManagerImpl(
             preferences[LOGGED_IN] ?: FALSE
         }
 
-    /**
-     * Encode with SecretCodec, keeping the previously stored ciphertext when encryption fails.
-     * An empty encode of a non-empty plain value means the platform refused to protect it —
-     * overwriting the slot with "" would silently sign the user out.
-     */
     private fun encodeSecret(
         plain: String,
         purpose: String,
@@ -136,9 +119,6 @@ internal class DataStoreManagerImpl(
         return encoded
     }
 
-    // Protected at rest where the platform needs it — see SecretCodec. decode() passes plain text
-    // through unchanged, so an install that predates this keeps its session and is re-protected on
-    // the next write.
     override val cookie: Flow<String> =
         settingsDataStore.data.map { preferences ->
             SecretCodec.decode(preferences[COOKIE] ?: "", SECRET_PURPOSE_SESSION)
@@ -187,7 +167,6 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
     override val skipSilent: Flow<String> = flowOf(FALSE)
 
     override val saveStateOfPlayback: Flow<String> =
@@ -265,11 +244,6 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    /**
-     * On by default: reporting listens is what lets YouTube's recommendations learn from this app
-     * at all. Stored under a new key so every existing install starts with it on once (the old
-     * key defaulted to off, and almost nobody found the switch); a choice made after that sticks.
-     */
     override val sendBackToGoogle =
         settingsDataStore.data.map { preferences ->
             preferences[SEND_BACK_TO_GOOGLE_V2] ?: TRUE
@@ -283,10 +257,6 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
-    // A new key (v2), off until switched on in Settings > Playback. The old key is not read: an
-    // install from before 2.2.0 may still hold TRUE there, and SponsorBlock must not start
-    // skipping by itself after an update.
     override val sponsorBlockEnabled: Flow<String> =
         settingsDataStore.data.map { preferences ->
             preferences[SPONSOR_BLOCK_ENABLED] ?: FALSE
@@ -314,8 +284,6 @@ internal class DataStoreManagerImpl(
             if (stored != null) anyStored = true
             if (stored == TRUE) list.add(category.value)
         }
-        // Nothing chosen yet: the parts of a music video that are not the song. Without a default
-        // a fresh install had no category switched on and skipped nothing.
         return if (anyStored) list else ArrayList(DEFAULT_SPONSOR_BLOCK_CATEGORIES)
     }
 
@@ -329,8 +297,7 @@ internal class DataStoreManagerImpl(
             }
             SponsorBlockType.toList().filter { !categories.contains(it.value) }.forEach { category ->
                 settingsDataStore.edit { settings ->
-                    // `.value`, the stored key ("sponsor"); toString() is the object's name
-                    // ("SPONSOR"), so unticking a category never took effect.
+                    // Store `.value` ("sponsor"), not toString() ("SPONSOR").
                     settings[stringPreferencesKey(category.value)] = FALSE
                 }
             }
@@ -363,7 +330,6 @@ internal class DataStoreManagerImpl(
         }
     }
 
-    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
     override val skipShortTrackSeconds: Flow<Int> = flowOf(0)
 
     override val maxSongCacheSize =
@@ -389,7 +355,6 @@ internal class DataStoreManagerImpl(
             preferences[VIDEO_QUALITY] ?: "720p"
         }
 
-    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
     override val syncFollowToYouTube: Flow<String> = flowOf(TRUE)
 
     override val chartKey =
@@ -399,8 +364,6 @@ internal class DataStoreManagerImpl(
 
     override val endlessQueue =
         settingsDataStore.data.map { preferences ->
-            // On unless turned off, as YouTube Music's Autoplay is: an album or single runs on into
-            // similar songs instead of stopping at its last track.
             preferences[ENDLESS_QUEUE] ?: TRUE
         }
 
@@ -420,7 +383,6 @@ internal class DataStoreManagerImpl(
 
     override val qualityMobile: Flow<String> =
         settingsDataStore.data.map { preferences ->
-            // Unset means the Wi-Fi choice, so nothing changes for anyone until they pick one.
             preferences[QUALITY_MOBILE] ?: quality.first()
         }
 
@@ -555,8 +517,6 @@ internal class DataStoreManagerImpl(
             preferences[KILL_SERVICE_ON_EXIT] ?: FALSE
         }
 
-    // Defaults to FALSE: it spends storage and mobile data on the user's behalf.
-    // Not part of the YouTube Music replica (2.2.0): pinned, whatever an older version stored.
     override val autoDownloadLikedSongs: Flow<String> = flowOf(FALSE)
 
     override val preferredAudioLanguage =
@@ -636,20 +596,11 @@ internal class DataStoreManagerImpl(
         val DATA_SYNC_ID = stringPreferencesKey("data_sync_id")
         val VISITOR_DATA = stringPreferencesKey("visitor_data")
 
-
-
         val LOCAL_PLAYLIST_FILTER = stringPreferencesKey("local_playlist_filter")
         val PREFERRED_AUDIO_LANGUAGE = stringPreferencesKey("preferred_audio_language")
 
-
-
         val EXPLICIT_CONTENT_ENABLED = stringPreferencesKey("explicit_content_enabled")
 
-
-
-
-
-        // Auto Backup
     }
 }
 

@@ -4,7 +4,6 @@ import android.content.Context
 import org.koin.mp.KoinPlatform.getKoin
 import java.io.File
 
-/** Written by the app's `CrashLog` (androidApp) to `filesDir/crash-log.txt`. */
 actual fun readCrashLog(): String? =
     runCatching {
         val context: Context = getKoin().get()

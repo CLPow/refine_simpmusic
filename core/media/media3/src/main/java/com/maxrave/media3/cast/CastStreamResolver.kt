@@ -8,16 +8,6 @@ import com.maxrave.logger.Logger
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.lastOrNull
 
-/**
- * Resolves a receiver-reachable stream URL for a Cast device.
- *
- * A [com.maxrave.domain.data.player.GenericMediaItem.uri] only carries the raw videoId —
- * the real HTTP URL is normally resolved lazily inside the local ExoPlayer pipeline
- * (ResolvingDataSource), which a remote receiver can never reach. This resolver runs the
- * same [StreamRepository] chain up-front so the receiver gets a self-contained URL.
- * Cast playback is audio-only: video-prefixed media ids are stripped and only audio
- * formats are used.
- */
 internal class CastStreamResolver(
     private val streamRepository: StreamRepository,
     private val dataStoreManager: DataStoreManager,
@@ -31,7 +21,6 @@ internal class CastStreamResolver(
         val videoId = mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO)
         streamRepository.getNewFormat(videoId).lastOrNull()?.let { format ->
             val cachedUrl = format.audioUrl
-            // A stored URL of another quality (resolved on mobile data, say) is not reused.
             val wantedQuality = streamRepository.deliversQuality(format.itag, streamRepository.wantedAudioItag(dataStoreManager))
             if (cachedUrl != null && wantedQuality && format.expiredTime > now()) {
                 val is403 = streamRepository.is403Url(cachedUrl).firstOrNull() != false
@@ -68,7 +57,6 @@ internal class CastStreamResolver(
     companion object {
         private const val TAG = "CastStreamResolver"
 
-        /** Default Media Receiver renders song metadata correctly only with an audio MIME type. */
         private const val DEFAULT_AUDIO_MIME_TYPE = "audio/mp4"
     }
 }

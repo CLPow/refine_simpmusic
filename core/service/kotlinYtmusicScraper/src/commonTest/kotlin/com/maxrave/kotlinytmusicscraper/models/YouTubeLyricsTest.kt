@@ -5,8 +5,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-// Trimmed from a live ANDROID_MUSIC browse of MPLYt_ZtnnRdjqS7w-1 (A2O & A2O LITE, "NEON"):
-// the same nesting, a neighbouring key to skip, and three of its 62 cues.
 private val TIMED =
     """
     {"contents":{"elementRenderer":{"newElement":{"type":{"componentType":{"model":{"timedLyricsModel":{

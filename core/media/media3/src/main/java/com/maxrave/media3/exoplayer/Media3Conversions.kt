@@ -9,9 +9,6 @@ import com.maxrave.domain.data.player.GenericMediaItem
 import com.maxrave.domain.data.player.GenericMediaMetadata
 import com.maxrave.domain.data.player.GenericTracks
 
-
-// Extension functions for conversions between Media3 and Generic types
-
 @UnstableApi
 fun GenericMediaItem.toMedia3MediaItem(): MediaItem {
     val builder =

@@ -5,7 +5,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/** Where releases are published. Public repo, so the API needs no token. */
 const val RELEASES_LATEST_URL = "https://api.github.com/repos/CLPow/refine_simpmusic/releases/latest"
 
 data class AppRelease(
@@ -20,20 +19,17 @@ sealed interface UpdateState {
 
     data object Checking : UpdateState
 
-    /** Only after a check the listener asked for; the start-up check stays silent. */
     data object UpToDate : UpdateState
 
     data class Available(
         val release: AppRelease,
     ) : UpdateState
 
-    /** [progress] is 0..1, or -1 while the size is unknown. */
     data class Downloading(
         val release: AppRelease,
         val progress: Float,
     ) : UpdateState
 
-    /** Android needs "Install unknown apps" allowed for Refine before it can update itself. */
     data class NeedsInstallPermission(
         val release: AppRelease,
     ) : UpdateState
@@ -46,23 +42,15 @@ sealed interface UpdateState {
 
 enum class UpdateFailure { CHECK, DOWNLOAD, NOT_SIGNED_BY_REFINE }
 
-/**
- * In-app updates from GitHub Releases. Android only: the desktop app is installed by hand, so
- * [createAppUpdater] returns null there and every update UI is hidden.
- */
 interface AppUpdater {
     val state: StateFlow<UpdateState>
 
-    /** Epoch millis of the last successful check, or null. */
     val lastCheckMillis: StateFlow<Long?>
 
-    /** At most once every 12 hours; says nothing unless there is an update. */
     fun checkOnStart()
 
-    /** Settings › About › Check for updates. */
     fun checkNow()
 
-    /** Download, verify and open the system installer (or the permission page first). */
     fun update()
 
     fun dismiss()
@@ -71,7 +59,6 @@ interface AppUpdater {
 expect fun createAppUpdater(): AppUpdater?
 
 object UpdateVersion {
-    /** `v2.4.1` / `2.4.1` / `2.4.1-dev` → `2.4.1`. */
     fun normalize(raw: String): String =
         raw
             .trim()
@@ -80,7 +67,6 @@ object UpdateVersion {
             .substringBefore("+")
             .substringBefore("-")
 
-    /** True when [remoteTag] is a newer version than [installed], compared number by number. */
     fun isNewer(
         remoteTag: String,
         installed: String,
@@ -114,10 +100,6 @@ private data class GithubAsset(
 
 private val releaseJson = Json { ignoreUnknownKeys = true }
 
-/**
- * The release in a `releases/latest` answer, or null when it is not one to offer (draft,
- * prerelease, no APK). With several APKs the one naming [abi] wins (e.g. `arm64-v8a`).
- */
 fun parseLatestRelease(
     json: String,
     abi: String?,

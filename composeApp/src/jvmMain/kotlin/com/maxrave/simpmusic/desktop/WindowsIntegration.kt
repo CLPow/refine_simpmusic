@@ -28,21 +28,6 @@ import java.nio.ByteOrder
 import java.util.concurrent.Executors
 import javax.imageio.ImageIO
 
-/**
- * Windows desktop integration, ported from what ytmdesktop (github.com/ytmdesktop/ytmdesktop) adds
- * around YouTube Music: the media keys work while the app is in the background, the taskbar
- * button carries previous / play-pause / next under its thumbnail, and the taskbar button fills
- * with the song's progress. Also the "Start on boot" registry entry.
- *
- * ytmdesktop gets these from Electron (globalShortcut, BrowserWindow.setThumbarButtons,
- * setProgressBar); this is the same Win32 underneath, called through JNA:
- * RegisterHotKey for the media keys, and ITaskbarList3 for the taskbar.
- *
- * It also makes the borderless window a standard one to the shell (see [enableSystemFrame]), so
- * FancyZones and Snap work on it.
- *
- * Everything degrades to a no-op off Windows or when a call fails: none of it may cost playback.
- */
 object WindowsIntegration {
     private const val TAG = "WindowsIntegration"
     val isWindows: Boolean = System.getProperty("os.name").orEmpty().startsWith("Windows")
@@ -59,11 +44,6 @@ object WindowsIntegration {
 
     @Volatile private var mediaKeysStarted = false
 
-    /**
-     * Registers the three media keys system-wide on a thread of their own, which then waits for
-     * them. If another app already holds a key, that key is left to it (as Electron's
-     * globalShortcut does) and the others still work.
-     */
     fun startMediaKeys(onCommand: (Command) -> Unit) {
         if (!isWindows || mediaKeysStarted) return
         mediaKeysStarted = true
@@ -91,7 +71,6 @@ object WindowsIntegration {
 
     // region Taskbar (ITaskbarList3)
 
-    /** ITaskbarList3, called by vtable slot: IUnknown 0-2, ITaskbarList 3-7, ITaskbarList2 8, ITaskbarList3 9+. */
     private class TaskbarList3(pointer: Pointer) : Unknown(pointer) {
         fun hrInit(): Int = _invokeNativeInt(3, arrayOf(pointer))
 
@@ -117,7 +96,6 @@ object WindowsIntegration {
         ): Int = _invokeNativeInt(16, arrayOf(pointer, hwnd, buttons.size, buttons[0].pointer))
     }
 
-    /** THUMBBUTTON from ShObjIdl_core.h. */
     @Structure.FieldOrder("dwMask", "iId", "iBitmap", "hIcon", "szTip", "dwFlags")
     class ThumbButton : Structure() {
         @JvmField var dwMask: Int = 0
@@ -148,7 +126,6 @@ object WindowsIntegration {
     private const val ID_PLAY_PAUSE = 0x5102
     private const val ID_NEXT = 0x5103
 
-    /** One STA thread owns the COM object; every taskbar call goes through it. */
     private val com = Executors.newSingleThreadExecutor { Thread(it, "taskbar-com").apply { isDaemon = true } }
     private var taskbar: TaskbarList3? = null
     private var hwnd: WinDef.HWND? = null
@@ -162,10 +139,6 @@ object WindowsIntegration {
     @Volatile private var previousWndProc: Pointer? = null
     private var taskbarCreatedMessage = 0
 
-    /**
-     * Attaches the taskbar controls to the window [windowHandle] (ComposeWindow.windowHandle).
-     * [onCommand] receives the thumbnail button presses.
-     */
     fun attachTaskbar(
         windowHandle: Long,
         onCommand: (Command) -> Unit,
@@ -185,8 +158,6 @@ object WindowsIntegration {
                 addButtons()
             }.onFailure { Logger.w(TAG, "Taskbar unavailable: ${it.message}") }
         }
-        // Thumbnail button presses arrive as WM_COMMAND on the window; the taskbar button being
-        // recreated (Explorer restart, the window coming back from the tray) as TaskbarButtonCreated.
         runCatching {
             val proc =
                 WinUser.WindowProc { h, msg, wParam, lParam ->
@@ -197,12 +168,8 @@ object WindowsIntegration {
                             ID_NEXT -> onCommand(Command.Next)
                         }
                     } else if (msg == WM_NCCALCSIZE && systemFrame && wParam.toLong() != 0L) {
-                        // The whole window stays client area: WS_THICKFRAME is there for the
-                        // shell to see, not to draw a border around the custom title bar.
                         return@WindowProc WinDef.LRESULT(0)
                     } else if (msg == WM_APP_SYSTEM_MOVE) {
-                        // On the window's own thread, which holds the mouse capture. Windows
-                        // runs its move loop here until the button is released.
                         runCatching { User32Ext.INSTANCE?.ReleaseCapture() }
                         User32.INSTANCE.DefWindowProc(h, WM_SYSCOMMAND, WinDef.WPARAM(SC_DRAGMOVE), WinDef.LPARAM(0))
                         return@WindowProc WinDef.LRESULT(0)
@@ -213,7 +180,6 @@ object WindowsIntegration {
                             lastProgress?.let { applyProgress(it) }
                         }
                     }
-                    // A message can arrive before SetWindowLongPtr has returned the old procedure.
                     val previous = previousWndProc
                     if (previous == null) {
                         User32.INSTANCE.DefWindowProc(h, msg, wParam, lParam)
@@ -257,16 +223,6 @@ object WindowsIntegration {
         }
     }
 
-    /**
-     * FancyZones only zones a borderless (WS_POPUP) window that also has a sizing frame and the
-     * minimize and maximize boxes, and it, like Snap, only reacts to Windows' own move loop. AWT's
-     * undecorated frame has neither, and the title bar used to move it by hand with setLocation,
-     * so the window was invisible to both. This adds the three styles, keeps the frame out of
-     * sight (WM_NCCALCSIZE above), and [beginSystemMove] hands title-bar drags to Windows.
-     *
-     * Needs the subclass from [attachTaskbar]; without it the frame would be drawn, so nothing is
-     * changed.
-     */
     fun enableSystemFrame() {
         val handle = hwnd ?: return
         if (!isWindows || previousWndProc == null) return
@@ -289,18 +245,12 @@ object WindowsIntegration {
         }
     }
 
-    /**
-     * Lets Windows move the window for the drag in progress, as it does when a native title bar
-     * is dragged. Call while the left button is down. False when unavailable, in which case the
-     * caller moves the window itself.
-     */
     fun beginSystemMove(): Boolean {
         val handle = hwnd ?: return false
         if (!systemFrame) return false
         return User32.INSTANCE.PostMessage(handle, WM_APP_SYSTEM_MOVE, WinDef.WPARAM(0), WinDef.LPARAM(0)).let { true }
     }
 
-    /** Swaps the middle thumbnail button between play and pause. */
     fun setPlaying(isPlaying: Boolean) {
         if (!isWindows || hwnd == null) return
         com.execute {
@@ -313,7 +263,6 @@ object WindowsIntegration {
         }
     }
 
-    /** The song's progress on the taskbar button, 0..1; null clears it. */
     fun setProgress(fraction: Float?) {
         if (!isWindows || hwnd == null) return
         lastProgress = fraction
@@ -363,7 +312,6 @@ object WindowsIntegration {
         return array
     }
 
-    /** White transport glyphs drawn here and loaded as icons, so no image files have to ship. */
     private fun buildIcons(): Map<String, WinDef.HICON> {
         val dir = File(System.getProperty("java.io.tmpdir"), "refine-music-taskbar").apply { mkdirs() }
         return listOf("previous", "play", "pause", "next")
@@ -402,7 +350,6 @@ object WindowsIntegration {
         return image
     }
 
-    /** A one-image .ico holding the PNG as is (supported since Windows Vista). */
     private fun icoOf(image: BufferedImage): ByteArray {
         val png = ByteArrayOutputStream().also { ImageIO.write(image, "png", it) }.toByteArray()
         val header = ByteBuffer.allocate(22).order(ByteOrder.LITTLE_ENDIAN)
@@ -420,7 +367,6 @@ object WindowsIntegration {
     private const val RUN_VALUE = "RefineMusic"
     const val MINIMIZED_ARG = "--minimized"
 
-    /** The installed launcher, or null when not running from it (a dev run through Gradle). */
     private fun launcherPath(): String? =
         ProcessHandle
             .current()
@@ -431,7 +377,6 @@ object WindowsIntegration {
 
     fun isStartOnBootSupported(): Boolean = isWindows && launcherPath() != null
 
-    /** Adds or removes the HKCU Run entry; the boot launch starts in the tray. */
     fun setStartOnBoot(enabled: Boolean) {
         if (!isWindows) return
         runCatching {

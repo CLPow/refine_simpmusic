@@ -10,11 +10,6 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonNames
 
-/**
- * Typical list item
- * Used in [MusicCarouselShelfRenderer], [MusicShelfRenderer]
- * Appears in quick picks, search results, table items, etc.
- */
 @Serializable
 data class MusicResponsiveListItemRenderer(
     val badges: List<Badges>?,
@@ -29,11 +24,6 @@ data class MusicResponsiveListItemRenderer(
     val isSong: Boolean
         get() = navigationEndpoint == null || navigationEndpoint.watchEndpoint != null || navigationEndpoint.watchPlaylistEndpoint != null
 
-    /**
-     * Deliberately narrower than [musicVideoType]: this one decides which *item class* to build,
-     * so it stays bound to the navigation endpoint it has always read. Widening it to the overlay
-     * fallback below would reclassify rows that currently parse as songs.
-     */
     val isVideo: Boolean
         get() =
             navigationEndpoint
@@ -42,21 +32,6 @@ data class MusicResponsiveListItemRenderer(
                 ?.watchEndpointMusicConfig
                 ?.musicVideoType != null
 
-    /**
-     * What YouTube says this row actually is — `MUSIC_VIDEO_TYPE_ATV` for the audio version,
-     * `_OMV`/`_UGC` for videos, a `PODCAST` variant for episodes.
-     *
-     * Searches the same three places [videoId] does, because the config rides on whichever
-     * watchEndpoint that row happens to carry: the 2026 web response moved it to the overlay play
-     * button on search rows and to the title column on playlist rows.
-     *
-     * Each candidate is read all the way down to the value before the next is tried. Falling
-     * through on the *endpoint* instead would stop at the first row that has a bare watchEndpoint
-     * on `navigationEndpoint` and the music config only on the overlay — which is precisely the
-     * migration described above, so it would drop the value on the rows this exists for.
-     *
-     * Null means YouTube sent no music config, which is not a claim that this is audio.
-     */
     val musicVideoType: String?
         get() =
             navigationEndpoint
@@ -112,10 +87,6 @@ data class MusicResponsiveListItemRenderer(
                 ?.browseEndpointContextMusicConfig
                 ?.pageType == MUSIC_PAGE_TYPE_ARTIST
 
-    /**
-     * The song/video id. YouTube (web, 2026) dropped [playlistItemData] from search items, so we
-     * fall back to the overlay play button and then the first flex column's watch endpoint.
-     */
     val videoId: String?
         get() =
             playlistItemData?.videoId
@@ -136,10 +107,6 @@ data class MusicResponsiveListItemRenderer(
                     ?.watchEndpoint
                     ?.videoId
 
-    /**
-     * The recording this row stands for, read from its "View song credits" menu entry, whose
-     * browse id is `MPTC` + the audio track's video id. Null when the row has no such entry.
-     */
     val creditsVideoId: String?
         get() =
             menu
@@ -154,31 +121,15 @@ data class MusicResponsiveListItemRenderer(
                         ?.removePrefix("MPTC")
                 }?.takeIf { it.length == 11 }
 
-    /**
-     * The id to play for a track row on an album or artist page.
-     *
-     * A track that also has a music video is listed under the video's id, and YouTube points every
-     * language version of the track at the same video: on A2O MAY's "BAD HABITS TONITE" the
-     * "(Chinese Ver.)" row carries the English video tYzAC-pYkyM, while its credits entry names the
-     * Chinese recording 31p2FLnezZw. So when the credits name a different recording than the row's
-     * own id, that recording is the track; otherwise the Chinese row plays the English song. For an
-     * audio row the two ids are the same. The row's music config is not required: some video rows
-     * (NEON's single) carry none.
-     */
     val songVideoId: String?
         get() = songCounterpartId ?: videoId
 
-    /** [musicVideoType] for [songVideoId]: the audio type once the row resolved to its recording. */
     val songMusicVideoType: String?
         get() = if (songCounterpartId != null) "MUSIC_VIDEO_TYPE_ATV" else musicVideoType
 
     private val songCounterpartId: String?
         get() = creditsVideoId?.takeIf { it != videoId }
 
-    /**
-     * The album/playlist id from the play button. The play endpoint switched from
-     * watchPlaylistEndpoint to watchEndpoint in the 2026 web response, so check both.
-     */
     val playlistId: String?
         get() =
             overlay

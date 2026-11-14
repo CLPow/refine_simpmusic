@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
-/** The songs behind the Library's built-in lists: Liked music (while signed out) and Downloads. */
 class LibraryDynamicPlaylistViewModel(
     songRepository: SongRepository,
 ) : BaseViewModel() {

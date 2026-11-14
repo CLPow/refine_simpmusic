@@ -16,11 +16,6 @@ private var castContext: CastContext? = null
 @Volatile
 private var castAvailable: Boolean = false
 
-/**
- * Safely initializes the Google Cast framework. Never throws — devices/emulators
- * without Google Play services (or a misconfigured Cast receiver) simply end up
- * with casting disabled instead of crashing the app.
- */
 fun initCast(context: Context): Boolean {
     castContext?.let { return castAvailable }
 
@@ -48,11 +43,6 @@ fun initCast(context: Context): Boolean {
 
 fun isCastAvailable(): Boolean = castAvailable
 
-/**
- * Wraps [localPlayer] in a [CastPlayer] so playback can switch seamlessly between
- * local and remote (Cast) output. Falls back to returning [localPlayer] unchanged
- * when Cast isn't available or the CastPlayer fails to build.
- */
 fun wrapWithCastPlayer(
     context: Context,
     localPlayer: Player,

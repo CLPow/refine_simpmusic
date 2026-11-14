@@ -9,7 +9,6 @@ import kotlin.test.assertNull
 class QueueDataTest {
     @Test
     fun addToQueueWhileAutoplayPlaysKeepsTheOrder() {
-        // An album of 3 ended; Autoplay began at 3 and its 2nd song (index 4) is playing.
         var data = QueueData.Data(autoplayStartIndex = 3)
         val current = 4
         val first = data.addToQueueIndex(current)!!

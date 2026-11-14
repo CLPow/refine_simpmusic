@@ -12,14 +12,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.time.Clock
 
-/**
- * Runtime store for Faraday/Zemer-style player configs.
- *
- * The store deliberately separates the normal six-hour refresh from the two
- * failure-triggered refreshes used by Zemer: an unknown player hash and a CDN
- * rejection. Both failure paths are single-flight and rate-limited so a bad
- * player rotation cannot create a request storm.
- */
 class RemotePlayerConfigStore(
     private val httpClient: HttpClient,
     internal val repository: PlayerConfigRepository,
@@ -48,7 +40,6 @@ class RemotePlayerConfigStore(
     @Volatile
     private var configSourceUrl: String? = null
 
-    /** Advances whenever a newly fetched or cached table changes the active config set. */
     @Volatile
     internal var configEpoch: Long = 0L
         private set
@@ -91,10 +82,6 @@ class RemotePlayerConfigStore(
         refresh(sourceUrl, force = false)
     }
 
-    /**
-     * Force a table refresh when the current player hash is not known locally.
-     * Returns true only when the active table changed.
-     */
     internal suspend fun forceRefresh(missingHash: String? = null): Boolean {
         if (!repository.enabled) return false
         val sourceUrl = configuredUrl() ?: return false
@@ -108,11 +95,6 @@ class RemotePlayerConfigStore(
         }
     }
 
-    /**
-     * Force a conditional refresh after a deciphered URL is rejected by the CDN.
-     * This is intentionally separate from unknown-hash cooldown: a stale or wrong
-     * solver can produce a bad signature without throwing an extraction exception.
-     */
     internal suspend fun refreshAfterStreamRejection(): Boolean {
         if (!repository.enabled) return false
         val sourceUrl = configuredUrl() ?: return false
@@ -408,7 +390,6 @@ class RemotePlayerConfigStore(
             ?.takeIf { url ->
                 url.protocol.name == "https" &&
                     when (url.host) {
-                        // Metrolist's table, and upstream SimpMusic's registry as the fallback table.
                         "raw.githubusercontent.com" ->
                             url.encodedPath.startsWith("/MetrolistGroup/faraday/") ||
                                 url.encodedPath.startsWith("/maxrave-dev/simpmusic-files/")

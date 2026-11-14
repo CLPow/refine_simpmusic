@@ -2,21 +2,6 @@ package com.maxrave.simpmusic
 
 import com.maxrave.logger.Logger
 
-/**
- * Registers the "simpmusic://" custom URI protocol handler in Windows Registry
- * under HKEY_CURRENT_USER (no admin rights required).
- *
- * Registry structure:
- * ```
- * HKCU\Software\Classes\simpmusic
- *     (Default) = "URL:SimpMusic Protocol"
- *     URL Protocol = ""
- *     \DefaultIcon
- *         (Default) = "\"<exe_path>\",0"
- *     \shell\open\command
- *         (Default) = "\"<exe_path>\" \"%1\""
- * ```
- */
 object WindowsProtocolRegistrar {
     private const val TAG = "WindowsProtocolRegistrar"
     private const val SCHEME = "simpmusic"
@@ -48,14 +33,11 @@ object WindowsProtocolRegistrar {
 
             Logger.d(TAG, "Registering $scheme:// protocol handler -> $exePath")
 
-            // Main key with protocol description
             regAdd(regKey, null, description)
             regAdd(regKey, "URL Protocol", "")
 
-            // DefaultIcon
             regAdd("$regKey\\DefaultIcon", null, "\"$exePath\",0")
 
-            // shell\open\command
             regAdd("$regKey\\shell\\open\\command", null, "\"$exePath\" \"%1\"")
 
             Logger.d(TAG, "$scheme:// registered successfully")
@@ -70,8 +52,6 @@ object WindowsProtocolRegistrar {
     ): Boolean {
         return try {
             val result = regQuery("${regKeyOf(scheme)}\\shell\\open\\command", null)
-            // Registry stores path with quotes: "C:\path\to\SimpMusic.exe" "%1"
-            // Normalize both for comparison
             val normalizedExe = currentExePath.replace("\\", "/").lowercase()
             result?.replace("\\", "/")?.lowercase()?.contains(normalizedExe) == true
         } catch (_: Exception) {
@@ -80,39 +60,28 @@ object WindowsProtocolRegistrar {
     }
 
     private fun resolveExePath(): String? {
-        // JPackage directory structure:
-        //   <app>/runtime/...  (java.home points here)
-        //   <app>/SimpMusic.exe
-        // So we go: java.home → parent (runtime) → parent (app) → SimpMusic.exe
         val javaHome = System.getProperty("java.home") ?: return null
         val javaHomeDir = java.io.File(javaHome)
 
-        // Try JPackage layout: java.home is <app>/runtime/... or <app>/runtime
         val appDir = if (javaHomeDir.name == "runtime") {
             javaHomeDir.parentFile
         } else {
-            // java.home might be deeper, e.g., <app>/runtime/conf/...
             generateSequence(javaHomeDir) { it.parentFile }
                 .firstOrNull { it.name == "runtime" }
                 ?.parentFile
         }
 
         if (appDir != null) {
-            // The launcher was renamed RefineMusic.exe; looking only for SimpMusic.exe meant the
-            // link handlers were never registered on an installed build.
             listOf("RefineMusic.exe", "SimpMusic.exe")
                 .map { java.io.File(appDir, it) }
                 .firstOrNull { it.exists() }
                 ?.let { return it.absolutePath }
         }
 
-        // Fallback: running from IDE/dev environment, use current process
         return ProcessHandle.current().info().command().orElse(null)
     }
 
     private fun regAdd(key: String, valueName: String?, data: String) {
-        // Build command as a single string for cmd.exe to avoid
-        // ProcessBuilder double-escaping embedded quotes in data
         val valueFlag = if (valueName != null) "/v \"$valueName\"" else "/ve"
         val escapedData = data.replace("\"", "\\\"")
         val cmdString = "reg add \"$key\" /f $valueFlag /t REG_SZ /d \"$escapedData\""

@@ -32,8 +32,6 @@ import kotlin.system.exitProcess
 internal class SimpleMediaService :
     MediaLibraryService(),
     KoinComponent {
-    // Session-level player from DI: the ForwardingPlayer wrapped with Cast support in the
-    // full build (plain ForwardingPlayer in the FOSS build).
     private val player: Player by inject<Player>(qualifier = named(com.maxrave.common.Config.MAIN_PLAYER))
     private val coilBitmapLoader: CoilBitmapLoader by inject<CoilBitmapLoader>()
 
@@ -45,7 +43,6 @@ internal class SimpleMediaService :
 
     private val binder = MusicBinder()
 
-    /** The controller this service keeps on its own session; released in [onDestroy]. */
     private var selfControllerFuture: ListenableFuture<MediaController>? = null
 
     inner class MusicBinder : Binder() {
@@ -106,10 +103,6 @@ internal class SimpleMediaService :
 
         val sessionToken = SessionToken(this, ComponentName(this, SimpleMediaService::class.java))
         selfControllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
-        // The notification above is the only one this service posts. Before 2.3.10 a stale
-        // "keep service alive" key added a second PlayerNotificationManager notification for
-        // the same session, which showed the song twice on the lock screen. Deleting its channel
-        // also removes any copy of that notification still posted from an older install.
         getSystemService(NotificationManager::class.java)?.deleteNotificationChannel("media_playback_channel")
     }
 
@@ -125,12 +118,6 @@ internal class SimpleMediaService :
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
 
-    /**
-     * Releases what this service instance owns: its session, its self-controller and the
-     * keep-alive notification. The player, its handler and the shared coroutine scope are
-     * process-wide singletons and outlive the service — Android Auto, a widget or a media button
-     * can bring a new service up in the same process, and it must find them working.
-     */
     @UnstableApi
     private fun releaseServiceResources() {
         selfControllerFuture?.let { MediaController.releaseFuture(it) }
@@ -139,10 +126,6 @@ internal class SimpleMediaService :
         mediaSession = null
     }
 
-    /**
-     * Tears down the process-wide playback singletons. Their scope is cancelled for good, so this
-     * is only done right before the process exits (the "kill service on exit" setting).
-     */
     @UnstableApi
     private fun releaseEverythingAndExit() {
         Logger.w("Service", "Releasing playback and exiting")
@@ -181,7 +164,6 @@ internal class SimpleMediaService :
         }
     }
 
-    // Can't inject by Koin because it depend on service
     @UnstableApi
     private fun provideMediaLibrarySession(
         service: MediaLibraryService,
@@ -194,15 +176,8 @@ internal class SimpleMediaService :
                 player,
                 callback,
             ).setId(this.javaClass.name)
-            // Capped at the platform's own artwork limit so the framework never rescales the shared
-            // bitmap in setMetadata — see sizeLimitedForSession (#2500). Falls back to the plain
-            // loader if the limit cannot be read.
             .setBitmapLoader(sizeLimitedForSession(service, coilBitmapLoader))
-            // Tapping the media notification opens whatever the session activity points at, and the
-            // only other place that sets it is MainActivity's bind. A service started without that
-            // bind — a headset/Bluetooth play, Android Auto, a widget, a restart after the process
-            // was killed — would otherwise post a notification that opens nothing. The launcher
-            // activity is resolved at runtime, so this module never has to name MainActivity.
+            // The launcher activity is resolved at runtime, so this module never has to name MainActivity.
             .apply {
                 service.packageManager.getLaunchIntentForPackage(service.packageName)?.let { launch ->
                     setSessionActivity(

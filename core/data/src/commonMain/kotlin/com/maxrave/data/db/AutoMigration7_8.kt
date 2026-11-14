@@ -23,11 +23,6 @@ internal class AutoMigration7_8 : AutoMigrationSpec {
     columnName = "synced_with_youtube_playlist",
 )
 internal class AutoMigration11_12 : AutoMigrationSpec
-/**
- * 31 drops the tables of features that are gone: lyrics translation, the AutoEq cache, release
- * notifications, podcasts, local listening analytics, sync tombstones and the followed-artist
- * release cache. Nothing reads or writes them any more.
- */
 @Suppress("ktlint:standard:class-naming")
 @DeleteTable.Entries(
     DeleteTable(tableName = "translated_lyrics"),

@@ -112,22 +112,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 private const val TAG = "YouTubeScraper"
 
-/** Pause before the second attempt at a failed player request. */
 private const val PLAYER_RETRY_DELAY_MS = 700L
-
-/**
- * Special thanks to [z-huang/InnerTune](https://github.com/z-huang/InnerTune)
- * This library is from [z-huang/InnerTune] and I just modified it to comply with SimpMusic
- *
- * Here is the object that can create all request to YouTube Music and Spotify in SimpMusic
- * Using YouTube Internal API
- * @author maxrave-dev
- */
 
 class YouTube {
     private val ytMusic = Ytmusic()
 
-    // Runs the blocking stream extraction alongside the player request (see [player]).
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     var cookiePath: Path?
@@ -136,18 +125,12 @@ class YouTube {
             ytMusic.cookiePath = value
         }
 
-    /**
-     * Set the locale and language for YouTube Music
-     */
     var locale: YouTubeLocale
         get() = ytMusic.locale
         set(value) {
             ytMusic.locale = value
         }
 
-    /**
-     * Set custom visitorData for client (default is @see [DEFAULT_VISITOR_DATA])
-     */
     var visitorData: String?
         get() = ytMusic.visitorData
         set(value) {
@@ -160,9 +143,6 @@ class YouTube {
             ytMusic.dataSyncId = value
         }
 
-    /**
-     * Set cookie and authentication header for client (for log in option)
-     */
     var cookie: String?
         get() = ytMusic.cookie
         set(value) {
@@ -170,18 +150,8 @@ class YouTube {
             ytMusic.cookie = value
         }
 
-    /**
-     * True when a cookie is saved but YouTube no longer accepts it as signed in. Requests then
-     * quietly come back signed out: Home turns into the generic feed and listens reach no history,
-     * with nothing on screen to say why. Set by [verifySignIn]; a new cookie clears it.
-     */
     val signInExpired = MutableStateFlow(false)
 
-    /**
-     * Asks YouTube whether the saved cookie is still signed in (the account menu names the active
-     * account only when it is). Returns null when the question could not be answered (offline, a
-     * refusal), true when signed in or there is no cookie to check, false when it has expired.
-     */
     suspend fun verifySignIn(): Boolean? {
         if (cookie.isNullOrEmpty()) {
             signInExpired.value = false
@@ -208,12 +178,6 @@ class YouTube {
             ytMusic.authUser = value
         }
 
-    /**
-     * Search for a song, album, artist, playlist, etc.
-     * @param query the search query
-     * @param filter the search filter (see in [SearchFilter])
-     * @return a [Result]<[SearchResult]> object
-     */
     suspend fun search(
         query: String,
         filter: SearchFilter,
@@ -267,37 +231,11 @@ class YouTube {
             )
         }
 
-    /**
-     * YouTube Music's own search page: one request with no filter, answered with the top result
-     * card, the chips in the order YouTube ranks them for this query, and the results YouTube
-     * ranked below. Returned as sent; the data layer reads it.
-     */
     suspend fun searchSummary(query: String): Result<SearchResponse> =
         runCatching { ytMusic.search(WEB_REMIX, query).body<SearchResponse>() }
 
-    /**
-     * Song search that deliberately carries no session.
-     *
-     * Used by the Spotify import, which issues one query per track being matched. Those are the
-     * app's queries, not the user's, and routing them through the signed-in client would write
-     * every imported track title into the account's YouTube search history.
-     *
-     * Restricted to the song filter so the results are catalogue tracks rather than user uploads
-     * or music videos, which gives the matcher a cleaner set to score.
-     */
-    /**
-     * Pacing and backoff applied to every request that carries the user's account.
-     *
-     * Surfaced so the app can tell the user it is deliberately standing down, rather than looking
-     * broken while it waits out a refusal.
-     */
     val accountGuard get() = ytMusic.accountGuard
 
-    /**
-     * Every search request response a limited data. Use this function to get the next data
-     * @param continuation continuation token from [SearchResult.continuation]
-     * @return a [Result]<[SearchResult]> object
-     */
     suspend fun searchContinuation(continuation: String): Result<SearchResult> =
         runCatching {
             val response = ytMusic.search(WEB_REMIX, continuation = continuation).body<SearchResponse>()
@@ -320,12 +258,6 @@ class YouTube {
             )
         }
 
-    /**
-     * Get the album page data from YouTube Music
-     * @param browseId the album browseId
-     * @param withSongs if true, the function will get the songs data too
-     * @return a [Result]<[AlbumPage]> object
-     */
     suspend fun album(
         browseId: String,
         withSongs: Boolean = true,
@@ -503,11 +435,6 @@ class YouTube {
             }
         }
 
-    /**
-     * Get the artist page data from YouTube Music
-     * @param browseId the artist browseId
-     * @return a [Result]<[ArtistPage]> object
-     */
     suspend fun artist(browseId: String): Result<ArtistPage> =
         runCatching {
             val response = ytMusic.browse(WEB_REMIX, browseId).body<BrowseResponse>()
@@ -598,18 +525,14 @@ class YouTube {
     suspend fun getYouTubePlaylistFullTracksWithSetVideoId(playlistId: String): Result<List<Pair<SongItem, String>>> =
         runCatching {
             val plId = if (playlistId.startsWith("VL")) playlistId else "VL$playlistId"
-            // SongItem / SetVideoId
             val listPair = mutableListOf<Pair<SongItem, String>>()
             val response = ytMusic.playlist(plId).body<BrowseResponse>()
             listPair.addAll(
                 response.fromPlaylistToTrackWithSetVideoId(),
             )
             var continuation = response.getPlaylistContinuation()
-            // A token seen twice would loop forever.
             val seenContinuations = mutableSetOf<String>()
             while (continuation != null && seenContinuations.add(continuation)) {
-                // A page that fails ends the walk but keeps the pages already read, rather than
-                // failing the whole result.
                 val continuationResponse =
                     runCatching {
                         ytMusic
@@ -620,9 +543,6 @@ class YouTube {
                                 continuation = continuation,
                             ).body<BrowseResponse>()
                     }.getOrNull() ?: break
-                // Continuation pages carry their rows in a different shape from the first page:
-                // read with the first-page parser they yielded nothing, so every track past the
-                // first page (100) was missing.
                 listPair.addAll(
                     continuationResponse.fromPlaylistContinuationToTrackWithSetVideoId(),
                 )
@@ -660,11 +580,6 @@ class YouTube {
             return@runCatching null
         }
 
-    /**
-     * Get the playlist page data from YouTube Music
-     * @param playlistId the playlistId
-     * @return a [Result]<[PlaylistPage]> object
-     */
     suspend fun playlist(playlistId: String): Result<PlaylistPage> =
         runCatching {
             val response =
@@ -752,16 +667,6 @@ class YouTube {
             )
         }
 
-    /**
-     * Execute a custom POST request to YouTube Music
-     * In SimpMusic, I use this function to parsing Home, Playlist, Album data instead using [album], [playlist], [artist] function
-     * @param browseId the browseId (such as "FEmusic_home", "VL$playlistId", etc.)
-     * @param params the params
-     * @param continuation the continuation token
-     * @param country the country code
-     * @param setLogin if true, the function will set the cookie and authentication header
-     * @return a [Result]<[BrowseResponse]> object
-     */
     suspend fun customQuery(
         browseId: String?,
         params: String? = null,
@@ -772,11 +677,6 @@ class YouTube {
         ytMusic.browse(WEB_REMIX, browseId, params, continuation, country, setLogin).body<BrowseResponse>()
     }
 
-    /**
-     * Get Skip Segments from SponsorBlock
-     * @param videoId the videoId of song
-     * @return a [Result]<[List]<[SkipSegments]>> object
-     */
     suspend fun getSkipSegments(videoId: String): Result<List<SkipSegments>> =
         runCatching {
             ytMusic.getSkipSegments(videoId).body<List<SkipSegments>>()
@@ -1012,14 +912,8 @@ class YouTube {
                 like = returnYouTubeDislikeResponse.likes,
                 dislike = returnYouTubeDislikeResponse.dislikes,
             )
-            // Get author thumbnails, subscribers, description, like count
         }
 
-    /**
-     * A track's comments, from the Comments tab of YouTube Music's own watch page: the first page
-     * and its header. Null when the track has none: comments turned off, or a live stream that only
-     * has its chat. Signed in, the comments carry the like, dislike and reply commands.
-     */
     suspend fun comments(videoId: String): Result<CommentsPage?> =
         runCatching {
             val next = ytMusic.next(WEB_REMIX, videoId, null, null, null, null).body<NextResponse>()
@@ -1029,13 +923,11 @@ class YouTube {
                 .takeIf { it.header != null || it.comments.isNotEmpty() }
         }
 
-    /** Whatever a comments token loads: the next page, a thread's replies, or more of them. */
     suspend fun commentsPage(token: String): Result<CommentsPage> =
         runCatching {
             CommentsPageParser.parse(ytMusic.next(WEB_REMIX, null, null, null, null, null, token).body<CommentsResponse>())
         }
 
-    /** Posts a comment. The result is the comment as YouTube made it, or null when its answer did not carry it. */
     suspend fun createComment(
         createCommentParams: String,
         text: String,
@@ -1052,7 +944,6 @@ class YouTube {
             CommentsPageParser.parseCreated(ytMusic.createCommentReply(createReplyParams, text).body<CommentsResponse>())
         }
 
-    /** Like, dislike, or undo either: [action] is the token the comment's toolbar carries for it. */
     suspend fun performCommentAction(action: String): Result<Unit> =
         runCatching {
             ytMusic.performCommentAction(action)
@@ -1154,22 +1045,12 @@ class YouTube {
                     ?.let { addAll(it) }
             },
         )
-        // A freshly extracted URL is used as is, as YouTube Music does. Probing one first cost a
-        // full round trip before every song; a URL that is refused anyway goes through the
-        // player's own recovery, which drops it and resolves a new one.
         return if (listUrlSig.isNotEmpty()) decodedSigResponse else null
     }
 
     fun isManifestUrl(url: String): Boolean = url.contains(".m3u8") || url.contains(".mpd") || url.contains("manifest")
 
     @OptIn(ExperimentalTime::class)
-    /**
-     * Resolves the playable streams of [videoId].
-     *
-     * One failed attempt used to be final: a single timeout or 5xx on the player request, or a
-     * response that was not playable yet, failed the track. It is tried once more after a short
-     * pause. A rate limit (429) is not retried: another request would only extend it.
-     */
     suspend fun player(
         videoId: String,
         playlistId: String? = null,
@@ -1203,10 +1084,6 @@ class YouTube {
                     }.joinToString("")
 
             var decodedSigResponse: PlayerResponse? = null
-            // The stream extraction (several requests plus the player-script decode) does not need
-            // the WEB_REMIX response, so it starts now and runs while that request is in flight.
-            // It used to start only after the response arrived, adding one full round trip to the
-            // time before every uncached song could begin.
             val extraction =
                 ioScope.async {
                     ytMusic.getNewPipePlayer(videoId)
@@ -1283,8 +1160,6 @@ class YouTube {
                         )
                     }
                 }.getOrElse {
-                    // The extraction started above is only cancelled further down; a failed player
-                    // request used to leave it running with nobody waiting for it.
                     extraction.cancel()
                     throw it
                 }
@@ -1358,12 +1233,6 @@ class YouTube {
             }
         }
 
-    /**
-     * @return [Pair<Int, Float>]
-     * Int: status code
-     * Float: second watchtime
-     * First watchtime is 5.54
-     */
     suspend fun initPlayback(
         playbackUrl: String,
         atrUrl: String,
@@ -1469,7 +1338,6 @@ class YouTube {
                         ?.content
                         ?.playlistPanelRenderer
             if (playlistPanelRenderer != null) {
-                // load automix items
                 if (playlistPanelRenderer.contents
                         .lastOrNull()
                         ?.automixPreviewVideoRenderer
@@ -1521,9 +1389,6 @@ class YouTube {
                             )
                         }
                 }
-//        else if (playlistPanelRenderer.contents.firstOrNull()?.playlistPanelVideoRenderer?.navigationEndpoint?.watchPlaylistEndpoint != null) {
-//
-//        }
                 return@runCatching NextResult(
                     title = playlistPanelRenderer.title,
                     items =
@@ -1574,15 +1439,6 @@ class YouTube {
             }
         }
 
-    /**
-     * YouTube Music's own lyrics for [videoId], as its Android app shows them.
-     *
-     * The lyrics page (`MPLYt…`, from the watch page's Lyrics tab) answers the web client with
-     * plain text only. The Android client gets the same lyrics timed line by line for this
-     * recording (Musixmatch or LyricFind, credited in `source`); measured on 2026-11-07, 18 of
-     * 20 recently played songs had timing and the other 2 plain text. When there is no timing,
-     * the web client's plain text is returned. Null when the track has no Lyrics tab at all.
-     */
     suspend fun youTubeMusicLyrics(videoId: String): Result<YouTubeLyrics?> =
         runCatching {
             val endpoint =
@@ -1606,12 +1462,6 @@ class YouTube {
             timed ?: lyrics(endpoint).getOrNull()?.takeIf { it.isNotBlank() }?.let { YouTubeLyrics(lines = null, plain = it, source = null) }
         }
 
-    /**
-     * The radio tuning chips YouTube Music shows over Up next for the radio of [videoId] in
-     * [playlistId]: "All", "Familiar", "Popular", "Discover", "Deep cuts", moods and a
-     * genre, each a re-tuned radio (its own playlistId and params). The "Save" chip has no
-     * watch endpoint and comes back with a null playlistId.
-     */
     suspend fun radioChips(
         videoId: String,
         playlistId: String,
@@ -1782,14 +1632,6 @@ class YouTube {
         ytMusic.addItemYouTubePlaylist(playlistId, videoId).body<AddItemYouTubePlaylistResponse>()
     }
 
-    /**
-     * Move a playlist item before another item in a YouTube playlist.
-     * @param playlistId The YouTube playlist ID
-     * @param setVideoId The setVideoId of the item to move
-     * @param movedSetVideoIdSuccessor The setVideoId of the item that should come AFTER the moved item.
-     *        If null, the item is moved to the end of the playlist.
-     * @return Result<Int> HTTP status code
-     */
     suspend fun movePlaylistItem(
         playlistId: String,
         setVideoId: String,
@@ -1812,12 +1654,6 @@ class YouTube {
         ytMusic.createYouTubePlaylist(title, listVideoId).body<CreatePlaylistResponse>()
     }
 
-    /**
-     * Subscribes the signed-in account to a channel.
-     *
-     * Returns the HTTP status rather than a parsed body, the same way the like endpoints do —
-     * these calls answer with an empty payload, so the status is the whole result.
-     */
     suspend fun subscribeChannel(channelId: String) =
         runCatching {
             ytMusic.subscribeChannel(channelId).status.value
@@ -1838,7 +1674,6 @@ class YouTube {
             ytMusic.removeFromLiked(mediaId).status.value
         }
 
-    /** YouTube Music's thumbs down; cleared with [removeFromLiked], as on YouTube. */
     suspend fun dislike(mediaId: String) =
         runCatching {
             ytMusic.dislike(mediaId).status.value
@@ -1849,12 +1684,6 @@ class YouTube {
             ytMusic.getSimpMusicChart().body<SimpMusicChartResponse>()
         }
 
-    // Any format carrying a signatureCipher would do; medium Opus is the one YouTube returns for
-    // every video, logged in or not, which is why the lookup pins that itag rather than scanning.
-    /**
-     * Which extractor and cipher decoder produced this video's URLs in THIS run of the app, or null
-     * if it has not been extracted yet. Diagnostic only — see [com.maxrave.kotlinytmusicscraper.extractor.ExtractSource].
-     */
     fun getExtractSource(videoId: String): String? = ExtractSource.of(videoId)
 
     fun download(
@@ -1864,7 +1693,6 @@ class YouTube {
         isVideo: Boolean = false,
     ): Flow<DownloadProgress> =
         channelFlow {
-            // Video if videoId is not null
             trySend(DownloadProgress(0.01f))
             player(videoId = videoId)
                 .onSuccess { playerResponse ->
@@ -1929,7 +1757,6 @@ class YouTube {
                             trySend(DownloadProgress.failed(it.message ?: "Download failed"))
                         }
                     } else {
-                        // Song if url is not null
                         runCatching {
                             ytMusic
                                 .download(audioUrl, ("$filePath.webm"))
@@ -1942,7 +1769,6 @@ class YouTube {
                                 }
                         }.onSuccess {
                             Logger.d(TAG, "Download only Audio Success")
-                            // Convert to mp3
                             trySend(
                                 ytMusic.saveAudioWithThumbnail(
                                     filePath,
@@ -1966,10 +1792,6 @@ class YouTube {
     companion object {
         const val MAX_GET_QUEUE_SIZE = 1000
 
-        // Visitor data is a base64 protobuf: bytes 0x0a 0x0b (field 1, length 11) then an 11-char
-        // id. "Cg" is fixed; the third char encodes the top 2 bits of the id's first byte, so it is
-        // "s" for a digit or "-" and "t" for a letter or "_" ("u"/"v" only for a non-ASCII byte).
-        // Matching "Cgt" alone missed every id starting with a digit.
         private val VISITOR_DATA_REGEX = Regex("^Cg[stuv][A-Za-z0-9_-]{15,}")
 
         const val DEFAULT_VISITOR_DATA = "CgtsZG1ySnZiQWtSbyiMjuGSBg%3D%3D"
@@ -1977,10 +1799,6 @@ class YouTube {
     }
 }
 
-/**
- * The browse endpoint of the watch page's tab with [pageType] (lyrics, related). Found by type, not
- * position: YouTube added a Comments tab in 2026, which moved Related and broke index lookups.
- */
 private fun List<Tabs.Tab>.tabEndpoint(pageType: String): BrowseEndpoint? =
     firstNotNullOfOrNull { tab ->
         tab.tabRenderer.endpoint?.browseEndpoint?.takeIf {
@@ -1988,7 +1806,6 @@ private fun List<Tabs.Tab>.tabEndpoint(pageType: String): BrowseEndpoint? =
         }
     }
 
-/** Up next's chips in YouTube's order. A chip without a radio endpoint is the Save action. */
 internal fun MusicQueueRenderer.SubHeaderChipCloud?.toRadioChips(): List<YouTube.RadioChip> =
     this
         ?.chipCloudRenderer

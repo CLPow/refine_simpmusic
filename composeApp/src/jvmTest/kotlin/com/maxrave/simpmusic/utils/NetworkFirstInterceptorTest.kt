@@ -63,7 +63,6 @@ class NetworkFirstInterceptorTest {
         assertEquals(DataSource.DISK, diskResult.dataSource)
         assertEquals(0, fixture.client.requests.size)
 
-        // A disk hit must warm RAM without resetting the original response's TTL.
         fixture.client.nowMillis += 1
         val refreshedResult = assertIs<SuccessResult>(fixture.load())
         assertEquals("new", assertIs<TestImage>(refreshedResult.image).label)
@@ -366,7 +365,6 @@ class NetworkFirstInterceptorTest {
             request: NetworkRequest,
             block: suspend (NetworkResponse) -> T,
         ): T {
-            // Match OkHttp's only-if-cached behaviour without a socket or an HTTP cache.
             if (request.headers["Cache-Control"]?.contains("only-if-cached") == true) {
                 return block(NetworkResponse(code = 504))
             }

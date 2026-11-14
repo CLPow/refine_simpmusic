@@ -7,14 +7,6 @@ import androidx.compose.ui.unit.dp
 import com.maxrave.domain.data.model.ui.ScreenSizeInfo
 import kotlin.math.roundToInt
 
-/**
- * Main-window chrome facts published once by DesktopApp. The custom title bar is drawn INSIDE
- * the window (above the app content), so `LocalWindowInfo.containerSize` includes it — every
- * hDP-based layout (most visibly the player's one-screen fold math) overflowed by exactly the
- * bar height until it is subtracted here. In VMs the bar is not mounted (native decorations
- * live outside containerSize) and nothing must be subtracted. Only the main window ever calls
- * [getScreenSizeInfo]; the mini-player window does not.
- */
 object DesktopWindowChrome {
     const val TITLE_BAR_HEIGHT_DP = 32
 
@@ -47,6 +39,5 @@ actual fun getScreenSizeInfo(): ScreenSizeInfo {
 
 @Composable
 actual fun KeepScreenOn() {
-    // TODO: Implement if needed
 }
 

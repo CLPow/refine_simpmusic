@@ -27,7 +27,6 @@ data class SectionListRenderer(
                 data class ChipCloudChipRenderer(
                     val isSelected: Boolean? = null,
                     val navigationEndpoint: NavigationEndpoint,
-                    // The close button doesn't have the following two fields
                     val text: Runs?,
                     val uniqueId: String?,
                 )
@@ -47,7 +46,6 @@ data class SectionListRenderer(
         val musicResponsiveHeaderRenderer: MusicResponsiveHeaderRenderer?,
         val musicEditablePlaylistDetailHeaderRenderer: BrowseResponse.Header.MusicEditablePlaylistDetailHeaderRenderer?,
         val gridRenderer: GridRenderer?,
-        /** Search (2026): after the top result, each result row comes in a section of its own. */
         val itemSectionRenderer: ItemSectionRenderer? = null,
     ) {
         @Serializable

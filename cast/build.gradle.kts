@@ -47,17 +47,14 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.appcompat)
 
-    // Compose
     val composeBom = platform(libs.compose.bom)
     implementation(composeBom)
     implementation(libs.compose.material3.lib)
     implementation(libs.compose.ui)
 
-    // Media3 Cast — CastPlayer wraps the local Player for seamless local/remote switching.
     implementation(libs.media3.cast)
     implementation(libs.media3.common)
 
-    // Google Cast (Play Services) — CastContext, CastOptionsProvider, MediaRouteButton wiring.
     implementation(libs.play.services.cast.framework)
     implementation(libs.androidx.mediarouter)
 

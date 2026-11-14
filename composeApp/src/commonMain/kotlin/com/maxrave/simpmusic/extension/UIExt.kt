@@ -95,7 +95,6 @@ class GreyScaleModifier : DrawModifier {
 
 fun Modifier.greyScale() = this.then(GreyScaleModifier())
 
-// Angle Gradient Background without size
 fun GradientOffset(angle: GradientAngle): GradientOffset =
     when (angle) {
         GradientAngle.CW45 -> {
@@ -155,9 +154,6 @@ fun GradientOffset(angle: GradientAngle): GradientOffset =
         }
     }
 
-/**
- * Offset for [Brush.linearGradient] to rotate gradient depending on [start] and [end] offsets.
- */
 data class GradientOffset(
     val start: Offset,
     val end: Offset,
@@ -271,14 +267,6 @@ fun Palette?.getColorFromPalette(): Color {
     return Color(startColor)
 }
 
-/**
- * Apple-Music-style immersive page background derived from the artwork.
- * Uses the DOMINANT swatch (overall tone of the image, by pixel area) instead of a vivid Muted
- * swatch — so a light image yields a light-ish tone rather than a small saturated patch (e.g. a
- * bright portrait no longer turns brick-red from the hair/skin). Then darkens adaptively: the
- * lighter the source, the harder it is pulled toward black, so white text stays readable on any
- * artwork.
- */
 fun Palette?.toImmersiveBackground(): Color {
     val p = this ?: return Color.Black
     val rgb =
@@ -287,9 +275,7 @@ fun Palette?.toImmersiveBackground(): Color {
             ?: p.getVibrantColor(0).takeIf { it != 0 }
             ?: return Color.Black
     val base = Color(rgb)
-    // Perceived luminance (0 dark .. 1 light) of the source swatch.
     val luminance = 0.299f * base.red + 0.587f * base.green + 0.114f * base.blue
-    // Darken more for lighter artwork so the page stays dark enough for white text.
     val darkenFactor = 0.35f + 0.45f * luminance
     return androidx.compose.ui.graphics.lerp(base, Color.Black, darkenFactor)
 }
@@ -315,7 +301,6 @@ fun PaddingValues.copy(
     )
 }
 
-/** Converts HSV (hue 0-360, saturation 0-1, value 0-1) to Compose Color. */
 fun hsvToColor(
     hue: Float,
     saturation: Float,

@@ -157,13 +157,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import simpmusic.composeapp.generated.resources.retry
 import simpmusic.composeapp.generated.resources.ytm_page_failed
 
-/**
- * True on Desktop and tablets, where the app takes YouTube Music's web layout: sidebar, search
- * field in the top bar, shelf arrows and 180dp cards.
- */
 val LocalWideLayout = staticCompositionLocalOf { false }
 
-/** YouTube Music's palette, as used across every page. */
 object Ytm {
     val Background = Color(0xFF030303)
     val Surface = Color(0xFF212121)
@@ -175,11 +170,6 @@ object Ytm {
 
 // region Top bar and account
 
-/**
- * YouTube Music's top bar. On a tab page it carries the logo; on a sub-page, a back arrow and the
- * page title. The account avatar sits on the right of both, and sub-pages add
- * search (tab pages have the Search tab right below them).
- */
 @Composable
 fun YtmTopBar(
     navController: NavController,
@@ -187,7 +177,6 @@ fun YtmTopBar(
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     background: Color = Color.Transparent,
-    /** False on pages that, like YouTube Music's Settings, show only back and a title. */
     showActions: Boolean = true,
 ) {
     var showAccount by remember { mutableStateOf(false) }
@@ -213,7 +202,6 @@ fun YtmTopBar(
                 modifier = Modifier.weight(1f),
             )
         } else if (LocalWideLayout.current) {
-            // The web's top bar: the search field over the page (the logo is in the sidebar).
             Row(
                 Modifier
                     .padding(start = 40.dp)
@@ -241,8 +229,6 @@ fun YtmTopBar(
                     Icon(SimpIcons.Search, contentDescription = stringResource(Res.string.ytm_search), tint = Color.White)
                 }
             }
-            // Where YouTube Music has its Cast button. Here too, so another device can be
-            // controlled while nothing is loaded on this one (no mini player to hold the button).
             RefineControlButton()
             AccountAvatar(size = 28.dp, modifier = Modifier.padding(end = 4.dp)) { showAccount = true }
         }
@@ -252,7 +238,6 @@ fun YtmTopBar(
     }
 }
 
-/** The app mark: the logo in colour beside the name, YouTube Music's top-left. */
 @Composable
 fun YtmLogo() {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -270,11 +255,6 @@ fun YtmLogo() {
     }
 }
 
-/**
- * The signed-in account's picture, or a grey disc when signed out. An expired sign-in shows the
- * picture faded, so the account no longer looks signed in when it isn't. [onClick] null makes it
- * a plain picture; otherwise its touch target is the full 48dp.
- */
 @Composable
 fun AccountAvatar(
     size: Dp,
@@ -311,7 +291,6 @@ fun AccountAvatar(
     }
 }
 
-/** The sheet the avatar opens, as in YouTube Music: the account, then History, Settings and the account actions. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountMenuSheet(
@@ -373,7 +352,6 @@ fun AccountMenuSheet(
             onDismiss()
             navController.navigate(RecentlySongsDestination) { launchSingleTop = true }
         }
-        // Other saved accounts: a tap switches to it, as YouTube Music's account switcher does.
         accounts.data.orEmpty().filter { !it.isUsed }.forEach { account ->
             Row(
                 Modifier
@@ -430,7 +408,6 @@ private fun AccountMenuRow(
 
 // region Chips
 
-/** YouTube Music's filter chips: rounded rectangles, white when selected. */
 @Composable
 fun YtmChips(
     labels: List<String>,
@@ -475,7 +452,6 @@ fun YtmChip(
     }
 }
 
-/** An outlined pill button, YouTube Music's "More" / "Play all" beside a shelf title. */
 @Composable
 fun YtmOutlinedPill(
     label: String,
@@ -499,10 +475,6 @@ fun YtmOutlinedPill(
 
 // region Shelves
 
-/**
- * A shelf header: the optional small picture (round for an artist), the strapline above the
- * title, and an optional pill on the right.
- */
 @Composable
 fun YtmShelfHeader(
     title: String,
@@ -555,7 +527,6 @@ fun YtmShelfHeader(
     }
 }
 
-/** The web's round outlined arrow beside a shelf title. */
 @Composable
 private fun ShelfArrow(
     icon: ImageVector,
@@ -575,7 +546,6 @@ private fun ShelfArrow(
     }
 }
 
-/** One shelf of a YouTube Music feed: list shelves as the Quick picks grid, the rest as cards. */
 @Composable
 fun YtmShelf(
     item: HomeItem,
@@ -592,12 +562,9 @@ fun YtmShelf(
     val wideLayout = LocalWideLayout.current
     val rowState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    // Speed dial is the phone app's; the web (and so the desktop layout) shows the same shelf as
-    // YouTube sends it, "Listen again", a row of cards.
     val speedDial = item.isSpeedDial && !wideLayout
     val cardRow = !speedDial && !item.isListShelf
     YtmShelfHeader(
-        // The phone app's name for the account's own shelf; the web feed sends "Listen again".
         title = if (speedDial) stringResource(Res.string.ytm_speed_dial) else item.title,
         strapline = item.subtitle,
         thumbnail = item.thumbnail?.lastOrNull()?.url,
@@ -610,7 +577,6 @@ fun YtmShelf(
             } else {
                 null
             },
-        // On the web layout a card shelf pages by a screenful with its arrows.
         onPrevious =
             if (wideLayout && cardRow) {
                 {
@@ -650,8 +616,6 @@ fun YtmShelf(
             )
 
         else -> {
-            // Video shelves ("Music videos for you", "Listen together") are 16:9 cards, as YouTube
-            // sends them; everything else is square.
             val wide = contents.count { it.isWideArtwork() } * 2 > contents.size
             LazyRow(
                 state = rowState,
@@ -672,13 +636,6 @@ fun YtmShelf(
     }
 }
 
-/**
- * Speed dial, the account's own shelf at the top of YouTube Music's Home, as the phone app draws
- * it: pages of exactly three by three square tiles, swiped a page at a time, with page dots
- * under them. Every tile is the picture with its name over the bottom; an artist's picture is a
- * circle filling the tile, and anything that opens a page (artist, playlist, mix, album) has a
- * chevron after its name. Songs play and have none. A wide window fits more columns per page.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun YtmSpeedDial(
@@ -740,7 +697,6 @@ private fun SpeedDialTile(
     onLongClick: () -> Unit,
 ) {
     val artist = content.isArtist()
-    // Anything that is not a song opens a page, and says so with a chevron.
     val opensPage = content.videoId.isNullOrEmpty()
     Box(
         Modifier
@@ -784,13 +740,11 @@ private fun SpeedDialTile(
     }
 }
 
-/** True for a 16:9 cover (a video), from the size YouTube gave the artwork. */
 private fun Content.isWideArtwork(): Boolean {
     val art = thumbnails.lastOrNull() ?: return false
     return art.width > 0 && art.height > 0 && art.width * 10 > art.height * 13
 }
 
-/** YouTube Music's two-line card: square cover (round for an artist), title, subtitle. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun YtmCard(
@@ -846,10 +800,6 @@ fun YtmCard(
     }
 }
 
-/**
- * Quick picks: song rows four to a column, columns side by side with the next one peeking in,
- * snapping column by column.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun YtmQuickPicks(
@@ -882,7 +832,6 @@ fun YtmQuickPicks(
     }
 }
 
-/** YouTube Music's song row: 48dp cover, title, grey subtitle, the ⋮ menu. */
 @Composable
 fun YtmSongRow(
     title: String,
@@ -894,9 +843,7 @@ fun YtmSongRow(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     onMore: (() -> Unit)? = null,
-    /** YouTube Music's swipe-right-to-queue on a song row; null turns the swipe off. */
     onSwipeQueue: (() -> Unit)? = null,
-    /** Non-null while the list is selecting songs: whether this one is picked. */
     selected: Boolean? = null,
 ) {
     SwipeToQueueRow(
@@ -934,11 +881,6 @@ fun YtmSongRow(
     }
 }
 
-/**
- * The shell every song row shares: tap and long-press, YouTube Music's swipe right to add the song
- * to the queue (the queue icon shows behind the row, and releasing past half-way queues it), and,
- * while the list is selecting ([selected] non-null), the pick circle in front with no swipe.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SwipeToQueueRow(
@@ -995,7 +937,6 @@ fun SwipeToQueueRow(
                 ).combinedClickable(onClick = onClick, onLongClick = onLongClick)
                 .then(
                     if (selected != null) {
-                        // Read as "<title>, selected" / "not selected" while picking songs.
                         Modifier.semantics {
                             this.selected = selected
                             role = Role.Checkbox
@@ -1021,7 +962,6 @@ fun SwipeToQueueRow(
 
 private val SWIPE_QUEUE_DISTANCE = 120.dp
 
-/** A cover image clipped to [shape]; square unless the caller sizes it otherwise. */
 @Composable
 fun Thumb(
     url: String?,
@@ -1052,7 +992,6 @@ fun Thumb(
 private fun Content.isArtist(): Boolean =
     (browseId?.startsWith("UC") == true || playlistId?.startsWith("UC") == true) && videoId.isNullOrEmpty()
 
-/** The grey line under a card or row, built the way YouTube Music writes it. */
 fun Content.subtitle(): String {
     val artistNames = artists?.mapNotNull { it.name.takeIf { n -> n.isNotBlank() } }.orEmpty().joinToString(", ")
     return when {
@@ -1062,10 +1001,6 @@ fun Content.subtitle(): String {
     }
 }
 
-/**
- * Opens what a card or row stands for, as YouTube Music does: a song starts its radio, an album,
- * playlist or artist opens its page.
- */
 fun openContent(
     content: Content,
     navController: NavController,
@@ -1075,8 +1010,6 @@ fun openContent(
     val browseId = content.browseId
     val playlistId = content.playlistId
     when {
-        // A video that is not official music (a live "Listen together" station, an upload):
-        // its radio of songs plays instead, since Refine plays music only.
         !videoId.isNullOrEmpty() &&
             !MusicVideoType.isPlayableSong(content.videoType) &&
             !MusicVideoType.isOfficialVideo(content.videoType) ->
@@ -1108,7 +1041,6 @@ fun openContent(
     }
 }
 
-/** Plays [tracks] in order as a queue named [title] (a shelf's "Play all"), from [startIndex]. */
 fun playAll(
     tracks: List<Track>,
     title: String,
@@ -1136,10 +1068,6 @@ fun playAll(
 
 // region States
 
-/**
- * A page that could not load, in YouTube Music's words: a message and Retry, with a back arrow
- * when the page has no top bar of its own. Replaces bouncing back to the previous page silently.
- */
 @Composable
 fun YtmErrorPage(
     onBack: (() -> Unit)?,

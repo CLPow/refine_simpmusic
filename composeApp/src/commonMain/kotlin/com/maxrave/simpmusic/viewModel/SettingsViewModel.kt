@@ -65,11 +65,7 @@ class SettingsViewModel(
 
     private val collectors = mutableMapOf<String, Job>()
 
-    /**
-     * Runs [block] (a collector that never ends) as the only one under [key]. The getters below are
-     * called again by every setter and every time a Settings page opens, and each call used to
-     * start one more endless collector on top of the earlier ones.
-     */
+    // Runs [block] (a collector that never ends) as the only one under [key].
     private fun collectOnce(
         key: String,
         block: suspend () -> Unit,
@@ -203,28 +199,16 @@ class SettingsViewModel(
 
     fun clearListeningHistory() {
         viewModelScope.launch {
-            // The sweep walks every container table and then the whole song table, and finishes with
-            // a VACUUM — seconds of work on a large library, and the screen would look frozen.
             showLoadingDialog(getString(Res.string.clear_listening_history))
             val removed =
                 try {
-                    // NonCancellable because the sweep is only coherent once it has finished: the
-                    // cached containers are deleted first and the songs they were holding alive
-                    // last, so a run stopped in between — the user leaving Settings is enough to do
-                    // it — has already dropped every cached playlist, album and artist and left the
-                    // songs behind. Nothing resumes it afterwards, so it has to run to the end.
                     withContext(NonCancellable) { songRepository.clearHistoryAndOrphanedSongs() }
                 } catch (e: CancellationException) {
-                    // Not a failure, and it must not be swallowed: catching it breaks structured
-                    // concurrency, and it would put the generic error toast in front of a user whose
-                    // sweep had in fact just completed, inviting them to run the whole thing again.
                     throw e
                 } catch (e: Throwable) {
                     Logger.e(tag, "clearHistoryAndOrphanedSongs failed: ${e.stackTraceToString()}")
                     null
                 } finally {
-                    // In a finally so a failure — or the user leaving the screen — cannot strand the
-                    // dialog on top of the app with no way to dismiss it.
                     hideLoadingDialog()
                 }
             if (removed == null) {
@@ -382,14 +366,6 @@ class SettingsViewModel(
                     dataStoreManager.setCookie(cookie, accountInfoList.first().pageId, accountInfoList.first().authUser)
                     getAllGoogleAccount()
                     getLoggedIn()
-                    // Deliberately NOT importing followed artists here.
-                    //
-                    // Doing it on sign-in fired up to MAX_SUBSCRIPTION_PAGES paged browse calls the
-                    // instant a session came up, racing the home feed's own first load on the same
-                    // fresh credential. That is exactly the shape that earns a throttled session,
-                    // and it lines up with a home feed that came back generic and a Mix page that
-                    // crawled. Convenience is not worth spending the account's goodwill at its most
-                    // fragile moment — the import stays a deliberate press in Settings.
                     true
                 } ?: run {
                 Logger.w("getAllGoogleAccount", "addAccount: Account info is null")
@@ -400,8 +376,6 @@ class SettingsViewModel(
         } catch (e: Exception) {
             e.printStackTrace()
             Logger.e("getAllGoogleAccount", "addAccount: ${e.message}")
-            // Put the previous sign-in back even when this call was cancelled (the screen closed),
-            // then let the cancellation through instead of reporting it as a failed sign-in.
             withContext(NonCancellable) {
                 dataStoreManager.setCookie(currentCookie, currentPageId, currentAuthUser)
                 dataStoreManager.setLoggedIn(currentLoggedIn)

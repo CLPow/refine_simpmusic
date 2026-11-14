@@ -2,10 +2,6 @@ package org.simpmusic.lyrics.am
 
 import kotlinx.serialization.Serializable
 
-/**
- * Response shape for the AM catalog search (format[resources]=map): a flat [resources] map keyed
- * by id, plus a [results] block that preserves the search ranking order.
- */
 @Serializable
 data class AMSearchResponse(
     val results: AMResults? = null,
@@ -42,17 +38,11 @@ data class AMArtistResource(
 data class AMArtistAttributes(
     val name: String? = null,
     val url: String? = null,
-    // Hex string (no `#`); present on the artist-detail endpoint.
     val keyColor: String? = null,
     val artwork: AMArtwork? = null,
-    // Present on the artist-detail endpoint (extend=editorialArtwork); null on plain search.
     val editorialArtwork: AMEditorialArtwork? = null,
 )
 
-/**
- * Editorial art variants. [musicContentColorLogoTrimmed] is the artist NAME rendered as a trimmed
- * color logo image (PNG) — the header title art shown in place of plain text.
- */
 @Serializable
 data class AMEditorialArtwork(
     val musicContentColorLogoTrimmed: AMArtwork? = null,
@@ -60,10 +50,6 @@ data class AMEditorialArtwork(
     val bannerUber: AMArtwork? = null,
 )
 
-/**
- * Artwork descriptor. [url] is a template containing `{w}`, `{h}` and `{f}` placeholders that must
- * be substituted before requesting the actual image. The `*Color` fields are hex strings (no `#`).
- */
 @Serializable
 data class AMArtwork(
     val url: String? = null,
@@ -76,10 +62,6 @@ data class AMArtwork(
     val textColor4: String? = null,
 )
 
-/**
- * Substitute the `{w}`, `{h}`, `{c}` (crop) and `{f}` (format) placeholders in [AMArtwork.url].
- * Returns null when there is no url template.
- */
 fun AMArtwork.toImageUrl(
     width: Int,
     height: Int,

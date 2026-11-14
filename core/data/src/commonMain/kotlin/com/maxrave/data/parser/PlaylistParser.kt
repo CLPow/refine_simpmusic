@@ -157,10 +157,6 @@ internal fun parsePlaylistData(
                 Logger.d("PlaylistParser", "title: $title")
                 val secondSubtitle = header.secondSubtitle?.runs
                 if (!secondSubtitle.isNullOrEmpty()) {
-                    /**
-                     * Fuck Kotlin
-                     * Ref: https://stackoverflow.com/q/48379981/20605098
-                     */
                     trackCount =
                         try {
                             if (secondSubtitle.size >= 5) {
@@ -253,12 +249,7 @@ internal fun parsePlaylistData(
         val listTrack: MutableList<Track> = arrayListOf()
         for (content in listContent) {
             val renderer = content.musicResponsiveListItemRenderer
-            // Identify the columns from each one's own pageType instead of assuming an order —
-            // see SongRunParser. This is what makes the album name real rather than a placeholder,
-            // and what keeps the play count out of the artist list.
             val columns = renderer?.let { findSongColumns(it) }
-            // `firstOrNull`, not `get(0)`: fixedColumns is absent on rows YouTube marks unavailable,
-            // and indexing an empty list there threw.
             val durationText =
                 renderer
                     ?.fixedColumns
@@ -272,10 +263,6 @@ internal fun parsePlaylistData(
                 Track(
                     album =
                         renderer?.let { parseSongAlbumAt(it, columns?.albumIndex) }
-                            // No album column: the row still links one from its context menu, but a
-                            // menu entry carries only the browse id. Keep the id so navigation works
-                            // and leave the name empty — inventing one would put a fake title into
-                            // MediaSession metadata, which is what external scrobblers read.
                             ?: renderer
                                 ?.menu
                                 ?.menuRenderer
@@ -292,9 +279,6 @@ internal fun parsePlaylistData(
                     duration = durationText.orEmpty(),
                     durationSeconds = parseDurationSeconds(durationText),
                     isAvailable = false,
-                    // YouTube only emits this badge on explicit rows, so its absence is the normal
-                    // case rather than missing data. Same shape the search and album parsers
-                    // already read, and the same field ytmusicapi reads for playlist items.
                     isExplicit =
                         renderer?.badges?.any {
                             it.musicInlineBadgeRenderer?.icon?.iconType == "MUSIC_EXPLICIT_BADGE"
@@ -317,11 +301,7 @@ internal fun parsePlaylistData(
                             ?.runs
                             ?.firstOrNull()
                             ?.text ?: "",
-                    // The model already resolves this from playlistItemData, then the overlay play
-                    // button, then the title column — YouTube does not always populate all three.
                     videoId = renderer?.videoId ?: "",
-                    // Resolved from the same three endpoints as videoId above; null when this row
-                    // carried no music config at all.
                     videoType = renderer?.musicVideoType,
                     category = null,
                     feedbackTokens = null,

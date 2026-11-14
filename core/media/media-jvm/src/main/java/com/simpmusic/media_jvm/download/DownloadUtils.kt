@@ -25,8 +25,6 @@ import java.io.File
 
 private const val TAG = "DownloadUtils"
 
-// Not localised: this module sits below the UI layer and has no access to compose resources. If the
-// notification text needs translating, the label has to be passed down from the caller instead.
 private const val DOWNLOAD_STARTED_TITLE = "Downloading"
 private const val DOWNLOAD_FINISHED_TITLE = "Download complete"
 private const val DOWNLOAD_FAILED_TITLE = "Download failed"
@@ -40,7 +38,6 @@ internal class DownloadUtils(
 
     private var _downloads = MutableStateFlow<Map<String, Pair<DownloadHandler.Download?, DownloadHandler.Download?>>>(emptyMap())
 
-    // Audio / Video
     override val downloads: StateFlow<Map<String, Pair<DownloadHandler.Download?, DownloadHandler.Download?>>>
         get() = _downloads
     private val _downloadTask = MutableStateFlow<Map<String, Int>>(emptyMap())
@@ -52,17 +49,6 @@ internal class DownloadUtils(
         requestNotificationAuthorization()
     }
 
-    /**
-     * Ask macOS for permission to post notifications.
-     *
-     * Required, and easy to miss: `notification-common` does not expose authorization at all, and
-     * the macOS dispatcher never asks — its `initialize()` only registers a delegate. Without this
-     * call `UNUserNotificationCenter` accepts every notification and silently shows none, which
-     * looks exactly like the feature not being wired up.
-     *
-     * Safe to call on Windows and Linux: `requestAuthorization` short-circuits through
-     * `unavailableReason` when the macOS native bridge is not loaded, so it becomes a no-op there.
-     */
     private fun requestNotificationAuthorization() {
         runCatching {
             NotificationCenter.requestAuthorization(
@@ -118,16 +104,6 @@ internal class DownloadUtils(
         }
     }
 
-    // ===== Desktop download notifications =====
-    //
-    // Grouped per batch, the same way Android collapses every queued download into the single
-    // foreground-service notification rather than one per track. One notification goes out when the
-    // queue goes from idle to busy, and one summary replaces it when the queue drains.
-    //
-    // Progress cannot be tracked the way Android does: NotificationHandle only exposes dismiss(),
-    // there is no update, and desktop notifications carry no progress bar. So the opening
-    // notification says work started, and the closing one says how it went.
-
     private val batchLock = Any()
     private val activeDownloads = mutableSetOf<String>()
     private var batchHandle: NotificationHandle? = null
@@ -148,8 +124,6 @@ internal class DownloadUtils(
             batchFailed = 0
             batchTotal = 0
             lastSongTitle = songTitle
-            // Only one track is known at this point, so name it. If more join the batch, the
-            // closing notification switches to a count.
             batchHandle = postNotification(DOWNLOAD_STARTED_TITLE, songTitle)
         }
         batchTotal++
@@ -164,11 +138,8 @@ internal class DownloadUtils(
         lastSongTitle = songTitle
         if (succeeded) batchCompleted++ else batchFailed++
         if (activeDownloads.isEmpty()) {
-            // Clear the "started" notification so the tray shows one line about this batch, not two.
             batchHandle?.let { handle -> runCatching { handle.dismiss() } }
             batchHandle = null
-            // A single-track batch says which track — that is what the user was waiting on. Several
-            // tracks can only be summarised, since one notification cannot list them all.
             val summary =
                 when {
                     batchTotal == 1 -> lastSongTitle
@@ -183,20 +154,12 @@ internal class DownloadUtils(
         }
     }
 
-    /**
-     * Best-effort by design: a headless session, a Linux box with no notification daemon, or a user
-     * who muted the app all end up here, and none of them should be able to break a download that
-     * already finished. Hence the availability check and the surrounding runCatching.
-     */
     private fun postNotification(
         headline: String,
         message: String,
     ): NotificationHandle? =
         runCatching {
             if (!NotificationManager.isAvailable()) {
-                // Most common cause on macOS: the process is not running from inside a .app bundle
-                // (e.g. `gradlew jvmRun`), where UNUserNotificationCenter has no bundle identifier
-                // to attach to. Also covers a Linux box with no notification daemon.
                 Logger.w(TAG, "Desktop notifications unavailable on this platform/session")
                 return null
             }

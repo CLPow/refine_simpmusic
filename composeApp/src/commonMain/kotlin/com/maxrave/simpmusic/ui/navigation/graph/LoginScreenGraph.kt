@@ -22,6 +22,4 @@ fun NavGraphBuilder.loginScreenGraph(
         )
     }
 
-
-
 }

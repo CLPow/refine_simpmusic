@@ -31,7 +31,6 @@ import kotlinx.serialization.json.putJsonObject
 import java.util.UUID
 import kotlin.random.Random
 
-/** What the recognition sheet shows; [SongRecognizer.recognize] returns one of the last three. */
 internal sealed interface Recognition {
     data object Listening : Recognition
 
@@ -48,15 +47,9 @@ internal sealed interface Recognition {
     data object Failed : Recognition
 }
 
-/**
- * Listens to the microphone, then asks Shazam's unofficial API what is playing. Ported from
- * Metrolist (GPL-3.0), whose recognition is based on Aleksey Saenko's MusicRecognizer
- * (https://github.com/aleksey-saenko/MusicRecognizer).
- */
 internal object SongRecognizer {
     private const val TAG = "SongRecognition"
 
-    // 44.1 kHz is the one rate every device must record at; the fingerprint resamples to 16 kHz.
     private const val RECORD_SAMPLE_RATE = 44_100
     private const val RECORD_SECONDS = 12
     private const val MAX_ATTEMPTS = 3
@@ -73,7 +66,6 @@ internal object SongRecognizer {
     private val timezones =
         listOf("Europe/Paris", "Europe/London", "America/New_York", "America/Los_Angeles", "Asia/Tokyo", "Asia/Dubai")
 
-    /** Records [RECORD_SECONDS] of audio, calls [onIdentifying], then waits for Shazam's answer. */
     suspend fun recognize(onIdentifying: () -> Unit): Recognition =
         try {
             val pcm = record()
@@ -87,7 +79,6 @@ internal object SongRecognizer {
             Recognition.Failed
         }
 
-    // The sheet starts a pass only once RECORD_AUDIO is granted.
     @SuppressLint("MissingPermission")
     private suspend fun record(): ShortArray =
         withContext(Dispatchers.IO) {
@@ -103,7 +94,6 @@ internal object SongRecognizer {
             var filled = 0
             try {
                 recorder.startRecording()
-                // Each read blocks for one buffer, so closing the sheet stops the recording promptly.
                 while (filled < pcm.size && isActive) {
                     val read = recorder.read(pcm, filled, minOf(bufferSize / 2, pcm.size - filled))
                     if (read < 0) error("AudioRecord.read failed: $read")
@@ -120,7 +110,6 @@ internal object SongRecognizer {
         signature: String,
         sampleMs: Long,
     ): Recognition {
-        // The default engine: whichever Ktor engine the app ships (OkHttp, via ktorExt).
         val client = HttpClient { install(HttpTimeout) { requestTimeoutMillis = 30_000 } }
         try {
             repeat(MAX_ATTEMPTS) { attempt ->
@@ -169,7 +158,6 @@ internal object SongRecognizer {
     ): String {
         val now = System.currentTimeMillis() / 1000
         return buildJsonObject {
-            // Shazam asks where and when the tag was taken; it gets a random answer, not the user's.
             putJsonObject("geolocation") {
                 put("altitude", Random.nextDouble() * 400 + 100)
                 put("latitude", Random.nextDouble() * 180 - 90)

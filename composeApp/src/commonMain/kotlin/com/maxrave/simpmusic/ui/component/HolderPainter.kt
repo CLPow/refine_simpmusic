@@ -11,14 +11,6 @@ import simpmusic.composeapp.generated.resources.holder_light
 import simpmusic.composeapp.generated.resources.holder_video
 import simpmusic.composeapp.generated.resources.holder_video_light
 
-/**
- * Theme-aware artwork placeholder.
- *
- * Immersive screens (Artist/Album/Playlist/LocalPlaylist/NowPlaying) mark their subtree with
- * [LocalForceDarkText] = true because they always sit on dark artwork; there the dark holder art is
- * kept. Everywhere else the placeholder follows the app theme, using the light variant in light mode
- * so it blends into the white page instead of showing a dark tile.
- */
 @Composable
 fun rememberHolderPainter(isVideo: Boolean = false): Painter {
     val dark = LocalForceDarkText.current || LocalIsDarkTheme.current

@@ -6,10 +6,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * The merge decides what survives a sync, so every rule that could silently lose a playlist is
- * pinned here rather than left to be discovered on someone's phone.
- */
 class LibraryMergeTest {
     private fun snap(
         vararg records: Record<String>,
@@ -53,7 +49,7 @@ class LibraryMergeTest {
         assertEquals(setOf("p:1"), result.deleted)
     }
 
-    /** The one that matters most: deleting on one device must not erase a later edit on another. */
+    // The one that matters most: deleting on one device must not erase a later edit on another.
     @Test
     fun editAfterDeletionSurvives() {
         val result =
@@ -113,7 +109,7 @@ class LibraryMergeTest {
         assertEquals(500L, result.tombstones["p:1"])
     }
 
-    /** Merging must be stable: syncing twice with no changes must not churn the library. */
+    // Merging must be stable: syncing twice with no changes must not churn the library.
     @Test
     fun mergeIsIdempotent() {
         val local = snap(rec("p:1", 100), rec("p:2", 200), tombstones = mapOf("p:3" to 50))
@@ -129,7 +125,7 @@ class LibraryMergeTest {
         assertEquals(once.tombstones, twice.tombstones)
     }
 
-    /** Order of arguments must not change the outcome, or two devices would disagree. */
+    // Order of arguments must not change the outcome, or two devices would disagree.
     @Test
     fun mergeIsSymmetric() {
         val a = snap(rec("p:1", 100, "a1"), rec("p:2", 400, "a2"), tombstones = mapOf("p:9" to 10))

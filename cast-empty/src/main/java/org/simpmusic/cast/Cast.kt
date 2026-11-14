@@ -7,8 +7,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.media3.common.Player
 import com.maxrave.logger.Logger
 
-// NON-CAST build: Google Cast is not available in this build flavor. All
-// functions are safe no-ops so callers never need to branch on build flavor.
+// All functions are safe no-ops so callers never need to branch on build flavor.
 
 fun initCast(context: Context): Boolean {
     Logger.d("Cast", "NON-CAST build: Google Cast is not available")
@@ -29,5 +28,4 @@ fun CastIconButton(
     modifier: Modifier = Modifier,
     tint: Color = Color.White,
 ) {
-    // No-op: Google Cast is not available in this build flavor.
 }

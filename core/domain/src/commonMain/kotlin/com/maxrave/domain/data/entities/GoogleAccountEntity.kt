@@ -11,9 +11,6 @@ data class GoogleAccountEntity(
     val name: String = "",
     val thumbnailUrl: String = "",
     val pageId: String? = null,
-    // `authuser` index of the Google account owning this channel inside the cookie's
-    // browser session. @ColumnInfo(defaultValue) is REQUIRED: Room AutoMigration adds this
-    // NOT NULL column and needs a SQL default to backfill existing rows.
     @ColumnInfo(defaultValue = "0")
     val authUser: Int = 0,
     val cache: String? = null,

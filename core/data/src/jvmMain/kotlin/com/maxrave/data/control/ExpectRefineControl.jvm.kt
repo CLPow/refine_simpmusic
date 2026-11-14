@@ -16,8 +16,6 @@ actual fun createRefineControlRepository(
         local = localPlayer,
         scope = coroutineScope,
         deviceType = DEVICE_DESKTOP,
-        // The computer's name, read from the environment: asking the network stack for it can
-        // block for seconds on a machine without a resolvable host name.
         defaultDeviceName =
             System.getenv("COMPUTERNAME")?.takeIf { it.isNotBlank() }
                 ?: System.getenv("HOSTNAME")?.takeIf { it.isNotBlank() }

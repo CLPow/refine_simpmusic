@@ -106,15 +106,8 @@ import simpmusic.composeapp.generated.resources.ytm_unmute
 private val BarColor = Ytm.Surface
 private val TextSecondary = Ytm.TextSecondary
 
-/** YouTube Music's red, used on the web player's progress bar. */
 private val YtmRedProgress = Color(0xFFFF0000)
 
-/**
- * YouTube Music's mini player on a phone: a flat 64dp bar sitting on the navigation bar, with
- * cover, title and artist, play/pause and next, and a thin white progress line along its bottom.
- * A tap opens the player. A horizontal swipe changes the track; a downward swipe stops playback
- * and puts the bar away.
- */
 @Composable
 fun MiniPlayer(
     modifier: Modifier,
@@ -133,8 +126,6 @@ fun MiniPlayer(
             .background(BarColor)
             .clickable(onClickLabel = openLabel, onClick = onClick)
             .pointerInput(Unit) {
-                // One gesture, locked to the direction it starts in: sideways changes the track,
-                // up opens the player (as YouTube Music's bar does), down puts it away.
                 var horizontal: Boolean? = null
                 detectDragGestures(
                     onDragStart = { horizontal = null },
@@ -164,7 +155,6 @@ fun MiniPlayer(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                // The song follows the finger, so the swipe reads before it lets go.
                 .graphicsLayer {
                     translationX = dragX * 0.6f
                     alpha = 1f - (kotlin.math.abs(dragX) / (SWIPE_PX * 4)).coerceIn(0f, 0.6f)
@@ -207,18 +197,8 @@ fun MiniPlayer(
     }
 }
 
-/** How far a swipe on the mini player has to travel, in pixels. */
 private const val SWIPE_PX = 120f
 
-/**
- * YouTube Music's web player bar, used on Desktop: full width along the bottom of the window,
- * the progress bar in red across its top edge. Left: previous, play/pause, next and the time.
- * Centre: cover, title, artist, thumbs down and up. Right: volume, repeat, shuffle, and the
- * chevron that opens the player.
- *
- * The position is read only by the seek bar and the time ([DesktopSeek]), so the rest of the bar
- * does not recompose ten times a second.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DesktopPlayerBar(
@@ -233,7 +213,6 @@ fun DesktopPlayerBar(
     }
     val screenData by sharedViewModel.nowPlayingScreenData.collectAsStateWithLifecycle()
     val controllerState by sharedViewModel.controllerState.collectAsStateWithLifecycle()
-    // Shared by the seek bar and the time text while dragging.
     val seeking = remember { mutableStateOf<Float?>(null) }
 
     Column(modifier.fillMaxWidth().background(BarColor)) {
@@ -242,7 +221,6 @@ fun DesktopPlayerBar(
             Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left: transport and time.
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.Previous) }) {
                     Icon(SimpIcons.SkipPrevious, contentDescription = stringResource(Res.string.ytm_previous), tint = Color.White)
@@ -254,7 +232,6 @@ fun DesktopPlayerBar(
                 Spacer(Modifier.width(8.dp))
                 DesktopTime(sharedViewModel, seeking.value)
             }
-            // Centre: the track.
             Row(
                 Modifier.weight(1.4f).clickable(onClick = onOpenPlayer),
                 verticalAlignment = Alignment.CenterVertically,
@@ -291,12 +268,10 @@ fun DesktopPlayerBar(
                         tint = if (controllerState.isLiked) Color.White else TextSecondary,
                     )
                 }
-                // The web bar's action menu: the song menu for what is playing.
                 IconButton(onClick = { showMenu = true }) {
                     Icon(SimpIcons.MoreVert, contentDescription = stringResource(Res.string.more), tint = Color.White)
                 }
             }
-            // Right: volume, repeat, shuffle, open.
             Row(
                 Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
@@ -324,7 +299,6 @@ fun DesktopPlayerBar(
                         SimpIcons.KeyboardArrowDown,
                         contentDescription = stringResource(Res.string.ytm_open_player),
                         tint = Color.White,
-                        // Points up while the player is closed, as the web's does.
                         modifier = Modifier.size(28.dp).rotate(180f),
                     )
                 }
@@ -416,7 +390,6 @@ private fun PlayPauseButton(
     sharedViewModel: SharedViewModel,
     iconSize: Int = 30,
 ) {
-    // Only the loading flag is read, so the button recomposes when it flips, not on every tick.
     val timeline = sharedViewModel.timeline.collectAsStateWithLifecycle()
     val loading by remember { derivedStateOf { timeline.value.loading } }
     IconButton(onClick = { sharedViewModel.onUIEvent(UIEvent.PlayPause) }, modifier = Modifier.size(48.dp)) {
@@ -433,7 +406,6 @@ private fun PlayPauseButton(
     }
 }
 
-/** The 2dp progress line. Reads the timeline itself so only it recomposes on each tick. */
 @Composable
 private fun ProgressLine(
     sharedViewModel: SharedViewModel,
@@ -446,12 +418,7 @@ private fun ProgressLine(
     }
 }
 
-/**
- * YouTube Music's web volume control: the speaker icon on its own, the slider sliding out beside
- * it while the pointer is over either. A click on the icon mutes, and a second click restores the
- * level from before. The slider follows the drag locally, so it never lags behind the player.
- * The mouse wheel over the icon or the slider moves the volume 5% per notch.
- */
+// The slider follows the drag locally, so it never lags behind the player.
 private const val VOLUME_WHEEL_STEP = 0.05f
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -477,7 +444,6 @@ private fun VolumeControl(
                         if (event.type != PointerEventType.Scroll) continue
                         val notches = event.changes.fold(0f) { sum, change -> sum + change.scrollDelta.y }
                         if (notches == 0f) continue
-                        // Wheel up (negative delta) turns it up, as in YouTube Music on the web.
                         currentOnVolume((currentVolume - notches * VOLUME_WHEEL_STEP).coerceIn(0f, 1f))
                         event.changes.forEach { it.consume() }
                     }

@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Refine Music: strings for the YouTube Music screens. -->
 <resources>
     <string name="ytm_downloads">Downloads</string>
     <string name="ytm_sort_recent_activity">Recent activity</string>

@@ -16,7 +16,6 @@ internal data class RestrictedTextResponse(
     val body: String?,
 )
 
-/** Uses the caller's engine without inheriting its redirect policy or taking engine ownership. */
 internal suspend fun HttpClient.getTextWithoutRedirects(
     url: Url,
     maxBytes: Int,

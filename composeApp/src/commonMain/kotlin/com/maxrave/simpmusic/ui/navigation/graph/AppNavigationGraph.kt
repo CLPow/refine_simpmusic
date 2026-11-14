@@ -36,10 +36,6 @@ fun AppNavigationGraph(
     NavHost(
         navController,
         startDestination = startDestination,
-        // Movement follows where things are. Between tabs the page slides the way the tab sits
-        // in the bar (Home -> Library comes in from the right, back the other way); a page opened
-        // on top slides in from the right and goes back out to the right. Every move used to slide
-        // in from the left whatever its direction.
         enterTransition = {
             val from = tabIndexOf(initialState.destination)
             val to = tabIndexOf(targetState.destination)
@@ -59,7 +55,6 @@ fun AppNavigationGraph(
             fadeOut(tween(TAB_MS)) + slideOutHorizontally(tween(TAB_MS)) { it / 3 }
         },
     ) {
-        // Bottom bar destinations
         composable<HomeDestination> {
             HomeScreen(
                 onScrolling = onScrolling,
@@ -76,22 +71,18 @@ fun AppNavigationGraph(
                 navController = navController,
             )
         }
-        // Home screen graph
         homeScreenGraph(
             innerPadding = innerPadding,
             navController = navController,
         )
-        // Library screen graph
         libraryScreenGraph(
             innerPadding = innerPadding,
             navController = navController,
         )
-        // List screen graph
         listScreenGraph(
             innerPadding = innerPadding,
             navController = navController,
         )
-        // Login screen graph
         loginScreenGraph(
             innerPadding = innerPadding,
             navController = navController,
@@ -105,7 +96,6 @@ fun AppNavigationGraph(
 
 private const val TAB_MS = 250
 
-/** Position of [destination] in the bottom bar (Home, Search, Library), or null for other pages. */
 private fun tabIndexOf(destination: NavDestination): Int? =
     when {
         destination.hasRoute(HomeDestination::class) -> 0

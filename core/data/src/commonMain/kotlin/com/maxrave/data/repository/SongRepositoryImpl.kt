@@ -70,9 +70,6 @@ internal class SongRepositoryImpl(
 
     override fun getSongsByListVideoId(listVideoId: List<String>): Flow<List<SongEntity>> =
         flow {
-            // SQLite's `WHERE videoId IN (:list)` does NOT preserve the input list order
-            // (it returns rows in table/rowid order). Album tracks, local playlist items,
-            // and queue snapshots all rely on caller-defined order, so we restore it here.
             val songs = localDataSource.getSongByListVideoIdFull(listVideoId)
             val byId = songs.associateBy { it.videoId }
             emit(listVideoId.mapNotNull { byId[it] })
@@ -114,14 +111,6 @@ internal class SongRepositoryImpl(
             )
         }.flowOn(Dispatchers.IO)
 
-    /**
-     * The order below is the whole feature.
-     *
-     * A song is orphaned only once nothing points at it, so every cached container has to go first —
-     * sweeping songs on their own found zero to delete, because eleven thousand of them were held
-     * alive by playlists nobody prunes. Artists lead, then albums and playlists; songs last, then the
-     * satellite rows that were already orphaned before any of this ran.
-     */
     override suspend fun clearHistoryAndOrphanedSongs(): Int =
         withContext(Dispatchers.IO) {
             persistLiveQueueBeforeSweep()
@@ -136,14 +125,6 @@ internal class SongRepositoryImpl(
                 "Clear history: removed $removed of ${orphans.size} candidate songs, " +
                     "$artists artists, $albums albums, $playlists playlists, $satellites stale rows",
             )
-            // Last, and outside every statement above: SQLite refuses VACUUM inside a transaction.
-            // Without it the file stays fragmented and less space comes back than the user expects.
-            // The checkpoint first folds the WAL — which every delete above just filled — back into
-            // the main file, so VACUUM actually has those pages to reclaim.
-            //
-            // Failure here is not failure of the operation: every delete has already committed, so
-            // letting it throw would show an error toast for work that actually succeeded. It only
-            // costs some disk space, and the next run reclaims it.
             runCatching {
                 localDataSource.checkpoint()
                 localDataSource.vacuum()
@@ -151,20 +132,7 @@ internal class SongRepositoryImpl(
             removed
         }
 
-    /**
-     * Write whatever is playing right now into the `queue` table, so the sweep cannot delete it.
-     *
-     * The sweep spares songs found in `queue.listTrack`, but that table is only written on pause,
-     * on track change, and on exit — and only when the user has "save recent song and queue" on.
-     * Two ways that loses the current session: with the setting off the table is empty, and even
-     * with it on, the endless queue keeps appending tracks that no save has caught up with yet.
-     * Either way the song playing through the speakers looks orphaned and goes.
-     *
-     * Deliberately ignores that setting: this is not "remember my queue for next launch", it is
-     * "do not delete what is on screen". Writing nothing when the queue is empty matters too —
-     * overwriting a previously saved queue with an empty one would strip the protection instead of
-     * adding it.
-     */
+    // Deliberately ignores that setting: this is not "remember my queue for next launch", it is "do not delete what is on screen".
     private suspend fun persistLiveQueueBeforeSweep() {
         val liveQueue = mediaPlayerHandler.queueData.value?.data?.listTracks.orEmpty()
         if (liveQueue.isEmpty()) return
@@ -211,30 +179,12 @@ internal class SongRepositoryImpl(
             localDataSource.resetTotalPlayTime(videoId)
         }
 
-    /**
-     * Resolved lazily rather than taken in the constructor: the download handler is implemented in
-     * the platform media modules, and pulling it in at construction time would make this repository
-     * depend on them being built first.
-     */
     private val downloadHandler: DownloadHandler by lazy { getKoin().get() }
 
-    /**
-     * Lazy for the same reason as [downloadHandler], and here it also breaks a cycle: the handler
-     * already depends on this repository (it calls [recoverQueue] whenever it saves the queue).
-     */
-    // The local player by name: the queue saved here is this device's, also while the screens
-    // show another device's (Refine Control).
     private val mediaPlayerHandler: MediaPlayerHandler by lazy {
         getKoin().get(org.koin.core.qualifier.named(com.maxrave.common.Config.LOCAL_PLAYER))
     }
 
-    /**
-     * Note the side effect: liking a song can start a download, when the user has asked for that.
-     *
-     * Deliberately one-way. It fires only on the way *in* (`likeStatus == 1`) and only for songs
-     * not already offline, so re-liking something you already have does not queue it twice, and
-     * unliking never removes a file — the user downloaded it, only they should undo that.
-     */
     override suspend fun updateLikeStatus(
         videoId: String,
         likeStatus: Int,
@@ -247,17 +197,6 @@ internal class SongRepositoryImpl(
                 downloadHandler.downloadTrack(videoId, song.title, song.thumbnails.orEmpty())
             }
         }
-//        if (dataStoreManager.combineLocalAndYouTubeLiked.first() == TRUE) {
-//            if (likeStatus == 1) {
-//                addToYouTubeLiked(videoId).collect { result ->
-//                    Logger.d(TAG, "updateLikeStatus -> addToYouTubeLiked: $result")
-//                }
-//            } else {
-//                removeFromYouTubeLiked(videoId).collect { result ->
-//                    Logger.d(TAG, "updateLikeStatus -> removeFromYouTubeLiked: $result")
-//                }
-//            }
-//        }
     }
 
     override fun updateSongInLibrary(
@@ -314,27 +253,11 @@ internal class SongRepositoryImpl(
             emit(localDataSource.getQueue())
         }.flowOn(Dispatchers.IO)
 
-    /**
-     * Refine plays songs only, everywhere: every queue source passes through here.
-     *
-     * Queue rows that ship both renditions were already resolved to their audio side by
-     * `PlaylistPanelRenderer.Content.songTrack`; what reaches this point with a video type has no
-     * audio counterpart (measured: almost always `MUSIC_VIDEO_TYPE_UGC` fan remixes), so it is
-     * dropped. Unknown types are kept — see [MusicVideoType.isPlayableSong].
-     */
     private fun List<SongItem>.songsOnly(): List<SongItem> = filter { MusicVideoType.isPlayableSong(it.musicVideoType) }
 
-    /**
-     * [songsOnly] for a radio, except that a radio with no songs left keeps its official videos.
-     *
-     * The radio of an official video is itself almost all official videos (measured on A2O's
-     * "NEON" video, KGK2KZOFAPE: 48 of 50), so filtering it to songs left nothing and playback
-     * stopped after the one track. Videos played as audio are better than silence.
-     */
     private fun List<SongItem>.songsOrOfficialVideos(): List<SongItem> =
         songsOnly().ifEmpty { filter { MusicVideoType.isOfficialVideo(it.musicVideoType) } }
 
-    // Official video id -> its song, or null when YouTube had none. For this run of the app.
     private val songVersions = mutableMapOf<String, Track?>()
     private val songVersionsLock = Mutex()
 
@@ -357,10 +280,6 @@ internal class SongRepositoryImpl(
             songVersionsLock.withLock {
                 if (songVersions.containsKey(track.videoId)) return@withContext songVersions[track.videoId]
             }
-            // A tile or queue row for a video carries no link to its song (checked on Home, the
-            // radio and the player response), so ask the Songs search and accept only an exact
-            // match: the same title and at least one of the same artists. Anything less plays
-            // the video as before.
             val title = track.title.songTitleKey()
             val artistIds = track.artists.orEmpty().mapNotNull { it.id?.takeIf(String::isNotBlank) }.toSet()
             val artistNames = track.artists.orEmpty().map { it.name.trim().lowercase() }.filter(String::isNotEmpty).toSet()
@@ -391,10 +310,6 @@ internal class SongRepositoryImpl(
             song
         }
 
-    /**
-     * Drop entries shorter than the user's skip-short threshold. Unknown duration is kept:
-     * a missing length is not a reason to hide a track.
-     */
     private suspend fun List<SongItem>.dropShortWhenConfigured(): List<SongItem> {
         val minSeconds = dataStoreManager.skipShortTrackSeconds.first()
         if (minSeconds <= 0) return this
@@ -412,7 +327,6 @@ internal class SongRepositoryImpl(
         flow {
             Logger.d(TAG, "getContinueTrack -> playlistId: $playlistId, continuation: $continuation")
             if (!fromPlaylist) {
-                // `RRDAMVM…` is YouTube's other spelling for the radio of a single video.
                 val result =
                     youTube.next(
                         if (playlistId.startsWith("RRDAMVM")) {
@@ -591,10 +505,6 @@ internal class SongRepositoryImpl(
             if (next == null) {
                 emit(Resource.Error<Pair<List<Track>, String?>>(result.exceptionOrNull()?.message.toString()))
             } else {
-                // Always a radio, though not directly: `next(videoId)` alone answers with just two
-                // rows — the song itself and an `automixPreviewVideoRenderer` pointing at its
-                // `RDAMVM…` radio. `YouTube.next` follows that pointer and splices the radio in, so
-                // everything past the first row is radio content that extends the queue.
                 val data =
                     next.items
                         .filter { it.id != videoId }
@@ -691,17 +601,12 @@ internal class SongRepositoryImpl(
         flow { emit(localDataSource.getSongInfo(videoId)) }.flowOn(Dispatchers.IO)
 }
 
-// What a video title says inside quotes is the song: A2O MAY 'BAD HABITS TONITE' Official Video.
-// The quotes must open after a space and close before one, so the apostrophes in "Don't" and
-// "let's" are never read as quotes.
+// The quotes must open after a space and close before one, so the apostrophes in "Don't" and "let's" are never read as quotes.
 private val QUOTED_TITLE = Regex("""(?:^|\s)['\u2018\u201C"](.+?)['\u2019\u201D"](?=\s|$)""")
 
-// Bracketed video labels that are not part of the song's title.
 private val VIDEO_LABEL =
     Regex("""\s*[(\[][^)\]]*\b(official|video|mv|m/v|lyrics?|visuali[sz]er|performance|audio|teaser)\b[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
 
-/** The song title a video title stands for, for the search query. */
 private fun String.songTitleQuery(): String = (QUOTED_TITLE.find(this)?.groupValues?.get(1) ?: this).replace(VIDEO_LABEL, "").trim()
 
-/** [songTitleQuery] in a form two titles can be compared by. */
 private fun String.songTitleKey(): String = songTitleQuery().lowercase().replace(Regex("\\s+"), " ")

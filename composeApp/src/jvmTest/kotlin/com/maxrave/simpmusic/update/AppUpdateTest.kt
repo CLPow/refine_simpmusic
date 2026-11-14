@@ -15,7 +15,6 @@ class AppUpdateTest {
         assertFalse(UpdateVersion.isNewer("v2.4.0", "2.4.0"))
         assertFalse(UpdateVersion.isNewer("v2.4.0", "2.4.1"))
         assertFalse(UpdateVersion.isNewer("v2.0.41", "2.4.1"))
-        // The dev build reports its version with a suffix.
         assertFalse(UpdateVersion.isNewer("v2.4.1", "2.4.1-dev"))
         // A tag that is not a version is never offered.
         assertFalse(UpdateVersion.isNewer("nightly", "2.4.1"))

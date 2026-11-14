@@ -20,17 +20,8 @@ import com.maxrave.domain.extension.now
 import com.maxrave.domain.utils.FilterState
 import kotlinx.datetime.LocalDateTime
 
-/** SQLite caps bind parameters per statement; stay well under it when deleting in bulk. */
 private const val DELETE_BATCH_SIZE = 400
 
-/**
- * The album name older builds stored when they could not find a real one.
- *
- * The playlist parser used to take the album's browse id out of the row's context menu, which
- * carries an id but no title, and filled the name in with this literal string. It then travelled
- * out to MediaSession metadata, where external scrobblers read it. The parser no longer does this,
- * but roughly half the rows already in users' databases still hold it — see [LocalDataSource.insertSong].
- */
 private const val PLACEHOLDER_ALBUM_NAME = "Album"
 
 internal class LocalDataSource(
@@ -39,7 +30,6 @@ internal class LocalDataSource(
 ) {
     suspend fun checkpoint() = databaseDao.checkpoint()
 
-    /** Goes through the database rather than the DAO — see [MusicDatabase.vacuum]. */
     suspend fun vacuum() = musicDatabase.vacuum()
 
     suspend fun getAllRecentData() = databaseDao.getAllRecentData()
@@ -83,8 +73,6 @@ internal class LocalDataSource(
         offset,
     )
 
-    // ===== Clear listening history + drop orphaned songs =====
-
     suspend fun deleteUnfollowedArtists() = databaseDao.deleteUnfollowedArtists()
 
     suspend fun deleteUnreferencedAlbums() = databaseDao.deleteUnreferencedAlbums()
@@ -93,18 +81,8 @@ internal class LocalDataSource(
 
     suspend fun getOrphanedSongIds() = databaseDao.getOrphanedSongIds()
 
-    /**
-     * Drop the songs and everything that only existed to describe them.
-     *
-     * Batched because SQLite limits how many bind parameters a single statement may carry, and this
-     * can run over a library with thousands of stale rows.
-     *
-     * @return how many songs were actually deleted, which can be fewer than were asked for — the
-     * delete re-checks the orphan conditions, so anything the user touched in the meantime survives.
-     */
     suspend fun deleteSongsAndRelatedData(videoIds: List<String>): Int =
         videoIds.chunked(DELETE_BATCH_SIZE).sumOf { batch ->
-            // Songs first, so the follow-up deletes can tell which ids really went.
             val deleted = databaseDao.deleteSongsByIds(batch)
             databaseDao.deleteLyricsByIds(batch)
             databaseDao.deleteNewFormatsByIds(batch)
@@ -112,14 +90,6 @@ internal class LocalDataSource(
             deleted
         }
 
-    /**
-     * The same four tables again, but for rows whose song is already gone.
-     *
-     * [deleteSongsAndRelatedData] can only reach the ids it was handed, so these have been piling up
-     * since long before this sweep existed. Unbatched on purpose — the statements bind nothing.
-     *
-     * @return how many rows went, across all four tables.
-     */
     suspend fun deleteStaleSongSatellites(): Int =
         databaseDao.deleteStaleNewFormats() +
             databaseDao.deleteStaleLyrics() +
@@ -137,24 +107,6 @@ internal class LocalDataSource(
 
     fun getSongAsFlow(videoId: String) = databaseDao.getSongAsFlow(videoId)
 
-    /**
-     * Every path that stores a track funnels through here — playback, playlist browsing, the
-     * now-playing sheet, local playlist edits — which is why the self-repair below lives at this
-     * level rather than at any one caller.
-     *
-     * The insert itself is IGNORE, so a track already in the database keeps whatever it was first
-     * written with. That is usually right, but it also means a row saved with the old "Album"
-     * placeholder can never learn its real album name, however many times it is seen again.
-     *
-     * Room returns -1 when IGNORE drops the row, which tells us the track already exists without
-     * spending a read to ask. Only then, and only when this copy actually carries a real name, do
-     * we let the database decide whether the stored row is stale — the WHERE clause in
-     * [DatabaseDao.refreshAlbumIfPlaceholder] is what guarantees good data is never overwritten.
-     *
-     * The artist list is refreshed the same way. Rows written before the parser split the subtitle
-     * column on " • " kept its trailing groups too, so the album name and the view count were
-     * stored as extra artists ("JENNIE", "13M plays") and travelled out to MediaSession metadata.
-     */
     suspend fun insertSong(song: SongEntity): Long {
         val rowId = databaseDao.insertSong(song)
         if (rowId == -1L) {
@@ -333,12 +285,6 @@ internal class LocalDataSource(
 
     suspend fun insertLocalPlaylist(localPlaylist: LocalPlaylistEntity) = databaseDao.insertLocalPlaylist(localPlaylist)
 
-    /**
-     * Deletes a playlist and records the deletion, so a later sync does not bring it back.
-     *
-     * The untracked [databaseDao.deleteLocalPlaylist] is left in place for internal rewrites that
-     * are not user intent; anything the user removes should go through here.
-     */
     suspend fun deleteLocalPlaylist(id: Long) = databaseDao.deleteLocalPlaylist(id)
 
     suspend fun updateLocalPlaylistTitle(
@@ -432,13 +378,6 @@ internal class LocalDataSource(
         listPosition: List<Int>,
     ) = databaseDao.getPlaylistPairSongByListPosition(playlistId, listPosition)
 
-    /**
-     * Search one local playlist by title or artist.
-     *
-     * Escaping happens here rather than in the DAO because the term is a bind parameter, not a
-     * column: Room passes the value through untouched, and LIKE still reads `%` and `_` inside it
-     * as wildcards. A user typing `%` would otherwise get the whole playlist back.
-     */
     suspend fun searchPlaylistPairSong(
         playlistId: Long,
         query: String,
@@ -532,12 +471,6 @@ internal class LocalDataSource(
 
 }
 
-/**
- * Escapes the LIKE wildcards in a user-typed term, for use with `ESCAPE '\\'`.
- *
- * The backslash goes first: escaping it after `_` and `%` would escape the backslashes this very
- * function just added, turning `\_` back into a literal backslash followed by a wildcard.
- */
 private fun String.escapeForLike(): String =
     replace("\\", "\\\\")
         .replace("_", "\\_")

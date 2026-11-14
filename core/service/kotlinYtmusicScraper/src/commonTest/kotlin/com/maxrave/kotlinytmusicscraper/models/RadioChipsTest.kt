@@ -7,8 +7,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-// From a live WEB_REMIX `next` for the radio of rlYOsUfpi3M (2026-11), trimmed to two radio chips;
-// the Save chip's endpoint opens the playlist picker rather than re-tuning the radio.
 private val CHIPS =
     """
     {"chipCloudRenderer":{"chips":[
@@ -19,7 +17,6 @@ private val CHIPS =
     """.trimIndent()
 
 class RadioChipsTest {
-    // The HTTP client's settings (Ytmusic.kt): absent fields become null, unknown ones are skipped.
     private val json =
         Json {
             ignoreUnknownKeys = true

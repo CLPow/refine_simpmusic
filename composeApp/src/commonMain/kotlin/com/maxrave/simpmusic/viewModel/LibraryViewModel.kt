@@ -35,7 +35,6 @@ import simpmusic.composeapp.generated.resources.ytm_sort_alphabetical
 import simpmusic.composeapp.generated.resources.ytm_sort_recent_activity
 import simpmusic.composeapp.generated.resources.ytm_sort_recently_added
 
-/** YouTube Music's Library chips. */
 enum class LibraryChip(val label: StringResource) {
     Playlists(Res.string.playlists),
     Songs(Res.string.songs),
@@ -44,7 +43,6 @@ enum class LibraryChip(val label: StringResource) {
     Downloads(Res.string.ytm_downloads),
 }
 
-/** YouTube Music's sort menu. */
 enum class LibrarySort(val label: StringResource) {
     RecentActivity(Res.string.ytm_sort_recent_activity),
     RecentlyAdded(Res.string.ytm_sort_recently_added),
@@ -54,11 +52,6 @@ enum class LibrarySort(val label: StringResource) {
 private const val KEY_LIBRARY_SORT = "library_sort"
 private const val KEY_LIBRARY_GRID = "library_grid"
 
-/**
- * YouTube Music's Library: playlists (the account's YouTube playlists and the ones made here),
- * liked songs, saved albums, subscribed artists and downloads. The local lists follow the database
- * live; the account's playlists are fetched on open and on pull-to-refresh.
- */
 class LibraryViewModel(
     private val dataStoreManager: DataStoreManager,
     private val songRepository: SongRepository,
@@ -67,7 +60,6 @@ class LibraryViewModel(
     private val albumRepository: AlbumRepository,
     private val artistRepository: ArtistRepository,
 ) : BaseViewModel() {
-    /** Null is YouTube Music's unfiltered Library: playlists, albums and artists together. */
     private val _chip = MutableStateFlow<LibraryChip?>(null)
     val chip: StateFlow<LibraryChip?> = _chip.asStateFlow()
 
@@ -107,7 +99,6 @@ class LibraryViewModel(
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
 
     init {
-        // YouTube Music remembers the sort and the list/grid choice between visits.
         viewModelScope.launch {
             dataStoreManager.getString(KEY_LIBRARY_SORT).first()?.let { saved ->
                 LibrarySort.entries.firstOrNull { it.name == saved }?.let { _sort.value = it }
@@ -117,7 +108,6 @@ class LibraryViewModel(
         refreshYouTubePlaylists()
     }
 
-    /** Tapping the selected chip clears it, back to the unfiltered Library. */
     fun setChip(chip: LibraryChip) {
         _chip.value = if (_chip.value == chip) null else chip
     }
@@ -133,12 +123,10 @@ class LibraryViewModel(
         viewModelScope.launch { dataStoreManager.putString(KEY_LIBRARY_GRID, value) }
     }
 
-    /** The account's playlists, from YouTube. Nothing to fetch while signed out. */
     fun refreshYouTubePlaylists() {
         viewModelScope.launch {
             _refreshing.value = true
             if (dataStoreManager.loggedIn.first() == DataStoreManager.TRUE) {
-                // A failed fetch keeps the playlists already on screen rather than emptying the list.
                 val fetched = runCatching { playlistRepository.getLibraryPlaylist().lastOrNull() }.getOrNull()
                 if (fetched != null || _youTubePlaylists.value == null) {
                     _youTubePlaylists.value = fetched.orEmpty()

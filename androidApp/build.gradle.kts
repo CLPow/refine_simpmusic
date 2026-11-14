@@ -33,14 +33,10 @@ android {
 
         @Suppress("UnstableApiUsage")
         androidResources {
-            // English only: also drops the translations bundled inside libraries.
             localeFilters += listOf("en")
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // arm64 only, for every build type and the AAB: the one device it is installed on is a
-        // 64-bit phone, and Android Auto runs on the phone. (The x86_64 emulator is no longer a
-        // target.) The release is one APK: androidApp-release-unsigned.apk.
         ndk {
             abiFilters.add("arm64-v8a")
         }
@@ -73,7 +69,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
-    // enable view binding
     buildFeatures {
         viewBinding = true
         compose = true
@@ -97,17 +92,7 @@ android {
             )
         resources {
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
-            // kuromoji ships the SAME META-INF/CONTRIBUTORS.md and META-INF/LICENSE.md in both
-            // kuromoji-ipadic and the kuromoji-core it depends on, and mergeDebugJavaResource
-            // refuses to pick between two files at one path. Excluded by pattern rather than by
-            // name: dropping only CONTRIBUTORS.md moves the failure to LICENSE.md on the next
-            // build. Nothing here is code — these are documentation files.
             excludes += "META-INF/*.md"
-            // kuromoji's ipadic dictionary is ~13 MB of .bin resources — the whole reason the APK
-            // grew by 14.4 MB. Android fetches the same eight files on demand instead (see
-            // KuromojiDictionary in lyricsService androidMain), so the classpath copies are
-            // dropped here. Desktop is untouched: its jars keep the resources and kuromoji's
-            // default classpath resolver keeps working there.
             excludes += "com/atilika/kuromoji/ipadic/*.bin"
         }
     }
@@ -123,17 +108,12 @@ dependencies {
     debugImplementation(libs.ui.tooling)
     implementation(libs.activity.compose)
 
-    // Custom Activity On Crash
     implementation(libs.customactivityoncrash)
 
-    // Easy Permissions
     implementation(libs.easypermissions)
 
-    // Legacy Support
-    // Coroutines
     implementation(libs.coroutines.android)
 
-    // Glance
     implementation(libs.glance)
     implementation(libs.glance.appwidget)
     implementation(libs.glance.material3)

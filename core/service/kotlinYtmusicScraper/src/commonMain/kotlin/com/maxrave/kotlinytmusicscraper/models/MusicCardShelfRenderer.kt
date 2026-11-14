@@ -2,7 +2,6 @@ package com.maxrave.kotlinytmusicscraper.models
 
 import kotlinx.serialization.Serializable
 
-/** The top result card of an unfiltered search. Every field is optional: YouTube drops some. */
 @Serializable
 data class MusicCardShelfRenderer(
     val title: Runs? = null,

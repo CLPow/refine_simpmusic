@@ -4,11 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/**
- * Every case here is a shape a lyrics search actually returns. The failure being guarded against
- * shows no error and no spinner - it shows somebody else's words, confidently - so the guard has to
- * be checked directly rather than noticed in use.
- */
 class TrackMatchTest {
     private fun candidate(
         title: String,

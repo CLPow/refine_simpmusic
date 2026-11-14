@@ -26,7 +26,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// State cho tìm kiếm
 data class SearchScreenState(
     val searchType: SearchType = SearchType.ALL,
     val searchAllResult: List<SearchResultType> = emptyList(),
@@ -39,12 +38,10 @@ data class SearchScreenState(
     val searchPodcastsResult: List<PlaylistsResult> = emptyList(),
     val suggestQueries: List<String> = emptyList(),
     val suggestYTItems: List<SearchResultType> = emptyList(),
-    /** YouTube Music's unfiltered results page for [query]: top result, chips, ranked rows. */
     val summary: SearchSummary? = null,
     val query: String = "",
 )
 
-// Loại tìm kiếm
 enum class SearchType {
     ALL,
     SONGS,
@@ -56,7 +53,6 @@ enum class SearchType {
     PODCASTS,
 }
 
-// UI state cho tìm kiếm
 sealed class SearchScreenUIState {
     object Empty : SearchScreenUIState()
 
@@ -83,10 +79,8 @@ class SearchViewModel(
 
     var regionCode: String? = null
 
-    /** The filtered search in flight; a newer chip or query replaces it. */
     private var filterJob: Job? = null
 
-    /** The suggestion request in flight; each keystroke replaces it. */
     private var suggestJob: Job? = null
 
     private var historyJob: Job? = null
@@ -131,7 +125,6 @@ class SearchViewModel(
         }
     }
 
-    /** YouTube Music removes one recent search at a time, from a long press on it. */
     fun deleteSearchHistoryItem(query: String) {
         _searchHistory.update { list -> list.filter { it != query } }
         viewModelScope.launch {
@@ -164,12 +157,6 @@ class SearchViewModel(
         }
     }
 
-    /**
-     * YouTube Music's search: one unfiltered request, answered with the top result, the chips in
-     * the order YouTube ranks them for this query, and the ranked rows. The filtered lists are
-     * fetched only when their chip is tapped. This used to fire five filtered searches of three
-     * pages each before showing anything, and invent the top result from the first artist.
-     */
     fun searchAll(query: String) {
         _searchScreenUIState.value = SearchScreenUIState.Loading
         _searchScreenState.update {
@@ -195,7 +182,6 @@ class SearchViewModel(
         }
     }
 
-    /** A chip: the filtered list is fetched the first time it is shown for this query. */
     fun selectFilter(type: SearchType) {
         val state = _searchScreenState.value
         setSearchType(type)
@@ -244,7 +230,6 @@ class SearchViewModel(
                     }
 
                     is Resource.Error -> {
-                        // Không cần xử lý lỗi đặc biệt cho gợi ý
                         log("Error fetching suggest queries: ${values.message}", LogLevel.ERROR)
                     }
                 }

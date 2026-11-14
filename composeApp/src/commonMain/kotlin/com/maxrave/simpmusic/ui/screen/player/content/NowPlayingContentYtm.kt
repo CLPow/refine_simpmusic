@@ -199,35 +199,18 @@ private val PageBlack = Ytm.Background
 private val TextSecondary = Ytm.TextSecondary
 private val SheetColor = Ytm.Surface
 
-/** The three tabs along the bottom of YouTube Music's player, and of the sheet they open. */
 private enum class PlayerTab(val label: StringResource) {
     UpNext(Res.string.ytm_up_next),
     Lyrics(Res.string.ytm_lyrics),
     Related(Res.string.ytm_related),
 }
 
-/**
- * The artwork colour, darkened when it is so light that white icons over it would be hard to
- * read (a white or yellow cover). YouTube Music's player stays dark whatever the cover.
- */
 private fun Color.forPlayerBackground(): Color {
     if (this == Color.Black) return Color(0xFF3A3A3A)
     val lum = luminance()
     return if (lum > 0.35f) lerp(this, Color.Black, ((lum - 0.35f) / 0.65f * 0.6f).coerceIn(0f, 0.6f)) else this
 }
 
-/**
- * Now Playing, as YouTube Music lays it out:
- *
- * collapse · cast · more → square artwork, swipeable through the queue → title and artist →
- * action pills (like, save, share) → a thin white seek bar with times → shuffle · previous ·
- * the white play disc · next · repeat → UP NEXT · LYRICS · RELATED.
- *
- * A tab (or an upward drag on the tab row) slides YouTube Music's sheet over the player: a
- * collapsed player row on top, the three tabs with the selected one underlined, then that tab.
- * Lyrics are YouTube Music's: large bold left-aligned lines, the sung line white and the rest
- * dimmed, a tap on a line seeks to it, the source credited at the end.
- */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun NowPlayingContentYtm(
@@ -246,8 +229,6 @@ fun NowPlayingContentYtm(
         }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(PageBlack).background(background)) {
-        // YouTube Music's web player on a wide window: the cover and controls on the left, the
-        // Up next / Lyrics / Related panel always open on the right.
         if (maxWidth >= 840.dp) {
             Row(
                 Modifier
@@ -322,7 +303,6 @@ fun NowPlayingContentYtm(
             Spacer(Modifier.height(4.dp))
         }
 
-        // Back puts the Up next / Lyrics / Related sheet away before it closes the player.
         PlatformBackHandler(enabled = openTab != null) { openTab = null }
         AnimatedVisibility(
             visible = openTab != null,
@@ -350,7 +330,6 @@ private fun TopBar(
         IconButton(onClick = actions.onDismiss) {
             Icon(state.dismissIcon, contentDescription = stringResource(Res.string.ytm_close_player), tint = Color.White)
         }
-        // "Playing on <device>" while Refine Control is controlling another device.
         Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { RefineControlPlayingOn() }
         RefineControlButton()
         PlatformCastButton(tint = Color.White)
@@ -369,8 +348,6 @@ private fun Artwork(
     val queue = state.artworkQueue
     val dataStoreManager: DataStoreManager = koinInject()
     val seekSeconds by dataStoreManager.doubleTapSeekSeconds.collectAsState(10)
-    // Which side was double-tapped last, for the brief "+N seconds" label on that side; the time
-    // makes a second tap on the same side a new value, so the label restarts.
     var seekFlash by remember { mutableStateOf<Pair<Boolean, Long>?>(null) }
     LaunchedEffect(seekFlash) {
         if (seekFlash != null) {
@@ -378,15 +355,11 @@ private fun Artwork(
             seekFlash = null
         }
     }
-    // Square, as large as the space allows; YouTube Music keeps the cover and lets a horizontal
-    // swipe skip, which is what the shared artwork pager already does.
     Box(
         Modifier
             .widthIn(max = 520.dp)
             .fillMaxWidth()
             .aspectRatio(1f, matchHeightConstraintsFirst = true)
-            // YouTube Music's double-tap to seek: the left half goes back, the right half forward,
-            // by the step set in Settings. Taps only, so the pager's swipe is untouched.
             .pointerInput(seekSeconds) {
                 detectTapGestures(
                     onDoubleTap = { offset ->
@@ -488,10 +461,6 @@ private fun TitleBlock(
     }
 }
 
-/**
- * YouTube Music's row of pills under the title: thumbs up and down, save to a playlist, share.
- * The thumbs are the account's rating when signed in (see MediaPlayerHandler.toggleLike/dislike).
- */
 @Composable
 private fun ActionPills(
     state: NowPlayingContentState,
@@ -514,7 +483,6 @@ private fun ActionPills(
             onClick = { actions.onUIEvent(UIEvent.Dislike) },
         )
         val videoId = state.artworkQueue.getOrNull(state.currentOrderIndex)?.videoId
-        // YouTube Music's Comments, between the thumbs and Save; the count is the first page's header.
         if (videoId != null) {
             val comments = rememberCommentsState(videoId)
             var showComments by remember { mutableStateOf(false) }
@@ -570,15 +538,13 @@ private fun SeekBar(
 ) {
     val timeline by state.timelineFlow.collectAsState()
     val total = timeline.total
-    // While dragging, the thumb follows the finger; otherwise the song. Plain remember: a
-    // restored "dragging" after rotation never got its finish and froze the bar.
+    // Plain remember, not rememberSaveable: a drag restored after rotation never finishes.
     var dragging by remember { mutableStateOf<Float?>(null) }
     val fraction = dragging ?: if (total > 0) (timeline.current.toFloat() / total).coerceIn(0f, 1f) else 0f
     val shown = if (total > 0) (total * fraction).roundToLong() else 0L
     Column(Modifier.fillMaxWidth()) {
         Slider(
             value = fraction,
-            // Nothing to seek in until the song's length is known.
             enabled = total > 0,
             onValueChange = { dragging = it },
             onValueChangeFinished = {
@@ -680,14 +646,12 @@ private fun Transport(
     }
 }
 
-/** The white play disc, also drawn small in the sheet's collapsed player. */
 @Composable
 private fun PlayDisc(
     state: NowPlayingContentState,
     actions: NowPlayingContentActions,
     side: Int,
 ) {
-    // Only the loading flag matters here, so the disc recomposes when it flips, not every tick.
     val timeline = state.timelineFlow.collectAsState()
     val loading by remember { derivedStateOf { timeline.value.loading } }
     val label = stringResource(if (state.controllerState.isPlaying) Res.string.ytm_pause else Res.string.ytm_play)
@@ -713,7 +677,6 @@ private fun PlayDisc(
     }
 }
 
-/** UP NEXT · LYRICS · RELATED. [selected] is null on the player itself, where no tab is open. */
 @Composable
 private fun TabRow(
     selected: PlayerTab?,
@@ -748,7 +711,6 @@ private fun TabRow(
     }
 }
 
-/** YouTube Music's sheet: collapsed player, tabs, then the selected tab's content. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PlayerSheet(
@@ -768,7 +730,6 @@ private fun PlayerSheet(
             .windowInsetsPadding(WindowInsets.statusBars)
             .windowInsetsPadding(WindowInsets.navigationBars),
     ) {
-        // The collapsed player. A tap, or a downward drag, puts the sheet away.
         Row(
             Modifier
                 .fillMaxWidth()
@@ -817,11 +778,6 @@ private fun PlayerSheet(
     }
 }
 
-/**
- * Up next, as YouTube Music lays it out: "Playing from", the radio's tuning chips (Save, All,
- * Familiar, Discover, …) when the queue is a radio, the queue with the playing track marked, and
- * an Autoplay header with its switch where Autoplay's songs begin. Long-press to reorder.
- */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun UpNextTab(
@@ -839,20 +795,15 @@ private fun UpNextTab(
     val autoplayOn by dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }.collectAsState(true)
     val autoplayOffMessage = stringResource(Res.string.ytm_autoplay_off_message)
     val currentId = state.artworkQueue.getOrNull(state.currentOrderIndex)?.videoId
-    // The radio's own seed: Autoplay's radio is named after the song it grew from.
-    // Remembered per radio, so the chips are fetched once per radio and not again on every song.
     val seed = remember(radioId) { radioId?.removePrefix("RDAMVM")?.takeIf { radioId.startsWith("RDAMVM") && it.length == 11 } ?: currentId }
     val chips by produceState(emptyList<RadioChip>(), radioId) {
         value = if (radioId != null && seed != null) songRepository.getRadioChips(seed, radioId) else emptyList()
     }
-    // The chip the user just picked, until the new radio's own chips say which one is selected.
     var tuning by remember(radioId) { mutableStateOf<String?>(null) }
-    // A radio is already endless, and under shuffle the boundary has no place in the shown order.
     val showAutoplayHeader = queueData?.data?.isRadio != true && !state.controllerState.isShuffle
     var savingQueue by remember { mutableStateOf(false) }
     val onAutoplayChange: (Boolean) -> Unit = { enabled ->
         scope.launch { dataStoreManager.setEndlessQueue(enabled) }
-        // YouTube Music's mealbar when Autoplay is switched off from the queue.
         if (!enabled) showToast(autoplayOffMessage, ToastGravity.Bottom)
     }
     if (savingQueue) {
@@ -872,13 +823,11 @@ private fun UpNextTab(
     val listState = rememberLazyListState(initialFirstVisibleItemIndex = (state.currentOrderIndex).coerceAtLeast(0))
     val dragDropState = rememberDragDropState(listState) { from, to -> actions.onMoveQueueItem(from, to) }
     var overscrollJob by remember { mutableStateOf<Job?>(null) }
-    // The song, not just its row: the queue can change (radio paging in) while the menu is open.
     var itemSheet by remember { mutableStateOf<Pair<String, Int>?>(null) }
     itemSheet?.let { (videoId, index) ->
         QueueItemBottomSheet(onDismiss = { itemSheet = null }, videoId = videoId, indexHint = index)
     }
 
-    // Radio and endless queues page in as the end comes into view.
     val nearEnd by remember {
         derivedStateOf {
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf false
@@ -968,8 +917,6 @@ private fun UpNextTab(
             itemsIndexed(state.artworkQueue, key = { index, track -> "$index${track.videoId}" }) { index, track ->
                 DraggableItem(dragDropState = dragDropState, index = index, modifier = Modifier) { _ ->
                     Column {
-                        // Inside the row rather than an item of its own, so the list's indices stay
-                        // the queue's and drag-to-reorder keeps working.
                         if (showAutoplayHeader && index == autoplayStart) AutoplayHeader(autoplayOn, onAutoplayChange)
                         QueueRow(
                             track = track,
@@ -981,8 +928,6 @@ private fun UpNextTab(
                     }
                 }
             }
-            // An album or playlist that Autoplay has not reached yet still offers the switch at the
-            // end, as YouTube Music does; a radio is already endless.
             if (showAutoplayHeader && radioId == null && (autoplayStart == null || autoplayStart >= state.artworkQueue.size)) {
                 item(key = "autoplay") { AutoplayHeader(autoplayOn, onAutoplayChange) }
             }
@@ -990,7 +935,6 @@ private fun UpNextTab(
     }
 }
 
-/** YouTube Music's Autoplay row in Up next: the title, its byline and the switch. */
 @Composable
 private fun AutoplayHeader(
     enabled: Boolean,
@@ -1088,11 +1032,6 @@ private fun QueueRow(
     }
 }
 
-/**
- * YouTube Music's lyrics: large bold lines, left-aligned. Synced lyrics follow the song: the line
- * being sung is white, the rest are dimmed, the page keeps the sung line in view, and a tap on a
- * line plays from it. Unsynced lyrics are the same text, all white, scrolled by hand.
- */
 @Composable
 private fun LyricsTab(
     state: NowPlayingContentState,
@@ -1106,12 +1045,10 @@ private fun LyricsTab(
         }
         return
     }
-    // Reading along: the screen stays on while lyrics are shown and the song plays.
     if (state.controllerState.isPlaying) KeepScreenOn()
     val synced = data.lyrics.syncType != null && data.lyrics.syncType != "UNSYNCED"
     val timeline = state.timelineFlow.collectAsState()
     val starts = remember(lines) { lines.map { it.startTimeMs.toLongOrNull() ?: 0L } }
-    // The sung line, recomputed per tick but only read (and recomposed) when it changes.
     val active by remember(starts, synced) {
         derivedStateOf {
             if (!synced) {
@@ -1124,8 +1061,6 @@ private fun LyricsTab(
     }
     val listState = rememberLazyListState()
     val density = LocalDensity.current
-    // A hand scroll pauses following the song for a few seconds, as in YouTube Music, instead of
-    // being yanked back on the next tick.
     var lastUserScroll by remember { mutableStateOf(0L) }
     var autoScrolling by remember { mutableStateOf(false) }
     LaunchedEffect(listState) {
@@ -1196,11 +1131,6 @@ private fun LyricsProvider.displayName(): String =
         else -> name.lowercase().replaceFirstChar { it.uppercase() }
     }
 
-/**
- * Related, as YouTube Music shows it: the song's own Related page from YouTube, shelf by shelf in
- * its order ("You might also like" as song rows, then playlists, similar artists, "More from").
- * A song starts its radio; anything else closes the player and opens its page.
- */
 @Composable
 private fun RelatedTab(
     state: NowPlayingContentState,
@@ -1262,13 +1192,10 @@ private fun RelatedTab(
     }
 }
 
-/** Largest artwork decode, in pixels: enough for any phone or a desktop window's cover. */
 private const val ARTWORK_MAX_PX = 1080
 
-/** How long a hand scroll of the lyrics stops them following the song. */
 private const val LYRICS_FOLLOW_PAUSE_MS = 3_000L
 
-/** A pill that is on or off (Like) reads as a toggle; the others are plain buttons. */
 private fun Modifier.toggleableIf(
     active: Boolean,
     onClick: () -> Unit,

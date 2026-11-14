@@ -30,18 +30,13 @@ object Config {
     const val SERVICE_SCOPE = "serviceScope"
     const val MAIN_PLAYER = "mainPlayer"
 
-    /** Koin name of this device's own player; the unnamed one is routed by Refine Control. */
     const val LOCAL_PLAYER = "localPlayer"
     const val SECONDARY_PLAYER = "secondaryPlayer"
 
     val REMOVED_SONG_DATE_TIME: LocalDateTime = LocalDateTime(LocalDate(2003, Month.AUGUST, 26), LocalTime(3, 0))
 }
 
-/*** Update supported location from sigma67/ytmusicapi
- *
- */
 object SUPPORTED_LOCATION {
-    // India ("IN") removed deliberately: this fork does not want IN-region recommendation bias.
     val items: Array<CharSequence> =
         arrayOf(
             "AE",
@@ -243,56 +238,27 @@ object SUPPORTED_LANGUAGE {
     }
 }
 
-/**
- * The YouTube stream format ids (`itag`) SimpMusic asks for, in one place.
- *
- * YouTube publishes dozens; these are the handful the player, the downloader and the extractor
- * health-check all have to agree on. Every itag reference belongs here — a bare number inside a
- * `find { it.itag == ... }` reads as an arbitrary constant, and the next person cannot tell that it
- * is the same stream the quality setting three modules away is supposed to produce.
- */
 object ITAG {
-    /** Opus, adaptive audio — what the "Low" audio-quality setting selects. */
     const val AUDIO_OPUS_LOW: Int = 250
 
-    /** Opus, adaptive audio — what the "Medium" audio-quality setting selects. */
     const val AUDIO_OPUS_MEDIUM: Int = 251
 
-    /** Opus 256 kbps, adaptive audio — the "High" setting. YouTube serves it to Premium accounts only. */
     const val AUDIO_OPUS_HIGH: Int = 774
 
-    /**
-     * AAC 256 kbps, adaptive audio — the AAC twin of [AUDIO_OPUS_HIGH]. An account entitled to
-     * high-quality audio is given one family or the other, so this is the fallback when 774 is absent.
-     */
     const val AUDIO_AAC_HIGH: Int = 141
 
-    /** H.264 360p, adaptive video — what the "360p" video-quality setting selects. */
     const val VIDEO_360P: Int = 134
 
-    /** H.264 720p, adaptive video — what the "720p" video-quality setting selects. */
     const val VIDEO_720P: Int = 136
 
-    /** H.264 1080p, adaptive video — what the "1080p" video-quality setting selects. */
     const val VIDEO_1080P: Int = 137
 
-    /** H.264 360p and AAC muxed into ONE progressive stream, for the single-URL (muxed) path. */
     const val MUXED_360P: Int = 18
 
-    /** Every adaptive audio itag the app knows how to play. */
     val AUDIO: Set<Int> = setOf(AUDIO_OPUS_LOW, AUDIO_OPUS_MEDIUM, AUDIO_OPUS_HIGH, AUDIO_AAC_HIGH)
 
-    /** Every adaptive video itag the app knows how to play. */
     val VIDEO: Set<Int> = setOf(VIDEO_1080P, VIDEO_720P, VIDEO_360P)
 
-    /**
-     * The other 256 kbps rendition of the same audio, or null for an itag that has no twin.
-     *
-     * YouTube hands a high-quality account ONE of the two families, so the one the user picked can
-     * simply be absent from a response that still carries its counterpart. Asking for the twin is
-     * therefore a better fallback than dropping to "any audio stream", which would silently serve
-     * a 70 kbps one instead.
-     */
     fun highQualityTwinOf(itag: Int?): Int? =
         when (itag) {
             AUDIO_OPUS_HIGH -> AUDIO_AAC_HIGH
@@ -310,16 +276,8 @@ object QUALITY {
             "High AAC - 256 kbps (YT Premium)",
         )
 
-    /**
-     * Index of the highest tier YouTube serves without a Premium entitlement.
-     *
-     * The two entries above it (774 Opus 256, 141 AAC 256) are absent from the player response
-     * entirely for a free account, so selecting them gains nothing and falls back anyway. This is
-     * the ceiling a client can actually reach, and therefore the right default.
-     */
     const val BEST_FREE_QUALITY_INDEX: Int = 1
 
-    /** Parallel to [items]: an index into one is an index into the other, so the order is load-bearing. */
     val itags: Array<Int> =
         arrayOf(
             ITAG.AUDIO_OPUS_LOW,
@@ -328,45 +286,28 @@ object QUALITY {
             ITAG.AUDIO_AAC_HIGH,
         )
 
-    /**
-     * Labels written by older builds, mapped to the item that replaced them.
-     *
-     * The setting is persisted as the label STRING, not as an index, so renaming an entry orphans
-     * every device that already stored the old text. Without this map such a device falls through
-     * to [items]`[0]` — silently dropping a Premium account from 256 kbps to 66 kbps.
-     */
     private val LEGACY_ITEMS: Map<String, String> =
         mapOf(
-            // Split into the Opus and AAC families; the plain "High" was always the Opus one.
             "High - 256kps (YT Premium)" to items[2].toString(),
-            // 2.3.11 corrected the unit ("kps" to "kbps").
             "Low - 66kps" to items[0].toString(),
             "Medium - 129kps" to items[1].toString(),
             "High Opus - 256kps (YT Premium)" to items[2].toString(),
             "High AAC - 256kps (YT Premium)" to items[3].toString(),
         )
 
-    /**
-     * The stored label as a currently-valid one: itself when still valid, its replacement when it
-     * is a known older label, and [items]`[0]` for anything unrecognised.
-     *
-     * Migration is lazy on purpose — nothing rewrites the stored value, so a read never races a
-     * write. The stored text is replaced the next time the user picks an entry themselves.
-     */
+    // Migration is lazy on purpose — nothing rewrites the stored value, so a read never races a write.
     fun normalize(saved: String?): String {
         val label = saved ?: return items[0].toString()
         if (items.any { it.toString() == label }) return label
         return LEGACY_ITEMS[label] ?: items[0].toString()
     }
 
-    /** The itag a stored label selects. Goes through [normalize], so older labels still resolve. */
     fun itagOf(saved: String?): Int = itags[items.indexOfFirst { it.toString() == normalize(saved) }]
 }
 
 object VIDEO_QUALITY {
     val items: Array<CharSequence> = arrayOf("1080p", "720p", "360p")
 
-    /** Parallel to [items]: an index into one is an index into the other, so the order is load-bearing. */
     val itags: Array<Int> = arrayOf(ITAG.VIDEO_1080P, ITAG.VIDEO_720P, ITAG.VIDEO_360P)
 }
 
@@ -435,50 +376,6 @@ sealed class SponsorBlockType(
             )
     }
 }
-// object SPONSOR_BLOCK {
-//    val list: Array<CharSequence> =
-//        arrayOf("sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "music_offtopic", "poi_highlight", "filler")
-//    val listName: Array<Int> =
-//        arrayOf(
-//            R.string.sponsor,
-//            R.string.self_promotion,
-//            R.string.interaction,
-//            R.string.intro,
-//            R.string.outro,
-//            R.string.preview,
-//            R.string.music_off_topic,
-//            R.string.poi_highlight,
-//            R.string.filler,
-//        )
-//
-//    fun fromDbToName(
-//        context: Context,
-//        list: List<CharSequence>,
-//    ): List<String> {
-//        val result = mutableListOf<String>()
-//        for (item in list) {
-//            val index = list.indexOf(item)
-//            result.add(context.getString(listName[index]))
-//        }
-//        return result
-//    }
-//
-//    fun fromNameToDb(
-//        context: Context,
-//        input: List<String>,
-//    ): List<CharSequence> {
-//        val allString = fromDbToName(context, list.toList())
-//        val listIndex =
-//            allString.map {
-//                allString.indexOf(it)
-//            }
-//        val result =
-//            listIndex.mapNotNull {
-//                list.getOrNull(it)
-//            }
-//        return result
-//    }
-// }
 
 object CHART_SUPPORTED_COUNTRY {
     val items =
@@ -632,7 +529,6 @@ object MEDIA_CUSTOM_COMMAND {
     const val SHUFFLE = "shuffle"
     const val SHARE = "share"
 
-    // Android Auto (Car App Library): asks the session for its platform token
     const val GET_PLATFORM_TOKEN = "get_platform_token"
     const val KEY_PLATFORM_TOKEN = "platform_token"
 }

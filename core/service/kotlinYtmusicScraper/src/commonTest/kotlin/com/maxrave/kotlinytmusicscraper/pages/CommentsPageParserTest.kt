@@ -10,7 +10,6 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-// Shapes copied from YouTube Music's Comments tab (WEB_REMIX, 2026-10-17); names and tokens are made up.
 private val json =
     Json {
         ignoreUnknownKeys = true
@@ -33,7 +32,6 @@ private const val WATCH_TABS_TURNED_OFF = """
 ]}}}}}
 """
 
-// Signed out: the comment box offers only to sign in, and the toolbar carries no commands.
 private const val FIRST_PAGE = """
 {"onResponseReceivedEndpoints":[
  {"reloadContinuationItemsCommand":{"slot":"RELOAD_CONTINUATION_SLOT_HEADER","continuationItems":[
@@ -58,7 +56,6 @@ private const val FIRST_PAGE = """
   {"entityKey":"t1","payload":{"engagementToolbarSurfaceEntityPayload":{"likeCommand":{"clickTrackingParams":"x"},"prepareAccountCommand":{"modalEndpoint":{}}}}}]}}}
 """
 
-// Signed in: every command is there, one of them wrapped the way YouTube sometimes wraps them.
 private const val SIGNED_IN_PAGE = """
 {"onResponseReceivedEndpoints":[
  {"appendContinuationItemsAction":{"continuationItems":[
@@ -76,8 +73,6 @@ private const val SIGNED_IN_PAGE = """
     "replyButton":{"buttonRenderer":{"serviceEndpoint":{"createCommentReplyEndpoint":{"createReplyParams":"REPLY_PARAMS"}}}}}}}}}}}}]}}}
 """
 
-// A replies page, then "Show more replies". YouTube Music lists each reply as a thread; the WEB
-// client lists the bare view model. Both are here.
 private const val REPLIES_PAGE = """
 {"onResponseReceivedEndpoints":[
  {"appendContinuationItemsAction":{"continuationItems":[
@@ -89,7 +84,6 @@ private const val REPLIES_PAGE = """
   {"entityKey":"rk1","payload":{"commentEntityPayload":{"properties":{"content":{"content":"Agreed"},"publishedTime":"1 day ago"},"author":{"displayName":"@reply"},"toolbar":{"likeCountNotliked":"1"}}}}]}}}
 """
 
-// What comment/create_comment answers with: the new comment's keys under actions, its data in the mutations.
 private const val CREATED = """
 {"actions":[{"runAttestationCommand":{"engagementType":"ENGAGEMENT_TYPE_COMMENT_POST"}},
  {"createCommentAction":{"contents":{"commentThreadRenderer":{"commentViewModel":{"commentViewModel":{"commentId":"new","commentKey":"nk","toolbarStateKey":"ns","toolbarSurfaceKey":"nt"}}}}}}],
@@ -118,7 +112,6 @@ class CommentsPageParserTest {
         assertEquals("1,234 Comments", header.countText)
         assertEquals("1.2K", header.countShort)
         assertEquals("Add a comment...", header.placeholder)
-        // Signed out: no comment box to post with.
         assertNull(header.createParams)
         // The thread whose data never arrived is dropped, not the page.
         assertEquals(1, page.comments.size)
@@ -141,7 +134,6 @@ class CommentsPageParserTest {
         assertTrue(comment.isHearted)
         assertEquals("3 replies", comment.repliesLabel)
         assertEquals("REPLIES_C1", comment.repliesToken)
-        // Signed out: nothing to act with.
         assertNull(comment.likeAction)
         assertNull(comment.replyParams)
     }

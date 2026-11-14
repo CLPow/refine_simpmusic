@@ -62,7 +62,6 @@ internal class SearchRepositoryImpl(
             }
             val listSongs: ArrayList<SongsResult> = arrayListOf()
             listSongs.addAll(parseSearchSong(result).filter { MusicVideoType.isPlayableSong(it.videoType) })
-            // The first page shows at once; more follows while it is on screen.
             emit(Resource.Success<ArrayList<SongsResult>>(ArrayList(listSongs)))
             var continueParam = result.continuation
             var count = 0
@@ -72,7 +71,6 @@ internal class SearchRepositoryImpl(
                 continueParam = values?.continuation
                 count++
             }
-            // The Songs filter is already audio, but YouTube slips the odd video row into it.
             listSongs.retainAll { MusicVideoType.isPlayableSong(it.videoType) }
             emit(Resource.Success<ArrayList<SongsResult>>(listSongs))
         }.flowOn(Dispatchers.IO)

@@ -55,21 +55,6 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import androidx.glance.LocalContext
 
-/**
- * The Now Playing widget, laid out as YouTube Music's own widgets are. The class name is kept from
- * its earlier "turntable" form so widgets already on a home screen carry over through the update.
- *
- * YouTube Music's widget has no previous or next: its controls are a thumbs-up and a play button,
- * drawn in the wallpaper's Material You colours. Three layouts, picked from the size granted:
- * - 2x2: a round cover, the thumbs-up as a circle on its top-right, play as a rounded square on
- *   its bottom-left, nothing behind it (YouTube Music's "freeform" widget);
- * - 4x1: one row of cover, title and artist, thumbs-up, play;
- * - 4x2: that row taller, with the title over two lines, above a strip of the five songs played
- *   before this one. Tapping a cover plays it.
- *
- * No progress bar: a live one means re-rendering the widget every second (YouTube Music's widget
- * has none either).
- */
 class TurntableWidget :
     GlanceAppWidget(),
     KoinComponent {
@@ -176,7 +161,6 @@ private class RecentTile(
 
 private val openApp = actionStartActivity<MainActivity>()
 
-/** 2x2: YouTube Music's freeform widget, a round cover with the two controls on its rim. */
 @SuppressLint("RestrictedApi")
 @Composable
 private fun SquareLayout(
@@ -221,7 +205,6 @@ private fun SquareLayout(
     }
 }
 
-/** 4x1: YouTube Music's one-row widget. */
 @SuppressLint("RestrictedApi")
 @Composable
 private fun RowLayout(
@@ -248,10 +231,6 @@ private fun RowLayout(
     }
 }
 
-/**
- * 4x2: the header row (cover, two-line title, artist, thumbs-up, play) and, when there is height
- * for it, the strip of recently played covers on the surface-variant band below.
- */
 @SuppressLint("RestrictedApi")
 @Composable
 private fun WideLayout(
@@ -302,8 +281,6 @@ private fun RecentStrip(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Spacer(GlanceModifier.defaultWeight())
-        // Always five slots, so the covers sit in the same places whether the history holds one
-        // song or fifty. An empty slot is a plain tile.
         repeat(5) { index ->
             val tile = recent.getOrNull(index)
             val art = tile?.artwork
@@ -376,7 +353,6 @@ private fun TitleBlock(
     }
 }
 
-/** YouTube Music's thumbs-up: the secondary button, in the wallpaper's tertiary tones. */
 @SuppressLint("RestrictedApi")
 @Composable
 private fun LikeButton(
@@ -404,7 +380,6 @@ private fun LikeButton(
     }
 }
 
-/** YouTube Music's play button: the primary button, filled with the wallpaper's primary colour. */
 @SuppressLint("RestrictedApi")
 @Composable
 private fun PlayButton(

@@ -237,8 +237,6 @@ class AlbumViewModel(
                 firstPlayedTrack = shuffleList[randomIndex],
                 playlistId = uiState.value.browseId.replaceFirst("VL", ""),
                 playlistName = "${getString(Res.string.album)} \"${uiState.value.title}\"",
-                // Not ALBUM: shuffling has already thrown away the running order, so the reason to
-                // keep transitions gapless is gone. Crossfade behaves as it would for any playlist.
                 playlistType = PlaylistType.PLAYLIST,
                 continuation = null,
             ),
@@ -248,7 +246,6 @@ class AlbumViewModel(
 
     fun downloadFullAlbum() {
         viewModelScope.launch {
-            // Insert all song to database
             uiState.value.listTrack.forEach { track ->
                 songRepository.insertSong(track.toSongEntity()).singleOrNull()?.let {
                     log("Insert Song $it")
@@ -284,10 +281,8 @@ class AlbumViewModel(
 
 data class AlbumUIState(
     val browseId: String = "",
-    /** The album's OLAK… playlist: what a shared link must carry to open the album. */
     val audioPlaylistId: String = "",
     val title: String = "",
-    /** YouTube's kind for it: Album, Single, EP. */
     val type: String = "",
     val thumbnail: String? = null,
     val colors: List<Color> = listOf(Color.Black, Color.Black),

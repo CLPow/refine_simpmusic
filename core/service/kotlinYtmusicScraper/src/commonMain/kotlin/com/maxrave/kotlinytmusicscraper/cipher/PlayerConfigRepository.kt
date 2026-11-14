@@ -11,7 +11,6 @@ interface PlayerConfigRepository {
     var cachedEtag: String
 
     companion object {
-        /** Creates a non-persistent repository with remote config loading disabled. */
         fun disabled(): PlayerConfigRepository =
             object : PlayerConfigRepository {
                 override val enabled: Boolean = false

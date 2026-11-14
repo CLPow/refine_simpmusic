@@ -29,9 +29,6 @@ actual class Extractor {
     }
 
     actual fun newPipePlayer(videoId: String): List<Pair<Int, String>> {
-        // Re-register unconditionally: PipePipe drops the local decoder for good the first time it
-        // throws, and the getter is package-private so its state cannot be read from here. Setting
-        // it again each time turns "disabled forever" into "skipped for one track".
         YoutubeApiDecoder.setLocalDecoder(faradayDecoder)
         try {
             val streamInfo =
@@ -55,8 +52,6 @@ actual class Extractor {
                     TAG,
                     "PipePipe stream URL HEAD check failed (non 2xx) for $videoId, falling back to BravePipe",
                 )
-                // A rejected URL is the one symptom of a stale player table: the signature is
-                // well-formed and still wrong, so nothing threw on the way here.
                 faradayDecoder.invalidate()
             } else {
                 ExtractSource.record(videoId, "PipePipe · ${faradayDecoder.lastOutcomeLabel}")

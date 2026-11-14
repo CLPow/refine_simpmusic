@@ -197,9 +197,6 @@ data class AccountItem(
                         ?.firstOrNull { it?.pageIdToken != null }
                         ?.pageIdToken
                         ?.pageId,
-            // The switcher tells which signed-in Google account owns each channel only
-            // through the `authuser=N` param of its sign-in URL, e.g.
-            // "/signin?action_handle_signin=true&authuser=1&pageid=1032...&next=%2F".
             authUser =
                 tokens
                     ?.firstOrNull { it?.accountSigninToken != null }

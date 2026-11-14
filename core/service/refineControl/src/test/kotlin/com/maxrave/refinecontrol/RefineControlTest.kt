@@ -61,13 +61,11 @@ class RefineControlTest {
         val attacker = Crypto.newKeyPair()
         val n1 = Crypto.randomBytes(16)
         val n2 = Crypto.randomBytes(16)
-        // The caller talks to the attacker, the attacker to the answerer.
         val callerSide = Crypto.transcript(caller.public.encoded, n1, attacker.public.encoded, n2)
         val answererSide = Crypto.transcript(attacker.public.encoded, n1, answerer.public.encoded, n2)
         val keyA = Crypto.pairingKey(Crypto.ecdh(caller, attacker.public), callerSide)
         val keyB = Crypto.pairingKey(Crypto.ecdh(answerer, attacker.public), answererSide)
         assertFalse(keyA.contentEquals(keyB))
-        // The commitment pins the caller's key: another key or nonce does not match it.
         val commit = Crypto.commitment(caller.public.encoded, n1)
         assertFalse(commit.contentEquals(Crypto.commitment(attacker.public.encoded, n1)))
         assertFalse(commit.contentEquals(Crypto.commitment(caller.public.encoded, n2)))
@@ -83,14 +81,12 @@ class RefineControlTest {
         val first = caller.seal("one".toByteArray())
         val second = caller.seal("two".toByteArray())
         assertEquals("one", String(answerer.open(first)))
-        // A replay of the first frame is not the next frame.
         assertFails { answerer.open(first) }
         assertEquals("two", String(answerer.open(second)))
         assertEquals("back", String(caller.open(answerer.seal("back".toByteArray()))))
 
         val stranger = Crypto.frameCipher(Crypto.randomBytes(32), n1, n2, isCaller = false)
         assertFails { stranger.open(Crypto.frameCipher(key, n1, n2, isCaller = true).seal("x".toByteArray())) }
-        // Same key, another connection (other nonces): a recording does not open either.
         val later = Crypto.frameCipher(key, n1, Crypto.randomBytes(16), isCaller = false)
         assertFails { later.open(Crypto.frameCipher(key, n1, n2, isCaller = true).seal("x".toByteArray())) }
         val changed = Crypto.frameCipher(key, n1, n2, isCaller = true).seal("x".toByteArray()).also { it[0] = (it[0] + 1).toByte() }
@@ -155,13 +151,11 @@ class RefineControlTest {
                 a.start()
                 b.start()
                 withTimeout(30_000) {
-                    // Wait until both listen, then find each other by address.
                     var found = false
                     while (!found) found = a.connectByAddress("127.0.0.1:$portB")
                     b.devices.first { list -> list.any { it.id == "aaa" } }
                     assertFalse(a.devices.value.first { it.id == "bbb" }.paired)
 
-                    // An unpaired device gets no connection.
                     assertEquals(ERROR_NOT_CONNECTED, a.send("bbb", Command.Play))
 
                     a.startPairing("bbb")
@@ -177,7 +171,6 @@ class RefineControlTest {
                     assertNull(a.pairing.value)
                     assertEquals(storeA.peers.single().key, storeB.peers.single().key)
 
-                    // State flows one way, commands the other.
                     b.publishQueue(QueueState(rev = 1, tracksJson = "[1,2]"))
                     b.publishState(PlayerState(trackId = "t1", positionMs = 5000, isPlaying = true, queueRev = 1))
                     val mirrored = a.players.first { it["bbb"]?.state?.trackId == "t1" }.getValue("bbb")
@@ -191,8 +184,6 @@ class RefineControlTest {
                     assertNull(b.requestTransfer("aaa"))
                     assertEquals(1, playerA.transferRequests)
 
-                    // The desktop restarts: it comes back by itself, with the stored key and the
-                    // state it was sent after connecting.
                     b.stop()
                     a.devices.first { list -> list.none { it.id == "bbb" && it.connected } }
                     assertEquals(ERROR_NOT_CONNECTED, a.send("bbb", Command.Play))
@@ -202,7 +193,6 @@ class RefineControlTest {
                     assertEquals("Desk 2", a.devices.first { list -> list.any { it.id == "bbb" && it.name == "Desk 2" } }.first { it.id == "bbb" }.name)
                     assertNull(a.send("bbb", Command.Next))
 
-                    // Forget on one side removes the pairing on both.
                     a.forget("bbb")
                     a.devices.first { list -> list.none { it.id == "bbb" && it.paired } }
                     withTimeout(5_000) { while (storeB.peers.isNotEmpty()) kotlinx.coroutines.delay(50) }

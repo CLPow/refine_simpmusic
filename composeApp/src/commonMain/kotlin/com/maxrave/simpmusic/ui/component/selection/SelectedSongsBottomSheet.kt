@@ -43,10 +43,6 @@ import simpmusic.composeapp.generated.resources.favorite
 import simpmusic.composeapp.generated.resources.n_songs_selected
 import simpmusic.composeapp.generated.resources.play_next
 
-/**
- * One row in [SelectedSongsBottomSheet] that only some screens have — "remove from playlist"
- * means nothing on an album or in search results, so it is passed in rather than hardcoded here.
- */
 data class SongSelectionAction(
     val icon: ImageVector,
     val label: String,
@@ -54,10 +50,6 @@ data class SongSelectionAction(
     val onClick: () -> Unit,
 )
 
-/**
- * Actions for the current selection, opened from the overflow button in [SongSelectionTopAppBar].
- * A null callback hides its row, so a screen only offers what it can actually do.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SelectedSongsBottomSheet(

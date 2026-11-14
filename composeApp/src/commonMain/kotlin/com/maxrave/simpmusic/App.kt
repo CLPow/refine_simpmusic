@@ -73,22 +73,12 @@ import simpmusic.composeapp.generated.resources.this_app_needs_to_access_your_no
 import simpmusic.composeapp.generated.resources.this_link_is_not_supported
 import simpmusic.composeapp.generated.resources.yes
 
-/**
- * The app shell, in YouTube Music's layout.
- *
- * Phone: each tab page fills the screen above a flat mini player that sits directly on the
- * Home, Explore, Library bar. Tablet and Desktop (YouTube Music's web layout): the tabs in a rail
- * on the left and a full-width player bar along the bottom of the window. The player opens over
- * everything.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun App(viewModel: SharedViewModel = koinInject()) {
     val windowSize = currentWindowAdaptiveInfo().windowSizeClass
     val navController = rememberNavController()
-    // Refine Control's pairing code and toasts, wherever the user is in the app.
     RefineControlHost(onToast = { viewModel.makeToast(it) })
-    // New releases from GitHub (Android only).
     AppUpdateHost(onToast = { viewModel.makeToast(it) })
 
     val sleepTimerState by viewModel.sleepTimerState.collectAsStateWithLifecycle()
@@ -112,18 +102,9 @@ fun App(viewModel: SharedViewModel = koinInject()) {
         Logger.d("MainActivity", "onCreate: $data")
         if (data != null) {
             if (data == "simpmusic://notification".toUri()) {
-                // A release notification left in the shade from an older version: nothing to open.
                 viewModel.setIntent(null)
             } else if (data.host == "simpmusic.org" || data.scheme == "simpmusic") {
-                // https://simpmusic.org/app/watch?v=VIDEO_ID
-                // https://simpmusic.org/app/playlist?list=PLAYLIST_ID
-                // https://simpmusic.org/app/channel/CHANNEL_ID
-                // simpmusic://watch?v=VIDEO_ID  (host="watch", no path)
-                // simpmusic://playlist?list=PLAYLIST_ID
-                // simpmusic://channel/CHANNEL_ID
                 val segments = data.pathSegments
-                // For simpmusic.org: segments = ["app", "watch"] → appPath = segments[1]
-                // For simpmusic://: host IS the appPath (e.g. host="watch"), segments = []
                 val appPath =
                     if (data.scheme == "simpmusic") {
                         data.host
@@ -152,8 +133,6 @@ fun App(viewModel: SharedViewModel = koinInject()) {
                     }
 
                     "channel", "c" -> {
-                        // simpmusic://channel/UCxxx → segments = ["UCxxx"]
-                        // simpmusic.org/app/channel/UCxxx → segments = ["app", "channel", "UCxxx"]
                         val artistId =
                             if (data.scheme == "simpmusic") {
                                 segments.firstOrNull()
@@ -175,10 +154,6 @@ fun App(viewModel: SharedViewModel = koinInject()) {
                         }
                     }
 
-                    // simpmusic://library                     → the Library tab
-                    // simpmusic://library?type=favorite       → one of its collections
-                    // Added for the Playlists widget, whose shortcuts have to reach these
-                    // screens from the home screen without the app already running.
                     "library" -> {
                         val type = data.getQueryParameter("type")
                         if (type.isNullOrBlank()) {
@@ -293,8 +268,6 @@ fun App(viewModel: SharedViewModel = koinInject()) {
                             viewModel.reloadDestination(klass)
                         }
                     }
-                    // Pages end above the bottom bar, mini player and desktop player bar: without
-                    // this the last row of every page sat underneath them and could not be read.
                     Box(Modifier.weight(1f).fillMaxSize().padding(bottom = innerPadding.calculateBottomPadding())) {
                         AppNavigationGraph(
                             innerPadding = innerPadding,

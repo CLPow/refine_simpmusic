@@ -94,10 +94,6 @@ import simpmusic.composeapp.generated.resources.ytm_sign_in_title
 import simpmusic.composeapp.generated.resources.ytm_signed_out_body
 import simpmusic.composeapp.generated.resources.ytm_signed_out_title
 
-/**
- * Chips shown until YouTube's own arrive with the first page. The feed's chips are what YouTube
- * Music shows, in its order; these are only the stand-in for the first frame.
- */
 private val fallbackChips: List<Pair<StringResource, String>> =
     listOf(
         Res.string.energize to HOME_PARAMS_ENERGIZE,
@@ -112,13 +108,6 @@ private val fallbackChips: List<Pair<StringResource, String>> =
         Res.string.sleep to HOME_PARAMS_SLEEP,
     )
 
-/**
- * YouTube Music's Home: the logo bar, YouTube's chips, then YouTube's own feed for the account,
- * shelf after shelf in the order it sent them (Speed dial as its grid of tiles, Quick picks as its
- * song grid, video shelves as 16:9 cards, everything else as square cards), loading more as it
- * scrolls. The feed reloads when you come back to the app after a while, as YouTube Music's does,
- * so what you have been listening to shows up in it.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
@@ -144,14 +133,12 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) { viewModel.scrollToTop.collect { listState.scrollToItem(0) } }
 
-    // Coming back to the app (or to this tab) after a while reloads the feed.
     LifecycleStartEffect(Unit) {
         viewModel.refreshIfStale()
         onStopOrDispose { }
     }
     LaunchedEffect(loading) { if (!loading) refreshing = false }
 
-    // Tapping Home again: back to the top, or a reload when already there.
     LaunchedEffect(reloadDestination) {
         if (reloadDestination == HomeDestination::class) {
             if (listState.firstVisibleItemIndex > 0) {
@@ -199,9 +186,6 @@ fun HomeScreen(
         )
     }
 
-    // YouTube Music's Home sits on a dark slate wash that fades into the page from the top. When
-    // YouTube sends Home a background image, YouTube Music draws that instead, behind the chips and
-    // the first shelf, scrolling away with them and fading into the page.
     Box(Modifier.fillMaxSize().background(Ytm.Background)) {
     val backdrop = homeBackground
     if (backdrop != null) {
@@ -264,7 +248,6 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 item(key = "chips") {
-                    // Tapping the selected chip clears it, back to the whole feed.
                     val chips: List<Pair<String, String>> =
                         if (serverChips.isNotEmpty()) {
                             serverChips.map { it.title to it.params }
@@ -362,7 +345,6 @@ fun HomeScreen(
     }
 }
 
-/** A notice card at the top of Home, such as an expired sign-in. */
 @Composable
 private fun HomeNotice(
     title: String,
@@ -385,5 +367,4 @@ private fun HomeNotice(
     }
 }
 
-/** How far down Home YouTube's background image reaches before it has faded into the page. */
 private val HOME_BACKDROP_HEIGHT = 360.dp

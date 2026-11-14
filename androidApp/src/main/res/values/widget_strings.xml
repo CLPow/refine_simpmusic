@@ -1,9 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Widget labels and descriptions live here, not in composeResources: the entries in res/xml
-  reference them as @string/… and only Android resources resolve there. Not on Crowdin as a
-  result — these are the few strings the picker reads before any Compose code runs.
--->
 <resources>
     <string name="widget_turntable_label">Now playing</string>
     <string name="widget_turntable_description">YouTube Music widget: 2×2 round cover, 4×1 row, 4×2 with recently played</string>

@@ -4,10 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/**
- * Round-trip and fail-closed behaviour for the file-key path. Windows DPAPI cannot run in a
- * portable unit test, so the Linux/macOS AES-GCM path is exercised here.
- */
 class DesktopFileSecretCodecTest {
     private val sample = "SIDCC=very-secret-session-value; other=1"
 

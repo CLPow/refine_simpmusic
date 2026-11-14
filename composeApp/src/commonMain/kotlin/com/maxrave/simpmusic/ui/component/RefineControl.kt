@@ -102,11 +102,6 @@ import simpmusic.composeapp.generated.resources.ytm_rc_transfer_failed
 import simpmusic.composeapp.generated.resources.ytm_rc_unreachable
 import simpmusic.composeapp.generated.resources.ytm_rc_volume
 
-/**
- * The devices button of Refine Control, where Spotify has its "Connect" button. Drawn only while
- * Refine Control is switched on. Red while another device is being controlled; a red dot when a
- * paired device is there to switch to.
- */
 @Composable
 fun RefineControlButton(
     modifier: Modifier = Modifier,
@@ -126,7 +121,6 @@ fun RefineControlButton(
                 contentDescription = stringResource(Res.string.ytm_rc_devices),
                 tint = if (following) YtmRed else idleTint,
             )
-            // Another paired device is there to switch to.
             if (!following && devices.any { it.paired && it.connected }) {
                 Box(Modifier.align(Alignment.TopEnd).size(7.dp).background(YtmRed, CircleShape))
             }
@@ -135,7 +129,6 @@ fun RefineControlButton(
     if (open) RefineControlSheet(onDismiss = { open = false }, control = control)
 }
 
-/** "Playing on Desk" while another device is being controlled; nothing otherwise. */
 @Composable
 fun RefineControlPlayingOn(
     modifier: Modifier = Modifier,
@@ -161,10 +154,6 @@ fun RefineControlPlayingOn(
     }
 }
 
-/**
- * Put once at the root of the app: the pairing code dialog (it has to appear on the device that
- * did not ask, too) and the toasts.
- */
 @Composable
 fun RefineControlHost(
     onToast: (String) -> Unit,
@@ -194,7 +183,6 @@ fun RefineControlHost(
             text = {
                 Column(Modifier.fillMaxWidth()) {
                     Text(
-                        // Two groups of three read more easily across two screens.
                         pairing.code.chunked(3).joinToString(" "),
                         style = typo().titleLarge.copy(fontSize = 36.sp, fontWeight = FontWeight.Bold, letterSpacing = 4.sp),
                         color = Color.White,
@@ -223,11 +211,6 @@ fun RefineControlHost(
     }
 }
 
-/**
- * "Listening on": one list, one tap. A tap on a device moves the music there (or takes control
- * when that device is the one already playing); a tap on this device brings it back. A device
- * that is not paired yet pairs first, with the code, and then carries on with the same tap.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RefineControlSheet(
@@ -247,7 +230,6 @@ fun RefineControlSheet(
     val remoteTarget = target as? ControlTarget.Remote
     val isDesktop = getPlatform() == Platform.Desktop
 
-    // Look harder for devices while the list is on screen.
     DisposableEffect(control) {
         control.setScanning(true)
         onDispose { control.setScanning(false) }
@@ -259,12 +241,10 @@ fun RefineControlSheet(
         scope.launch {
             val done = control.listenOn(deviceId)
             busy = null
-            // On failure the toast says why and the list stays open to try again.
             if (done) onDismiss()
         }
     }
 
-    // A device paired from this list carries on with the tap that started the pairing.
     LaunchedEffect(devices, pendingPair) {
         val id = pendingPair ?: return@LaunchedEffect
         if (devices.any { it.id == id && it.paired && it.connected }) {
@@ -274,7 +254,6 @@ fun RefineControlSheet(
     }
     LaunchedEffect(pairing) {
         if (pairing == null && pendingPair != null) {
-            // Cancelled (the paired flag of a confirmed pairing arrives within moments).
             delay(3_000)
             if (devices.none { it.id == pendingPair && it.paired }) pendingPair = null
         }
@@ -343,7 +322,6 @@ fun RefineControlSheet(
                 )
             }
 
-            // The volume of the device being controlled: a phone has no slider for it otherwise.
             val mirrored = remote
             if (remoteTarget != null && mirrored != null && mirrored.connected) {
                 var dragging by remember { mutableStateOf<Float?>(null) }
@@ -356,7 +334,6 @@ fun RefineControlSheet(
                     Slider(
                         value = dragging ?: mirrored.volume,
                         onValueChange = { dragging = it },
-                        // Sent when the finger lifts: one command, not one per pixel.
                         onValueChangeFinished = {
                             dragging?.let { control.send(RemoteCommand.SetVolume(it)) }
                             dragging = null

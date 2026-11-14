@@ -11,20 +11,16 @@ import kotlin.time.TimeMark
 
 enum class ControlDeviceType { PHONE, DESKTOP }
 
-/** Another Refine device on the network. */
 data class ControlDevice(
     val id: String,
     val name: String,
     val type: ControlDeviceType,
     val paired: Boolean,
-    /** Paired and reachable right now: it can be controlled, and playback can move to it. */
     val connected: Boolean,
-    /** What it plays, when it plays something. */
     val playingTitle: String?,
     val isPlaying: Boolean,
 )
 
-/** Which player the app's controls act on. */
 sealed interface ControlTarget {
     data object ThisDevice : ControlTarget
 
@@ -34,20 +30,12 @@ sealed interface ControlTarget {
     ) : ControlTarget
 }
 
-/** The code to compare with the other device's screen. */
 data class ControlPairingPrompt(
     val deviceName: String,
     val code: String,
-    /** Confirmed here; the other device has not confirmed yet. */
     val waitingForOther: Boolean,
 )
 
-/**
- * What the controlled device is playing, as last reported by it.
- *
- * [positionMs] was true at [positionAt]; while [isPlaying] the position now is
- * `positionMs + positionAt.elapsedNow()` ([currentPositionMs]).
- */
 data class RemotePlayback(
     val deviceId: String,
     val deviceName: String,
@@ -73,7 +61,6 @@ data class RemotePlayback(
     }
 }
 
-/** What a controller can ask the controlled device to do. */
 sealed interface RemoteCommand {
     data object Play : RemoteCommand
 
@@ -101,7 +88,6 @@ sealed interface RemoteCommand {
         val volume: Float,
     ) : RemoteCommand
 
-    /** [index] is a place in the queue as shown. */
     data class PlayIndex(
         val index: Int,
     ) : RemoteCommand
@@ -123,7 +109,6 @@ sealed interface RemoteCommand {
         val tracks: List<Track>,
     ) : RemoteCommand
 
-    /** Start something new there, the way a tap on a song, album or playlist does here. */
     data class PlayQueue(
         val queue: QueueData.Data,
         val track: Track,
@@ -133,7 +118,6 @@ sealed interface RemoteCommand {
     ) : RemoteCommand
 }
 
-/** Something to tell the user in a toast. */
 sealed interface ControlNotice {
     data class Unreachable(
         val deviceName: String,
@@ -158,13 +142,7 @@ sealed interface ControlNotice {
     ) : ControlNotice
 }
 
-/**
- * Refine Control: control another Refine device on the same network, and move playback between
- * devices (the way Spotify Connect does). On unless switched off in Settings; devices still have to
- * be paired once with a code before they can see each other's music.
- */
 interface RefineControlRepository {
-    /** False on platforms without Refine Control; the UI hides everything then. */
     val isSupported: Boolean
 
     val enabled: StateFlow<Boolean>
@@ -172,7 +150,6 @@ interface RefineControlRepository {
     val devices: StateFlow<List<ControlDevice>>
     val target: StateFlow<ControlTarget>
 
-    /** The player being controlled; null while [target] is this device. */
     val remote: StateFlow<RemotePlayback?>
     val pairing: StateFlow<ControlPairingPrompt?>
     val notices: SharedFlow<ControlNotice>
@@ -181,7 +158,6 @@ interface RefineControlRepository {
 
     fun setDeviceName(name: String)
 
-    /** The devices list is on screen: look harder for devices. */
     fun setScanning(scanning: Boolean)
 
     fun startPairing(deviceId: String)
@@ -192,38 +168,23 @@ interface RefineControlRepository {
 
     fun forget(deviceId: String)
 
-    /** The app's controls act on [deviceId] from now on; nothing changes about what plays where. */
     fun controlRemote(deviceId: String)
 
     fun controlThisDevice()
 
-    /** Moves what this device plays to [deviceId], and controls it there. False when it failed. */
     suspend fun transferTo(deviceId: String): Boolean
 
-    /** Moves what [deviceId] plays to this device. False when it failed. */
     suspend fun transferHere(deviceId: String): Boolean
 
-    /**
-     * One tap in the devices list: listen on [deviceId] (null = this device). Moves the music
-     * there when it plays somewhere else, or just takes control when that device is the one
-     * already playing. False when it failed.
-     */
     suspend fun listenOn(deviceId: String?): Boolean = false
 
-    /**
-     * True while [target] was picked automatically (this device was idle and a paired device was
-     * playing). Starting something new on this device then plays it here instead of over there.
-     */
     val autoAttached: Boolean get() = false
 
-    /** For networks where the devices do not find each other. True when a device answered. */
     suspend fun connectByAddress(address: String): Boolean
 
-    /** Sends [command] to the controlled device. Nothing happens while [target] is this device. */
     fun send(command: RemoteCommand)
 }
 
-/** Refine Control where there is none (iOS for now): always off. */
 class NoRefineControlRepository : RefineControlRepository {
     override val isSupported: Boolean = false
     override val enabled: StateFlow<Boolean> = MutableStateFlow(false)

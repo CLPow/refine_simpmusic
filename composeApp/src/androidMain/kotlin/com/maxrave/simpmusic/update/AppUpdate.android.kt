@@ -86,7 +86,6 @@ private class AndroidAppUpdater(
             }
     }
 
-    /** The newest offerable release, or null when GitHub has none with an APK. */
     private fun fetchLatest(): AppRelease? {
         val connection = (URL(RELEASES_LATEST_URL).openConnection() as HttpURLConnection)
         try {
@@ -94,7 +93,6 @@ private class AndroidAppUpdater(
             connection.readTimeout = 15_000
             connection.setRequestProperty("Accept", "application/vnd.github+json")
             connection.setRequestProperty("User-Agent", "RefineMusic")
-            // 404 = the repo has no release yet.
             if (connection.responseCode == HttpURLConnection.HTTP_NOT_FOUND) return null
             if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
             val body = connection.inputStream.bufferedReader().use { it.readText() }
@@ -146,7 +144,6 @@ private class AndroidAppUpdater(
                     state.value = UpdateState.Failed(UpdateFailure.NOT_SIGNED_BY_REFINE, release)
                     return@launch
                 }
-                // Stays "available" behind the system installer, so backing out of it can retry.
                 state.value = UpdateState.Available(release)
                 install(apk)
             }
@@ -195,10 +192,6 @@ private class AndroidAppUpdater(
         }
     }
 
-    /**
-     * The download must be Refine, signed with the same key. Android refuses a different key
-     * anyway; this catches it before the installer shows a confusing "App not installed".
-     */
     @Suppress("DEPRECATION")
     private fun signedLikeThisApp(apk: File): Boolean {
         val pm = context.packageManager
@@ -214,7 +207,6 @@ private class AndroidAppUpdater(
             publicSourceDir = apk.path
         }
         val theirs = signatures(archive)
-        // Unreadable on some ROMs: leave the decision to the installer, which checks the key itself.
         if (theirs.isEmpty()) return true
         val ours = signatures(pm.getPackageInfo(context.packageName, flags))
         return ours.isNotEmpty() && theirs == ours

@@ -94,11 +94,6 @@ import simpmusic.composeapp.generated.resources.ytm_subscribe
 import simpmusic.composeapp.generated.resources.album
 import simpmusic.composeapp.generated.resources.ytm_single
 
-/**
- * YouTube Music's artist page: the artist's picture across the top, fading into the page, the
- * name in large type over its foot, the audience line, then Shuffle, Radio and Subscribe. Below:
- * Top songs, Albums, Singles & EPs, Featured on, Fans might also like and About.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArtistScreen(
@@ -192,8 +187,6 @@ fun ArtistScreen(
                                 isCurrent = song.videoId == playingVideoId,
                                 onSwipeQueue = { sharedViewModel.addSongToQueue(song) },
                                 onClick = {
-                                    // YouTube Music plays the artist's top songs as a list, from
-                                    // the tapped one, not a one-song radio.
                                     viewModel.setQueueData(
                                         QueueData.Data(
                                             listTracks = ArrayList(data.popularSongs),
@@ -263,7 +256,6 @@ fun ArtistScreen(
                         }
                     }
                 }
-                // The back button floats over the picture, as in YouTube Music.
                 IconButton(
                     onClick = { navController.navigateUp() },
                     modifier = Modifier.windowInsetsPadding(WindowInsets.statusBars).padding(4.dp),
@@ -325,7 +317,6 @@ private fun ArtistPill(
     }
 }
 
-/** YouTube Music's Subscribe button: red while not subscribed, grey "Subscribed" after. */
 @Composable
 private fun SubscribeButton(
     subscribed: Boolean,

@@ -13,19 +13,8 @@ import org.jetbrains.compose.resources.stringResource
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.max_selection_reached
 
-/**
- * Hard cap on how many songs can be selected at once. Anything that acts on the selection
- * (download, add to playlist, add to queue) fires one request per song, so the cap keeps a
- * single gesture from firing hundreds of them with no way to cancel.
- */
 const val MAX_SONG_SELECTION = 25
 
-/**
- * Selection state for a list of songs. Held by the screen, read by [com.maxrave.simpmusic.ui.component.SongFullWidthItems].
- *
- * Items are tracked by videoId rather than by list index: the lists this drives are paged and
- * reorderable, so an index stops pointing at the same song after a drag or a page load.
- */
 @Stable
 class SongSelectionState(
     private val limitMessage: String,
@@ -40,7 +29,6 @@ class SongSelectionState(
 
     fun isSelected(videoId: String): Boolean = _selected.contains(videoId)
 
-    /** Enters selection mode with [videoId] already picked. Long press calls this. */
     fun start(videoId: String) {
         if (isActive) return
         isActive = true
@@ -50,21 +38,12 @@ class SongSelectionState(
     fun toggle(videoId: String) {
         if (!isActive) return
         if (_selected.remove(videoId)) {
-            // Deselecting the last one leaves an action bar with nothing to act on, so leave the mode.
             if (_selected.isEmpty()) exit()
             return
         }
         add(videoId)
     }
 
-    /**
-     * Takes the first [MAX_SONG_SELECTION] of [videoIds], in the order the list shows them —
-     * and doubles as deselect-all: pressing it again once everything it would pick is already
-     * picked clears the selection instead of doing nothing.
-     *
-     * Clearing here deliberately stays in selection mode, unlike [toggle]. Tapping rows off one
-     * by one reads as leaving; tapping this reads as starting the selection over.
-     */
     fun toggleSelectAll(videoIds: List<String>) {
         if (!isActive) return
         val candidates = videoIds.filter { it.isNotBlank() }.distinct()
@@ -85,11 +64,6 @@ class SongSelectionState(
         _selected.clear()
     }
 
-    /**
-     * The only way into [_selected], which is what makes the cap hold: long press, tap and
-     * select-all all land here, so the check cannot be bypassed by one of the three.
-     * Returns false once the cap is reached, so select-all stops instead of toasting per song.
-     */
     private fun add(videoId: String): Boolean {
         if (videoId.isBlank() || _selected.contains(videoId)) return true
         if (isFull) {

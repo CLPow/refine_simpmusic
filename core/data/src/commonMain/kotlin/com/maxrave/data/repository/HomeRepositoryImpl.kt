@@ -26,12 +26,6 @@ import kotlinx.coroutines.flow.flowOn
 import com.maxrave.data.db.datasource.LocalDataSource
 import kotlinx.coroutines.flow.catch
 
-/**
- * One resolved category cover plus when it was fetched.
- *
- * Kept with a timestamp because the cover is whatever playlist YouTube happened to rank first in
- * that category — it drifts, so a cached copy should expire rather than stick forever.
- */
 @Serializable
 private data class MoodArtwork(
     val url: String,
@@ -51,10 +45,6 @@ internal class HomeRepositoryImpl(
 ) : HomeRepository {
     private val _homeChips = MutableStateFlow<List<HomeChip>>(emptyList())
     override val homeChips: StateFlow<List<HomeChip>> = _homeChips
-    /**
-     * Same posture as the Room converters: a cache written by an older build must not crash the
-     * app after the model gains a field, so unknown keys are dropped rather than rejected.
-     */
     private val moodJson =
         Json {
             ignoreUnknownKeys = true
@@ -66,15 +56,8 @@ internal class HomeRepositoryImpl(
         songString: String,
     ): Flow<Resource<Triple<String?, List<HomeItem>, String?>>> =
         flow {
-            // Nothing here may throw past the flow: an exception used to be swallowed by a
-            // runCatching around it, so the flow ended without emitting and Home sat on its spinner
-            // until the timeout said "Couldn't load your recommendations". Signed-in feeds with an
-            // empty `continuations` list did exactly that through `get(0)`.
             val response =
                 try {
-                    // The client is handed the signed-in cookie by its own collector, a moment after
-                    // start. Asking before it has it loads the signed-out feed, so wait for it -- only
-                    // as long as it actually takes, where the caller used to sleep a fixed second.
                     if (youTube.cookie.isNullOrEmpty() && dataStoreManager.cookie.first().isNotEmpty()) {
                         withTimeoutOrNull(3_000) {
                             while (youTube.cookie.isNullOrEmpty()) delay(50)
@@ -189,7 +172,6 @@ internal class HomeRepositoryImpl(
                             list[0] = list[0].copy(isSpeedDial = true)
                         }
                         Logger.d("Repository", "List size: ${list.size}")
-                        // The artwork YouTube draws behind the top of Home (port of maxrave-dev/core adac4c90).
                         val background = result.background?.musicThumbnailRenderer?.getThumbnailUrl()
                         Triple(continueParam, list.toList(), background)
                     }

@@ -262,8 +262,6 @@ class NowPlayingBottomSheetViewModel(
                     val videoId = songUIState.videoId
                     val isNowPlaying = mediaPlayerHandler.nowPlayingState.value.songEntity?.videoId == videoId
                     if (isNowPlaying) {
-                        // The player's thumb: the same path as the player's own Like, so the
-                        // account and the player stay in step.
                         mediaPlayerHandler.toggleLike()
                     } else {
                         val liking = !songUIState.liked

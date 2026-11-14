@@ -209,7 +209,7 @@ fun HomeItem(
                             }, data = temp)
                         } else if (browseId.startsWith("MPSP")) {
                             HomeItemContentPlaylist(onClick = {
-                                Unit // podcasts are not part of Refine (songs only)
+                                Unit
                             }, data = temp)
                         } else {
                             HomeItemContentPlaylist(onClick = {
@@ -555,9 +555,6 @@ fun QuickPicksItem(
                     ).align(Alignment.CenterVertically),
                 verticalArrangement = Arrangement.SpaceEvenly,
             ) {
-                // One line + marquee, NOT maxLines = 2: the parent LazyHorizontalGrid uses
-                // GridCells.Fixed(4) over a fixed 256.dp, so every cell is exactly 64.dp and a
-                // second title line pushes the artist row out of the cell, where the grid clips it.
                 Text(
                     text = data.title,
                     style = typo().titleSmall,

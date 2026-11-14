@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+ shows its own launch screen first; give it the same black. -->
     <style name="Theme.Refine" parent="Theme.AppCompat.NoActionBar">
         <item name="android:windowBackground">@color/refine_background</item>
         <item name="android:statusBarColor">@android:color/transparent</item>

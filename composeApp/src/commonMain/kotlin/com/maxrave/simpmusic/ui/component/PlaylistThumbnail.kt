@@ -51,8 +51,6 @@ fun PlaylistThumbnail(
                 )
             )
     ) {
-
-        // Title in bottom right
         Text(
             text = title,
             color = Color.White,
@@ -65,29 +63,20 @@ fun PlaylistThumbnail(
     }
 }
 
-// Generate deterministic gradient colors from title
 private fun generateGradientFromTitle(title: String): List<Color> {
     val hash = title.hashCode()
 
-    // Extract RGB components from hash
     val hue1 = ((hash and 0xFF) / 255f) * 360f
     val hue2 = (((hash shr 8) and 0xFF) / 255f) * 360f
 
-    // Convert HSV to RGB for vibrant colors
     val color1 = hsvToColor(hue1, 0.7f, 0.9f)
     val color2 = hsvToColor(hue2, 0.7f, 0.85f)
 
     return listOf(color1, color2)
 }
 
-/**
- * Deterministic placeholder gradient colors for a playlist title — matches the
- * [PlaylistThumbnail] / [painterPlaylistThumbnail] placeholder, so a screen can tint
- * its background to match a local playlist that has no real artwork.
- */
 fun playlistTitleGradient(title: String): List<Color> = generateGradientFromTitle(title)
 
-// HSV to RGB conversion
 private fun hsvToColor(hue: Float, saturation: Float, value: Float): Color {
     val h = hue / 60f
     val c = value * saturation

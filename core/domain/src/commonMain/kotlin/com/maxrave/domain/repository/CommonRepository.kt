@@ -10,7 +10,6 @@ interface CommonRepository {
 
     fun getDatabasePath(): String?
 
-    // Recently data
     fun getAllRecentData(): Flow<List<RecentlyType>>
 
     suspend fun writeTextToFile(text: String, filePath: String): Boolean

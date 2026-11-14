@@ -90,7 +90,6 @@ import simpmusic.composeapp.generated.resources.ytm_new_playlist
 private val BarColor = Ytm.Background
 private val Unselected = Ytm.TextSecondary
 
-/** The three tabs: Home · Search · Library. Search takes the place Explore had. */
 enum class YtmTab(
     val destination: Any,
     val title: StringResource,
@@ -101,7 +100,6 @@ enum class YtmTab(
     Library(LibraryDestination, Res.string.library, SimpIcons.LibraryMusic),
 }
 
-/** The tab whose page is on screen, read from the back stack so deep links and back presses agree. */
 @Composable
 private fun currentTab(navController: NavController): YtmTab? {
     val entry by navController.currentBackStackEntryAsState()
@@ -115,15 +113,10 @@ private fun NavController.selectTab(
     reload: (KClass<*>) -> Unit,
 ) {
     if (tab == current) {
-        // A tap on the open tab scrolls it to the top or reloads it, as in YouTube Music.
         reload(tab.destination::class)
         return
     }
     if (tab == YtmTab.Home) {
-        // Home always lands on Home itself, whatever page is open on top of it. Restoring Home's
-        // saved stack used to bring back the album or artist that had been open, so Home could
-        // not be reached from there at all; Home's own stack is therefore never saved. Search and
-        // Library are: leaving them keeps their query, chip, sort and scroll, as in YouTube Music.
         if (!popBackStack(HomeDestination, inclusive = false, saveState = current != null)) {
             navigate(HomeDestination) { launchSingleTop = true }
         }
@@ -139,10 +132,6 @@ private fun NavController.selectTab(
     }
 }
 
-/**
- * YouTube Music's bottom bar: Home · Search · Library on the page's near-black, the label always
- * shown, the open tab in white and the others grey. No indicator pill.
- */
 @Composable
 fun AppBottomNavigationBar(
     navController: NavController,
@@ -177,11 +166,6 @@ fun AppBottomNavigationBar(
     }
 }
 
-/**
- * YouTube Music's web sidebar, for Desktop and tablets: the menu button and logo, the three
- * tabs as 48dp rows (the open one on a light wash), a divider, "New playlist", then Liked Music
- * and the account's playlists. The menu button folds it to a slim rail of icons, as on the web.
- */
 @Composable
 fun AppNavigationRail(
     navController: NavController,
@@ -189,14 +173,12 @@ fun AppNavigationRail(
     reloadDestinationIfNeeded: (KClass<*>) -> Unit = { _ -> },
 ) {
     val current = currentTab(navController)
-    // A landscape phone is short: the rail starts folded there so the page keeps its width.
     val windowHeight = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp() }
     var expanded by rememberSaveable { mutableStateOf(windowHeight >= 480.dp) }
     val playlists by libraryViewModel.youTubePlaylists.collectAsStateWithLifecycle()
     val localPlaylists by libraryViewModel.localPlaylists.collectAsStateWithLifecycle()
     val loggedIn by libraryViewModel.loggedIn.collectAsStateWithLifecycle()
     var showNewPlaylist by remember { mutableStateOf(false) }
-    // The view model fetches the account's playlists when it is created; no second fetch here.
     if (showNewPlaylist) {
         NewPlaylistDialog(onDismiss = { showNewPlaylist = false }) { title ->
             libraryViewModel.createPlaylist(title)
@@ -274,7 +256,6 @@ fun AppNavigationRail(
             Spacer(Modifier.height(16.dp))
             LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
                 item(key = "liked") {
-                    // Signed out, Liked music is the songs liked on this device, as in Library.
                     GuidePlaylist(stringResource(Res.string.ytm_liked_music), stringResource(Res.string.ytm_auto_playlist)) {
                         if (loggedIn) {
                             navController.navigate(PlaylistDestination(playlistId = "VLLM")) { launchSingleTop = true }

@@ -32,20 +32,10 @@ abstract class BaseViewModel :
     protected val songVersionLookup: SongRepository by inject<SongRepository>()
     private val _nowPlayingVideoId: MutableStateFlow<String> = MutableStateFlow("")
 
-    /**
-     * Get now playing video id
-     * If empty, no video is playing
-     */
     val nowPlayingVideoId: StateFlow<String> get() = _nowPlayingVideoId
 
-    /**
-     * Tag for logging
-     */
     protected val tag: String = this::class.simpleName ?: "BaseViewModel"
 
-    /**
-     * Log with viewModel tag
-     */
     protected fun log(
         message: String,
         logType: LogLevel = LogLevel.WARN,
@@ -58,9 +48,6 @@ abstract class BaseViewModel :
         }
     }
 
-    /**
-     * Cancel all jobs
-     */
     override fun onCleared() {
         super.onCleared()
         viewModelScope.cancel()
@@ -85,9 +72,6 @@ abstract class BaseViewModel :
                 .getString(resId)
         }
 
-    // Loading dialog
-    // Starts with no text: the label is only shown once the dialog opens, and resolving it here
-    // blocked the main thread on a resource read for every view model created.
     private val _showLoadingDialog: MutableStateFlow<Pair<Boolean, String>> = MutableStateFlow(false to "")
     val showLoadingDialog: StateFlow<Pair<Boolean, String>> get() = _showLoadingDialog
 
@@ -113,9 +97,6 @@ abstract class BaseViewModel :
         }
     }
 
-    /**
-     * Communicate with SimpleMediaServiceHandler to load media item
-     */
     fun setQueueData(queueData: QueueData.Data) {
         mediaPlayerHandler.reset()
         mediaPlayerHandler.setQueueData(queueData)
@@ -136,12 +117,6 @@ abstract class BaseViewModel :
         }
     }
 
-    /**
-     * Refine plays songs, so a tapped official music video (a Speed dial tile, a Home card)
-     * plays as its song when YouTube has one: the album cover instead of a frame of the video,
-     * and a radio of songs instead of a radio of videos. The queue the caller already set is
-     * rewritten to match. Null leaves the video as it is.
-     */
     private suspend fun useSongVersion(track: Track): Track? {
         val song = withTimeoutOrNull(SONG_VERSION_TIMEOUT_MS) { songVersionLookup.findSongVersion(track) } ?: return null
         mediaPlayerHandler.queueData.value?.data?.let { data ->
@@ -161,5 +136,4 @@ abstract class BaseViewModel :
     }
 }
 
-// Long enough for one search; past it the video plays as it is rather than keep the tap waiting.
 private const val SONG_VERSION_TIMEOUT_MS = 4_000L

@@ -315,8 +315,6 @@ fun LocalPlaylistScreen(
         playlistBottomSheetShow = true
     }
 
-    // Suggestions come from the synced YouTube playlist, so they load once the playlist (and its
-    // sync state) is known, and again for another playlist.
     LaunchedEffect(uiState.id, uiState.syncState) {
         if (suggestedTracks.isEmpty() && uiState.syncState != LocalPlaylistEntity.YouTubeSyncState.NotSynced) {
             viewModel.getSuggestions(uiState.id)
@@ -346,9 +344,6 @@ fun LocalPlaylistScreen(
     var bitmap by remember {
         mutableStateOf<ImageBitmap?>(null)
     }
-    // Track which thumbnail we've already extracted a palette from.
-    // Prevents palette flash when LazyColumn recycles the header item on scroll —
-    // AsyncImage re-mount fires onSuccess again, but we skip the regenerate.
     var paletteGeneratedFor by remember {
         mutableStateOf<String?>(null)
     }
@@ -370,18 +365,8 @@ fun LocalPlaylistScreen(
             }
     }
 
-    // Apple Music-inspired immersive treatment. Which header is used depends on the window's
-    // aspect ratio alone, not on the platform: a portrait window (a phone held upright, or a
-    // narrow desktop window) gets the edge-to-edge artwork header, a landscape one gets the
-    // side-by-side header. Everything else on the page — the palette background, the row
-    // dividers, the blurred top bar — is shared by both.
     val screenInfo = getScreenSizeInfo()
     val isPortrait = screenInfo.wDP < screenInfo.hDP
-    // Apple Music-style page background. When the playlist has real artwork we pick a vivid
-    // swatch from its palette (getColorFromPalette). Many local playlists have NO artwork —
-    // AsyncImage shows the title placeholder and onSuccess never fires, so the palette stays
-    // null; in that case we fall back to the SAME deterministic title gradient the placeholder
-    // draws, so the background still matches the thumbnail. Darkened slightly for readability.
     val mutedPaletteBg =
         run {
             val palette = paletteState.palette
@@ -399,7 +384,6 @@ fun LocalPlaylistScreen(
             }
         }
 
-    // Loading dialog
     val showLoadingDialog by viewModel.showLoadingDialog.collectAsStateWithLifecycle()
     if (showLoadingDialog.first) {
         LoadingDialog(
@@ -421,8 +405,6 @@ fun LocalPlaylistScreen(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val searchResults by viewModel.searchResults.collectAsStateWithLifecycle()
 
-    // Back closes what is open on top of the playlist (search, a selection, reordering) before
-    // it leaves the page, as YouTube Music does.
     PlatformBackHandler(enabled = showSearchBar || selectionState.isActive || changingOrder) {
         when {
             selectionState.isActive -> selectionState.exit()
@@ -433,14 +415,11 @@ fun LocalPlaylistScreen(
             else -> changingOrder = false
         }
     }
-//    Box {
     LazyColumn(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .background(Ytm.Background)
-                // What the blurred bars over the list blur; without it they had nothing to blur
-                // and the sticky title sat unreadable over the rows.
                 .hazeSource(hazeState)
                 .pointerInput(changingOrder) {
                     if (!changingOrder) return@pointerInput
@@ -481,7 +460,6 @@ fun LocalPlaylistScreen(
                         overscrollJob?.cancel()
                     }
                     if (getPlatform() == Platform.Desktop) {
-                        // Desktop: normal drag (click-and-drag), no long press needed
                         detectDragGestures(
                             onDrag = onDrag,
                             onDragStart = onDragStart,
@@ -489,7 +467,6 @@ fun LocalPlaylistScreen(
                             onDragCancel = onDragCancel,
                         )
                     } else {
-                        // Android: long press then drag (touch-friendly)
                         detectDragGesturesAfterLongPress(
                             onDrag = onDrag,
                             onDragStart = onDragStart,
@@ -501,8 +478,6 @@ fun LocalPlaylistScreen(
         state = lazyState,
     ) {
         item(contentType = "header") {
-            // YouTube Music's own-playlist header: cover, title, "Playlist • N songs", the action
-            // row (download, search, the white play button, shuffle, more).
             Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(lerp(uiState.colors.firstOrNull() ?: Color.Black, Ytm.Background, 0.45f), Ytm.Background)))) {
                 YtmCollectionHeader(
                     thumbnail = uiState.thumbnail,
@@ -561,8 +536,7 @@ fun LocalPlaylistScreen(
                 }
             }
         }
-        // peek(), not get(): a key lookup must not make Paging load pages. Keyed by the song and its
-        // place in the playlist, not the row index, so a move animates instead of rebinding rows.
+        // peek(), not get(): a key lookup must not make Paging load pages.
         items(count = trackPagingItems.itemCount, key = { index ->
             val item = trackPagingItems.peek(index)
             if (item == null) "placeholder_$index" else item.first.videoId + "_" + item.second.position
@@ -588,7 +562,6 @@ fun LocalPlaylistScreen(
                             },
                             selectionMode = selectionState.isActive,
                             isSelected = selectionState.isSelected(item.videoId),
-                            // No long press while reordering: that gesture already belongs to drag.
                             onLongClick = if (changingOrder) null else ({ selectionState.start(it) }),
                             onSelectToggle = { selectionState.toggle(it) },
                             modifier = mod,
@@ -611,7 +584,6 @@ fun LocalPlaylistScreen(
                             },
                             selectionMode = selectionState.isActive,
                             isSelected = selectionState.isSelected(item.videoId),
-                            // No long press while reordering: that gesture already belongs to drag.
                             onLongClick = if (changingOrder) null else ({ selectionState.start(it) }),
                             onSelectToggle = { selectionState.toggle(it) },
                             modifier = mod,
@@ -661,8 +633,6 @@ fun LocalPlaylistScreen(
                 }
             }
         }
-        // YouTube Music lists suggestions under your own playlists, each with an add button. They
-        // come from the synced YouTube playlist, so an unsynced one shows no empty heading.
         if (uiState.syncState != LocalPlaylistEntity.YouTubeSyncState.NotSynced && (suggestionsLoading || suggestedTracks.isNotEmpty())) item(contentType = "suggestions") {
             Column(Modifier.fillMaxWidth().padding(top = 16.dp)) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -701,8 +671,7 @@ fun LocalPlaylistScreen(
         SongSelectionTopAppBar(
             state = selectionState,
             onSelectAll = {
-                // peek() rather than get(): reading an item is what asks Paging to load its page,
-                // and select-all must not drag the whole playlist into memory.
+                // peek() rather than get(): reading an item is what asks Paging to load its page, and select-all must not drag the whole playlist into memory.
                 selectionState.toggleSelectAll(
                     (0 until trackPagingItems.itemCount).mapNotNull {
                         trackPagingItems.peek(it)?.first?.videoId
@@ -866,13 +835,6 @@ fun LocalPlaylistScreen(
             },
         )
     }
-    // A sibling of the paged list, not a branch inside it. The paged reader carries drag
-    // reordering, in-place removal and its own scroll state; searching has none of that, and
-    // threading a second data source through it would put all of that at risk for a feature that
-    // only needs a flat list. This draws over it instead and leaves it untouched.
-    //
-    // Results come from LocalPlaylistViewModel.searchResults, which queries the database —
-    // filtering trackPagingItems would only ever search the pages already scrolled through.
     AnimatedVisibility(
         visible = showSearchBar,
         enter = SearchBarEnter,
@@ -884,8 +846,6 @@ fun LocalPlaylistScreen(
                     .fillMaxSize()
                     .background(mutedPaletteBg),
         ) {
-            // Same bar as the one on Playlist and Album: blurred over the content behind it,
-            // back on the left, clear on the right.
             Box(
                 Modifier
                     .fillMaxWidth()
@@ -904,7 +864,6 @@ fun LocalPlaylistScreen(
                             .windowInsetsPadding(WindowInsets.statusBars),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    // Back here closes the search, not the playlist.
                     RippleIconButton(
                         imageVector = SimpIcons.ArrowBackIosNew,
                     ) {
@@ -969,7 +928,6 @@ fun LocalPlaylistScreen(
                         isSelected = selectionState.isSelected(song.videoId),
                         onLongClick = { selectionState.start(it) },
                         onSelectToggle = { selectionState.toggle(it) },
-                        // Required, no default — the paged list passes it down through `mod`.
                         modifier = Modifier,
                     )
                     HorizontalDivider(modifier = Modifier.padding(start = 72.dp, end = 16.dp))

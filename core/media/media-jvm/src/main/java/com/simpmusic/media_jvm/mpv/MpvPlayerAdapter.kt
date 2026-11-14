@@ -32,37 +32,19 @@ import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "MpvPlayerAdapter"
 
-/** Generic source error, the value ExoPlayer uses for IO_UNSPECIFIED. */
 private const val MPV_ERROR_CODE = 2000
 
-/** A precached handle older than this may hold an expired stream URL (they last about six hours). */
 private const val PRECACHE_MAX_AGE_MS = 3 * 60 * 60 * 1000L
 
-/** Error recoveries (reload on a fresh URL) allowed for one track before the error is reported. */
 private const val MAX_RECOVERIES_PER_TRACK = 4
 
-/** Playback this far past where a track was started counts as "audio is really playing". */
 private const val CONFIRM_PROGRESS_MS = 500L
 
-/**
- * mpv (libmpv via JNA) implementation of [MediaPlayerInterface].
- *
- * Structural port of `VlcPlayerAdapter`: the queue, shuffle order, repeat modes, precaching,
- * URL resolution and 403 retry handling are carried over unchanged. Only the native-call layer
- * differs — see [MpvPlayer] for the vlcj → libmpv mapping.
- *
- * Differences from the VLC backend that are inherent to mpv rather than choices:
- *  - There is no factory object; each [MpvPlayer] owns its own `mpv_handle`, so there is nothing
- *    to release globally in [release].
- *  - Events are pulled on a per-handle pump thread instead of pushed from a native thread, so the
- *    "never call stop()/release() from inside a callback" hazard that VLC has does not exist here.
- */
 class MpvPlayerAdapter(
     private val coroutineScope: CoroutineScope,
     private val dataStoreManager: DataStoreManager,
     private val streamRepository: StreamRepository,
 ) : MediaPlayerInterface {
-    // Internal state enum for proper state machine
     private enum class InternalState {
         IDLE,
         PREPARING,
@@ -81,12 +63,10 @@ class MpvPlayerAdapter(
         }
     }
 
-    // ========== State Management ==========
     private val listeners = mutableListOf<MediaPlayerListener>()
 
     @Volatile
     private var currentPlayer: MpvPlayer? = null
-
 
     @Volatile
     private var internalState = InternalState.IDLE
@@ -95,25 +75,13 @@ class MpvPlayerAdapter(
     private var internalPlayWhenReady = true
 
     @Volatile
-    /**
-     * A seek requested while no handle existed yet, tagged with the track it was meant for.
-     *
-     * [seekTo] used to drop such a request on the floor — `currentPlayer?.let { }` with a null
-     * player is a no-op — while still having moved [cachedPosition] to the target. The bar showed
-     * the middle of the track and playback began at zero. The tag means a request cannot leak onto
-     * whatever track happens to load next.
-     */
     private var pendingSeek: Pair<Int, Long>? = null
 
     private var internalVolume = 1.0f
 
-    /** Sleep-timer fade gain, kept apart from [internalVolume] so the user's level survives it. */
     @Volatile
     private var internalSleepFadeFactor = 1.0f
 
-    /**
-     * Pitch shift the user asked for, 1.0 = unchanged.
-     */
     @Volatile
     private var internalPlaybackPitch = 1.0f
 
@@ -126,7 +94,6 @@ class MpvPlayerAdapter(
     @Volatile
     private var internalPlaybackSpeed = 1.0f
 
-    // Position tracking
     @Volatile
     private var cachedPosition = 0L
 
@@ -139,10 +106,8 @@ class MpvPlayerAdapter(
     @Volatile
     private var cachedIsLoading = false
 
-    // Position update job (fallback polling of time and length)
     private var positionUpdateJob: Job? = null
 
-    // Precaching system
     private class PrecachedPlayer(
         val player: MpvPlayer,
         val mediaItem: GenericMediaItem,
@@ -150,14 +115,9 @@ class MpvPlayerAdapter(
     ) {
         private val createdAtMs = System.currentTimeMillis()
 
-        /** Set by the handle's own listener: its load failed, or it ran to the end, while it waited. */
         @Volatile
         var failed = false
 
-        /**
-         * A handle whose load failed sits idle, and unpausing it "played" the track at 0:00 forever.
-         * One that has waited for hours holds an expired URL.
-         */
         fun isUsable(): Boolean = !failed && System.currentTimeMillis() - createdAtMs < PRECACHE_MAX_AGE_MS
     }
 
@@ -166,41 +126,32 @@ class MpvPlayerAdapter(
     private val maxPrecacheCount = 2
     private var precacheJob: Job? = null
 
-    // Retry system - mirrors Android ExoPlayerAdapter retry logic
     private var retryCount = 0
     private var retryVideoId: String? = null
     private val maxRetryCount = 2
 
-    // retryCount starts again each time the track plays; this one only on another track.
     private var recoveryCount = 0
     private var recoveryVideoId: String? = null
 
-    /** Position the current track was started at, and whether it has been seen to move past it. */
     @Volatile
     private var confirmFromMs = 0L
 
     @Volatile
     private var playbackConfirmed = false
 
-    // Playlist management
     private val playlist = mutableListOf<GenericMediaItem>()
     private var localCurrentMediaItemIndex = -1
 
-    // Shuffle management
     private var shuffleIndices = mutableListOf<Int>()
     private var shuffleOrder = mutableListOf<Int>()
 
-    // Loading management
     private var currentLoadJob: Job? = null
 
     fun getCurrentPlayer(): MpvPlayer? = currentPlayer
 
-    // ========== Playback Source ==========
     private data class PlayableSource(
         val url: String,
     )
-
-    // ========== Playback Control ==========
 
     override fun play() {
         Logger.d(TAG, "play() called (current state: $internalState)")
@@ -208,9 +159,6 @@ class MpvPlayerAdapter(
             when (internalState) {
                 InternalState.READY, InternalState.ENDED, InternalState.PAUSED -> {
                     currentPlayer?.let { player ->
-                        // At the end of the queue the handle is parked at EOF, and telling mpv to
-                        // play there does nothing — the press would look ignored. Rewind first so
-                        // the last track replays, which is what the Play button is offering.
                         if (internalState == InternalState.ENDED) {
                             Logger.d(TAG, "Play: replaying from the start after end of queue")
                             player.seekTo(0L)
@@ -238,8 +186,6 @@ class MpvPlayerAdapter(
                 }
 
                 InternalState.ERROR -> {
-                    // After a failed track the handle holds nothing playable, so Play used to do
-                    // nothing at all. Load the track again where it stopped, on a fresh URL.
                     val index = localCurrentMediaItemIndex
                     val videoId = playlist.getOrNull(index)?.mediaId
                     if (videoId != null) {
@@ -281,10 +227,6 @@ class MpvPlayerAdapter(
                     }
                 }
             } finally {
-                // Playback has genuinely stopped by this point, so a sleep-timer attenuation has
-                // served its purpose and is cleared here rather than by the caller, which cannot
-                // tell when that happened: pause() only queues this coroutine. In `finally` so a
-                // failure above cannot leave the mixer attenuated with nothing to restore it.
                 if (internalSleepFadeFactor < 1f) {
                     internalSleepFadeFactor = 1f
                     forEachLiveHandle { it.setSleepFadeVolume(100) }
@@ -305,28 +247,18 @@ class MpvPlayerAdapter(
     }
 
     override fun seekTo(positionMs: Long) {
-        // Updated here rather than inside the coroutine so the UI reflects the seek immediately.
         cachedPosition = positionMs
-        // The mpv call hops to the player thread, same as the volume setters: reaching into a
-        // handle from the caller's thread races the release that happens on the player thread, and
-        // a handle destroyed between the isReleased check and the native call is a use-after-free.
         coroutineScope.launch {
             val player = currentPlayer
             if (player == null) {
-                // Mid-load: the handle is released and rebuilt, so there is nothing to seek yet.
-                // Hand the position to the load instead of losing it.
                 pendingSeek = localCurrentMediaItemIndex to positionMs
                 Logger.d(TAG, "Seek deferred to load: $positionMs")
             } else {
                 try {
                     player.seekTo(positionMs)
                     Logger.d(TAG, "Seeked to position: $positionMs")
-                    // Same contract as the Android adapter: every seek is reported, whoever asked
-                    // for it (seek bar, lyric tap, ±5 s, Control Center, SponsorBlock).
                     notifyListeners { onSeeked(positionMs) }
                 } catch (e: Exception) {
-                    // Same reasoning as the null case: the bar has already moved, so the position
-                    // has to be applied somewhere or the two stay disagreeing.
                     pendingSeek = localCurrentMediaItemIndex to positionMs
                     Logger.e(TAG, "Seek exception, deferred to load: ${e.message}", e)
                 }
@@ -343,7 +275,6 @@ class MpvPlayerAdapter(
         coroutineScope.launch {
             val shouldPlay = internalPlayWhenReady
 
-            // Cancel any ongoing load
             currentLoadJob?.cancel()
 
             localCurrentMediaItemIndex = mediaItemIndex
@@ -375,15 +306,11 @@ class MpvPlayerAdapter(
 
     private fun previous(andPlay: Boolean) {
         coroutineScope.launch {
-            // Standard music player behavior:
-            // Position > 3s → seek to start of current track
-            // Position <= 3s → go to previous track
             val positionThresholdMs = 3000L
             if (cachedPosition > positionThresholdMs || !hasPreviousMediaItem()) {
                 Logger.d(TAG, "seekToPrevious: pos=${cachedPosition}ms — seeking to start")
                 currentPlayer?.seekTo(0)
                 cachedPosition = 0
-                // Same track, so nothing reloads: a paused player has to be told to play.
                 if (andPlay) play()
             } else {
                 Logger.d(TAG, "seekToPrevious: pos=${cachedPosition}ms <= ${positionThresholdMs}ms — going to previous track")
@@ -392,8 +319,6 @@ class MpvPlayerAdapter(
         }
     }
 
-    // A listener's skip plays the track it lands on (see MediaPlayerInterface.skipToNext). The
-    // intent alone is enough for a track change: seekTo(index) loads with internalPlayWhenReady.
     override fun skipToNext() {
         internalPlayWhenReady = true
         seekToNext()
@@ -411,8 +336,6 @@ class MpvPlayerAdapter(
 
     override fun seekToPreviousMediaItem() {
         coroutineScope.launch {
-            // Always go to the previous track — skips the 3-second "seek to start"
-            // rule used by seekToPrevious().
             if (hasPreviousMediaItem()) {
                 val prevIndex = getPreviousMediaItemIndex()
                 Logger.d(TAG, "seekToPreviousMediaItem: jumping to previous index=$prevIndex")
@@ -423,12 +346,6 @@ class MpvPlayerAdapter(
         }
     }
 
-    /**
-     * An empty playlist that gains an item points at it, as ExoPlayer's own does. clearMediaItems()
-     * leaves the index at -1 and nothing else moves it, so prepare() loaded nothing and Add to queue
-     * with nothing loaded (fresh start, or after closing the mini player) never played.
-     * Port of maxrave-dev/core 9a788aca.
-     */
     private fun pointAtFirstItemIfUnset() {
         if (localCurrentMediaItemIndex < 0 && playlist.isNotEmpty()) localCurrentMediaItemIndex = 0
     }
@@ -440,8 +357,6 @@ class MpvPlayerAdapter(
             }
         }
     }
-
-    // ========== Media Item Management ==========
 
     override fun setMediaItem(mediaItem: GenericMediaItem) {
         coroutineScope.launch {
@@ -516,10 +431,6 @@ class MpvPlayerAdapter(
 
     override fun removeMediaItem(index: Int) {
         coroutineScope.launch {
-            // Bounds check MUST run inside the launch, on the same player thread/queue as removeAt.
-            // If it sits outside (on the caller thread), another queued op (clearMediaItems/setMediaItem)
-            // can empty the playlist between the check and removeAt → IndexOutOfBounds (issue #2156 /
-            // SIMPMUSIC-DESKTOP-3Y: "Index 0 out of bounds for length 0").
             if (index !in playlist.indices) return@launch
             val track = playlist.removeAt(index)
 
@@ -564,8 +475,6 @@ class MpvPlayerAdapter(
         toIndex: Int,
     ) {
         coroutineScope.launch {
-            // Same reason as removeMediaItem (issue #2156): re-check bounds inside the launch, since the
-            // playlist can be emptied by another queued op between an outside-launch guard and removeAt.
             if (fromIndex !in playlist.indices || toIndex !in playlist.indices) return@launch
             val item = playlist.removeAt(fromIndex)
             playlist.add(toIndex, item)
@@ -643,7 +552,6 @@ class MpvPlayerAdapter(
             val replaced = playlist[index]
             playlist[index] = mediaItem
 
-            // The handle prepared for the item that was here, not for the one replacing it.
             precachedPlayers.remove(replaced.mediaId)?.let { cached ->
                 cleanupPlayerInternal(cached.player)
             }
@@ -677,8 +585,6 @@ class MpvPlayerAdapter(
         } else {
             shuffledIndex
         }
-
-    // ========== Playback State Properties ==========
 
     override val isPlaying: Boolean
         get() = internalState == InternalState.PLAYING
@@ -723,13 +629,6 @@ class MpvPlayerAdapter(
                 InternalState.PAUSED -> PlayerConstants.STATE_READY
             }
 
-    // ========== Navigation ==========
-
-    /**
-     * Repeat-one loops a song that ends by itself; it does not trap Next and Previous on it.
-     * Navigation treats it as repeat off. It used to make Next, a thumbs-down and the
-     * explicit-content skip replay the same song.
-     */
     private val navigationRepeatMode: Int
         get() = if (internalRepeatMode == PlayerConstants.REPEAT_MODE_ONE) PlayerConstants.REPEAT_MODE_OFF else internalRepeatMode
 
@@ -824,8 +723,6 @@ class MpvPlayerAdapter(
             }
         }
 
-    // ========== Playback Modes ==========
-
     override var shuffleModeEnabled: Boolean
         get() = internalShuffleModeEnabled
         set(value) {
@@ -864,10 +761,7 @@ class MpvPlayerAdapter(
         set(value) {
             internalPlaybackSpeed = value.speed
             internalPlaybackPitch = value.pitch
-            // Hopped to the player thread for the same reason as seekTo and the volume setters.
             coroutineScope.launch {
-                // Every live handle, not just the current one: these are playback-wide settings, so
-                // the precached handles have to carry them too or the next track starts back at 1.0x.
                 forEachLiveHandle {
                     try {
                         it.setRate(value.speed)
@@ -879,20 +773,12 @@ class MpvPlayerAdapter(
             }
         }
 
-    // ========== Audio Settings ==========
-
     override var volume: Float
         get() = internalVolume
         set(value) {
             Logger.w(TAG, "Setting volume to $value")
             internalVolume = value.coerceIn(0f, 1f)
-            // Same hop as sleepFadeFactor below, and for the same reason: writing mpv properties
-            // straight from the caller's thread races the player thread that releases handles, and
-            // a handle destroyed between the isReleased check and the property write is a
-            // use-after-free. The field itself is set synchronously so the getter reads back what
-            // was just written; only the mpv calls are deferred.
             coroutineScope.launch {
-                // mpv volume: 0-100 (100 = unattenuated). Map our 0.0-1.0 to 0-100.
                 val percent = (internalVolume * 100).toInt()
                 forEachLiveHandle { it.setMasterVolume(percent) }
             }
@@ -903,50 +789,17 @@ class MpvPlayerAdapter(
         get() = internalSleepFadeFactor
         set(value) {
             internalSleepFadeFactor = value.coerceIn(0f, 1f)
-            // Hop onto the player thread instead of writing from the caller's — the sleep timer
-            // ramps this from Main. Three separate things depend on that hop:
-            //  - [MpvPlayer.applyVolume] reads three fields and issues two native calls, so a
-            //    second writer can interleave and publish a stale combination.
-            //  - A handle can be released between its `isReleased` check and mpv_set_property,
-            //    which is a use-after-free that has already produced a SIGSEGV here once (see the
-            //    join comment in MpvPlayer.release). Releases happen on this same thread, so
-            //    sharing it removes the window entirely.
-            //  - pause() queues onto this same single-threaded scope. Going through it is what
-            //    guarantees the timer's closing restore to 1f lands *after* playback has actually
-            //    stopped, instead of briefly re-opening the mixer over the last of the audio.
             coroutineScope.launch {
-                // Re-read rather than capture: if the queue backs up, the pending writes collapse
-                // onto the newest value instead of replaying a stale ramp.
                 val percent = (internalSleepFadeFactor * 100).toInt()
                 forEachLiveHandle { it.setSleepFadeVolume(percent) }
             }
         }
 
-    /**
-     * Every handle that can currently reach the audio device.
-     *
-     * `ao-volume` is not per-handle: on Windows they all land in the process' default WASAPI
-     * session (mpv passes a NULL AudioSessionGuid), so one ISimpleAudioVolume covers the lot, and
-     * a handle left holding an older level re-asserts it on its own AUDIO_RECONFIG and overwrites
-     * everyone else's. Missing one is therefore not "that handle stays wrong", it is "that handle
-     * silently undoes the others".
-     */
     private fun forEachLiveHandle(action: (MpvPlayer) -> Unit) {
         currentPlayer?.let(action)
         precachedPlayers.values.forEach { action(it.player) }
     }
 
-    /**
-     * Push the playback-wide settings onto a handle that is about to become audible.
-     *
-     * A fresh mpv handle starts at 100/100 volume and 1.0x speed, so anything already in force has
-     * to be re-asserted here — otherwise a fade in progress jumps back to full volume mid-ramp, and
-     * a track started while the user has speed turned up plays at normal speed instead.
-     *
-     * The two volume levels go down in one call: setting them separately would publish a
-     * full-volume master onto the shared `ao-volume` before the fade is applied, which every other
-     * handle hears.
-     */
     private fun MpvPlayer.applyPlaybackLevels() {
         setVolumeLevels(
             master = (internalVolume * 100).toInt(),
@@ -956,16 +809,10 @@ class MpvPlayerAdapter(
         applyPitch()
     }
 
-    /**
-     * Put the user's pitch shift on this handle, if pitch is available at all right now.
-     */
     private fun MpvPlayer.applyPitch() {
         if (internalPlaybackPitch == 1.0f) {
             clearAudioFilters()
         } else {
-            // rubberband also absorbs the tempo change once present, so setRate keeps working.
-            // Only drive the shift if mpv actually took the filter — a build without rubberband
-            // rejects it, and af-command against a filter that is not in the chain fails every time.
             if (installPitchShift()) {
                 setPitchScale(internalPlaybackPitch)
             } else {
@@ -976,8 +823,6 @@ class MpvPlayerAdapter(
 
     override var skipSilenceEnabled: Boolean = false
 
-    // ========== Listener Management ==========
-
     override fun addListener(listener: MediaPlayerListener) {
         listeners.add(listener)
     }
@@ -985,8 +830,6 @@ class MpvPlayerAdapter(
     override fun removeListener(listener: MediaPlayerListener) {
         listeners.remove(listener)
     }
-
-    // ========== Release Resources ==========
 
     override fun release() {
         currentLoadJob?.cancel()
@@ -998,18 +841,8 @@ class MpvPlayerAdapter(
         clearAllPrecacheInternal()
         listeners.clear()
 
-        // No factory to release: libmpv has no factory concept, each handle is destroyed by its
-        // own MpvPlayer.release() via mpv_terminate_destroy().
     }
 
-    // ========== Internal Methods ==========
-
-    /**
-     * Transition internal state and notify listeners.
-     * Listeners are called on the service thread (not Main) because
-     * JvmMediaPlayerHandlerImpl uses thread-safe StateFlow updates
-     * and contains runBlocking calls that would deadlock on Main.
-     */
     private fun transitionToState(
         newState: InternalState,
         emitError: Boolean = true,
@@ -1021,7 +854,6 @@ class MpvPlayerAdapter(
 
         Logger.d(TAG, "State transition: $oldState -> $newState (playWhenReady=$internalPlayWhenReady)")
 
-        // Query duration from mpv
         currentPlayer?.let { player ->
             val dur = player.length
             if (dur > 0L) {
@@ -1029,8 +861,6 @@ class MpvPlayerAdapter(
             }
         }
 
-        // Notify listeners on the service thread — safe because JvmMediaPlayerHandlerImpl
-        // uses thread-safe StateFlow/MutableStateFlow for all state updates.
         when (newState) {
             InternalState.PAUSED -> {
                 listeners.forEach { it.onPlaybackStateChanged(PlayerConstants.STATE_READY) }
@@ -1079,9 +909,6 @@ class MpvPlayerAdapter(
             InternalState.ERROR -> {
                 listeners.forEach { it.onPlaybackStateChanged(PlayerConstants.STATE_IDLE) }
                 listeners.forEach { it.onIsPlayingChanged(false) }
-                // A generic report for the load failures that have no error of their own. A caller
-                // that already reported the real error passes false: a second report counted as a
-                // second failure, and skipped a good track.
                 if (emitError) {
                     listeners.forEach {
                         it.onPlayerError(
@@ -1097,32 +924,16 @@ class MpvPlayerAdapter(
         }
     }
 
-    /**
-     * Give the C allocator's free pages back to the OS now that playback has gone quiet.
-     *
-     * Only ever called from the PAUSED / IDLE transitions: the underlying call walks the heap while
-     * holding the allocator lock, so anything that mallocs — mpv's decoder threads included — stalls
-     * until it returns. See [MemoryTrimmer] for the measurements that motivate this.
-     *
-     * Dispatched off the single service thread because that thread also drives the transport; a
-     * heap walk there would show up as a laggy pause button. [MemoryTrimmer] throttles itself, so
-     * firing this on every pause is cheap.
-     */
     private fun trimNativeMemory(reason: String) {
         coroutineScope.launch(Dispatchers.IO) {
             MemoryTrimmer.trim(reason)
         }
     }
 
-    /**
-     * Load and play track - MUST run on coroutineScope
-     */
     private fun loadAndPlayTrackInternal(
         index: Int,
         startPositionMs: Long,
         shouldPlay: Boolean,
-        // False when the same track is loaded again to recover from an error: announcing it as a
-        // new item counted every recovery as another listen.
         announce: Boolean = true,
     ) {
         if (index !in playlist.indices) return
@@ -1141,8 +952,6 @@ class MpvPlayerAdapter(
                 try {
                     transitionToState(InternalState.PREPARING)
 
-                    // Notify media item transition (fire-and-forget to avoid
-                    // blocking the service thread with runBlocking inside handler)
                     if (announce) {
                         notifyListeners {
                             onMediaItemTransition(
@@ -1152,14 +961,9 @@ class MpvPlayerAdapter(
                         }
                     }
 
-                    // Detach event listener from old player IMMEDIATELY before
-                    // spending time on URL extraction. This prevents stale events
-                    // (error/finished) from the old player seeing the updated
-                    // playlist/index and interfering with the new track load.
                     cleanupEventListenerInternal()
                     stopPositionUpdates()
 
-                    // Extract URL on IO thread (network), mpv native calls stay on service thread
                     val cachedPrecache =
                         precachedPlayers.remove(videoId)?.let { cached ->
                             if (cached.isUsable()) {
@@ -1199,15 +1003,12 @@ class MpvPlayerAdapter(
                         return@launch
                     }
 
-                    // mpv native calls on the service thread
                     cleanupCurrentPlayerInternal()
                     currentPlayer = player
                     setupPlayerEventsInternal(player)
                     player.applyPlaybackLevels()
 
                     if (cachedPrecache != null) {
-                        // The precached handle already has the file loaded and held paused;
-                        // unpausing is all that is needed (VLC needed an explicit play() here too).
                         if (shouldPlay) {
                             player.play()
                         }
@@ -1223,9 +1024,7 @@ class MpvPlayerAdapter(
                         }
                     }
 
-                    // A seek the user asked for while this track was still loading wins over the
-                    // position the load was started with — it is the newer intent. Read and cleared
-                    // unconditionally so a request for a track that never loads cannot linger.
+                    // Read and cleared unconditionally so a request for a track that never loads cannot linger.
                     val deferred = pendingSeek?.takeIf { it.first == index }?.second
                     pendingSeek = null
                     val resumeAt = deferred ?: startPositionMs
@@ -1237,15 +1036,10 @@ class MpvPlayerAdapter(
                         cachedPosition = resumeAt
                     }
 
-                    // Always transition to READY first so UI receives
-                    // isLoading=false via STATE_READY. The READY handler
-                    // will auto-call play() when internalPlayWhenReady is true.
                     transitionToState(InternalState.READY)
 
-                    // Start position updates
                     startPositionUpdates()
 
-                    // Trigger precaching
                     triggerPrecachingInternal()
                 } catch (e: Exception) {
                     if (e !is CancellationException) {
@@ -1256,40 +1050,18 @@ class MpvPlayerAdapter(
             }
     }
 
-    /** The URL handed to `loadfile`: the audio stream, or a downloaded file's path. */
     private fun buildPlaybackUrl(source: PlayableSource): String = source.url
 
-    /**
-     * Create an audio-only mpv player instance (`vid=no`/`vo=null`), so no video stream is ever
-     * decoded or fetched.
-     */
     private fun createMediaPlayerInternal(
         source: PlayableSource,
         mediaId: String,
     ): MpvPlayer? {
-        // VLC used --network-caching=10000.
         val player = MpvPlayer.create(networkCacheSeconds = 10)
-        // A fresh handle starts at masterPercent = 100, and every handle shares a
-        // single `ao-volume` because they all register under the same
-        // audio-client-name. The handle's first AUDIO_RECONFIG therefore pushes
-        // that default 100 onto the shared mixer — audible as a jump to full
-        // volume, and for a precache handle it lands while the previous track is
-        // still playing. Seeding the user's level here means the value
-        // AUDIO_RECONFIG re-applies is already the right one, whether or not the
-        // audio output exists yet.
         player?.setMasterVolume((internalVolume * 100).toInt())
         return player
     }
 
-    /**
-     * Setup mpv event listeners for a player.
-     *
-     * Unlike VLC — whose callbacks arrive on a native thread where calling stop()/release()
-     * deadlocks — mpv events are pulled by [MpvPlayer]'s own pump thread. Work is still dispatched
-     * to [coroutineScope] so the state machine stays serialized on one thread.
-     */
     private fun setupPlayerEventsInternal(player: MpvPlayer) {
-        // Remove old listener
         cleanupEventListenerInternal()
 
         val listener =
@@ -1297,7 +1069,6 @@ class MpvPlayerAdapter(
                 override fun finished(player: MpvPlayer) {
                     Logger.d(TAG, "End of stream reached")
                     coroutineScope.launch {
-                        // Ignore events from a player that is no longer current
                         if (currentPlayer !== player) {
                             Logger.w(TAG, "Ignoring finished() from stale player")
                             return@launch
@@ -1310,16 +1081,12 @@ class MpvPlayerAdapter(
                 override fun error(player: MpvPlayer) {
                     Logger.e(TAG, "mpv playback error")
                     coroutineScope.launch {
-                        // Ignore errors from a player that is no longer current.
-                        // This can happen when the old player fires error() after
-                        // a new track has started loading (playlist/index already updated).
                         if (currentPlayer !== player) {
                             Logger.w(TAG, "Ignoring error() from stale player")
                             return@launch
                         }
                         val currentVideoId = playlist.getOrNull(localCurrentMediaItemIndex)?.mediaId
                         if (currentVideoId != null) {
-                            // Reset retry count for new track
                             if (retryVideoId != currentVideoId) {
                                 retryVideoId = currentVideoId
                                 retryCount = 0
@@ -1328,16 +1095,11 @@ class MpvPlayerAdapter(
                                 retryCount++
                                 recoveryCount++
                                 Logger.w(TAG, "Retrying playback (attempt $retryCount/$maxRetryCount) for $currentVideoId")
-                                // Where it failed, not 0:00: an expired URL after a long pause used
-                                // to restart the song from the beginning.
                                 val resumePositionMs = cachedPosition.coerceAtLeast(0L)
                                 try {
-                                    // Invalidate cached format so fresh URL is fetched
                                     streamRepository.invalidateFormat(currentVideoId)
                                     streamRepository.invalidateFormat("${MERGING_DATA_TYPE.VIDEO}$currentVideoId")
-                                    // Evict stale precache
                                     precachedPlayers.remove(currentVideoId)?.player?.release()
-                                    // Reload the track
                                     loadAndPlayTrackInternal(localCurrentMediaItemIndex, resumePositionMs, shouldPlay = true, announce = false)
                                     return@launch
                                 } catch (e: Exception) {
@@ -1348,9 +1110,6 @@ class MpvPlayerAdapter(
                             Logger.e(TAG, "Max retries ($maxRetryCount) exhausted for $currentVideoId")
                         }
                         val error =
-                            // Not a timeout: mpv does not say why it failed, so the shared policy
-                            // decides from the connection (offline pauses and waits for it, online
-                            // moves past the track). As a timeout it always paused for good.
                             PlayerError(
                                 errorCode = MPV_ERROR_CODE,
                                 errorCodeName = "MPV_ERROR",
@@ -1366,7 +1125,6 @@ class MpvPlayerAdapter(
                         if (currentPlayer !== player) return@launch
                         if (internalState != InternalState.PLAYING) {
                             transitionToState(InternalState.PLAYING)
-                            // Reset retry counter on successful playback
                             retryCount = 0
                             retryVideoId = null
                         }
@@ -1408,14 +1166,10 @@ class MpvPlayerAdapter(
                     player: MpvPlayer,
                     newCache: Float,
                 ) {
-                    // Update buffered position first
                     if (cachedDuration > 0) {
                         cachedBufferedPosition = (cachedDuration * newCache / 100f).toLong()
                     }
 
-                    // Only report loading when buffer is actually behind the playhead
-                    // AND the player intends to play. Ignore buffering while paused
-                    // to avoid showing a loading spinner when user has explicitly paused.
                     val isStalled = newCache < 100f && cachedBufferedPosition <= cachedPosition && internalPlayWhenReady
                     if (isStalled != cachedIsLoading) {
                         Logger.w(TAG, "isLoading changed: $cachedIsLoading -> $isStalled")
@@ -1432,16 +1186,10 @@ class MpvPlayerAdapter(
         player.setEventListener(listener)
     }
 
-    /**
-     * Clean up event listener from current player
-     */
     private fun cleanupEventListenerInternal() {
         currentPlayer?.setEventListener(null)
     }
 
-    /**
-     * Cleanup a player instance
-     */
     private fun cleanupPlayerInternal(player: MpvPlayer) {
         try {
             player.release()
@@ -1450,9 +1198,6 @@ class MpvPlayerAdapter(
         }
     }
 
-    /**
-     * Cleanup current player
-     */
     private fun cleanupCurrentPlayerInternal() {
         stopPositionUpdates()
         cleanupEventListenerInternal()
@@ -1461,9 +1206,6 @@ class MpvPlayerAdapter(
         currentPlayer = null
     }
 
-    /**
-     * Handle track end
-     */
     private fun handleTrackEndInternal() {
         when (internalRepeatMode) {
             PlayerConstants.REPEAT_MODE_ONE -> {
@@ -1478,12 +1220,6 @@ class MpvPlayerAdapter(
         }
     }
 
-    // ========== Position Updates ==========
-
-    /**
-     * Start position updates: a periodic poll of time and length, backing up mpv's observed
-     * `time-pos`.
-     */
     private fun startPositionUpdates() {
         stopPositionUpdates()
 
@@ -1504,10 +1240,9 @@ class MpvPlayerAdapter(
                             }
                         }
                     } catch (_: Exception) {
-                        // Ignore query errors
                     }
 
-                    delay(200) // Update every 200ms
+                    delay(200)
                 }
             }
     }
@@ -1517,9 +1252,6 @@ class MpvPlayerAdapter(
         positionUpdateJob = null
     }
 
-    /**
-     * Trigger precaching
-     */
     private fun triggerPrecachingInternal() {
         if (!precacheEnabled || playlist.isEmpty()) return
 
@@ -1528,14 +1260,9 @@ class MpvPlayerAdapter(
         precacheJob =
             coroutineScope.launch {
                 try {
-                    // What plays next, in the order it will play: with shuffle on, index + 1 is
-                    // almost never the next track, so those handles were built and thrown away.
                     val upcoming = upcomingIndices(maxPrecacheCount)
                     val indicesToPrecache = upcoming.filter { !precachedPlayers.containsKey(playlist.getOrNull(it)?.mediaId) }
 
-                    // Handles precached for tracks that are no longer next, that failed, or whose
-                    // URL has aged out are released. Left alone they stayed alive, paused, for the
-                    // whole session, and every volume change was pushed to each of them.
                     val wanted = upcoming.mapNotNull { playlist.getOrNull(it)?.mediaId }.toSet()
                     precachedPlayers.entries.removeIf { (videoId, cached) ->
                         val stale = (videoId !in wanted && videoId != currentMediaItem?.mediaId) || !cached.isUsable()
@@ -1548,21 +1275,15 @@ class MpvPlayerAdapter(
 
                         val mediaItem = playlist.getOrNull(idx) ?: continue
 
-                        // Network extraction on IO, mpv native calls on the service thread
                         val source = withContext(Dispatchers.IO) { extractPlayableUrl(mediaItem) }
 
                         if (source != null && source.url.isNotEmpty()) {
                             try {
-                                // mpv has no separate "parse without playing" call like vlcj's
-                                // media().prepare(); loading held at pause=yes is the equivalent,
-                                // and additionally warms the demuxer cache.
                                 val player = createMediaPlayerInternal(source, mediaItem.mediaId)
                                 if (player == null) {
                                     Logger.w(TAG, "Precaching skipped for $idx: could not create mpv player")
                                 } else {
                                     val precached = PrecachedPlayer(player, mediaItem, source)
-                                    // Nothing else listens to a waiting handle, so a failed load
-                                    // would go unseen until the track was "played".
                                     player.setEventListener(
                                         object : MpvPlayerEventAdapter() {
                                             override fun error(player: MpvPlayer) {
@@ -1594,7 +1315,6 @@ class MpvPlayerAdapter(
             }
     }
 
-    /** The next [count] playlist indices in play order (shuffle and repeat-all included). */
     private fun upcomingIndices(count: Int): List<Int> {
         val current = localCurrentMediaItemIndex
         val shuffled = internalShuffleModeEnabled && shuffleOrder.isNotEmpty()
@@ -1637,18 +1357,11 @@ class MpvPlayerAdapter(
         precachedPlayers.clear()
     }
 
-    /**
-     * Dispatch listener notifications on the service thread.
-     * Listeners (JvmMediaPlayerHandlerImpl) use thread-safe StateFlow updates
-     * and contain runBlocking calls that would deadlock on Main/Swing EDT.
-     */
     private fun notifyListeners(block: MediaPlayerListener.() -> Unit) {
         coroutineScope.launch {
             listeners.forEach(block)
         }
     }
-
-    // ========== Shuffle Management ==========
 
     private fun createShuffleOrder() {
         if (playlist.isEmpty()) {
@@ -1731,14 +1444,10 @@ class MpvPlayerAdapter(
         }
     }
 
-    // ========== URL Extraction ==========
-
-    /** The audio URL for [mediaItem]: a downloaded file first, then the format API, then stream extraction. */
     private suspend fun extractPlayableUrl(mediaItem: GenericMediaItem): PlayableSource? {
         Logger.w(TAG, "Extracting playable URL for ${mediaItem.mediaId}")
         val videoId = mediaItem.mediaId
 
-        // Check downloads first
         val downloadFiles =
             File(getDownloadPath()).listFiles()?.filter {
                 it.name.contains(videoId)
@@ -1746,16 +1455,12 @@ class MpvPlayerAdapter(
         if (!downloadFiles.isNullOrEmpty()) {
             val audioFile = downloadFiles.firstOrNull { !it.name.contains(MERGING_DATA_TYPE.VIDEO) }
             if (audioFile != null && audioFile.length() > 0 && audioFile.exists()) {
-                // mpv accepts absolute file paths directly
                 return PlayableSource(url = audioFile.absolutePath)
             }
         }
 
-        // Try the new format API
         streamRepository.getNewFormat(videoId).lastOrNull()?.let { stored ->
             val audioUrl = stored.audioUrl
-            // A stored URL of another quality (the setting was changed since) is not reused: it
-            // used to play at the old quality for as long as the URL lived, about six hours.
             val wantedQuality = streamRepository.deliversQuality(stored.itag, streamRepository.wantedAudioItag(dataStoreManager))
             if (!audioUrl.isNullOrEmpty() && wantedQuality && streamRepository.is403Url(audioUrl).firstOrNull() == false) {
                 Logger.w("Stream", "Audio from format")
@@ -1763,7 +1468,6 @@ class MpvPlayerAdapter(
             }
         }
 
-        // Fallback to stream extraction
         val audioUrl =
             streamRepository
                 .getStream(

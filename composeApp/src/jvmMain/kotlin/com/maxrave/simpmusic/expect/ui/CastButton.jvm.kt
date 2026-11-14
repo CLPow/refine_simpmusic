@@ -9,6 +9,5 @@ actual fun PlatformCastButton(
     modifier: Modifier,
     tint: Color,
 ) {
-    // No-op: desktop has no Google Cast sender.
 }
 

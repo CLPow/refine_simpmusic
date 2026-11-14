@@ -34,6 +34,5 @@ interface SearchRepository {
 
     fun getSuggestQuery(query: String): Flow<Resource<SearchSuggestions>>
 
-    /** YouTube Music's unfiltered search page: top result, chips and ranked results, one request. */
     fun getSearchSummary(query: String): Flow<Resource<SearchSummary>>
 }

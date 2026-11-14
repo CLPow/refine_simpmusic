@@ -80,8 +80,6 @@ fun LoginScreen(
 
     val state = rememberWebViewState()
 
-    // The page reports reaching the main page more than once (redirects, page-finished), and each
-    // report used to add the account again and navigate up again, popping the page beneath too.
     var handled by remember { mutableStateOf(false) }
 
     LaunchedEffect(state) {
@@ -98,12 +96,10 @@ fun LoginScreen(
         }
     }
 
-    // Hide bottom navigation when entering this screen
     LaunchedEffect(Unit) {
         hideBottomNavigation()
     }
 
-    // Show bottom navigation when leaving this screen
     DisposableEffect(Unit) {
         onDispose {
             showBottomNavigation()
@@ -112,8 +108,6 @@ fun LoginScreen(
 
     Box(modifier = Modifier.fillMaxSize().hazeSource(state = hazeState)) {
         Column {
-            // Room for the top bar: the status bar plus the bar itself (the Scaffold's own top
-            // padding is 0 here, so the status bar used to cover the top of the page).
             Spacer(Modifier.windowInsetsPadding(WindowInsets.statusBars).height(64.dp))
             val loading = state.value as? com.maxrave.simpmusic.expect.ui.WebViewState.Loading
             if (loading != null) {
@@ -124,7 +118,6 @@ fun LoginScreen(
                     trackColor = Color.Transparent,
                 )
             }
-            // WebView for YouTube Music login
             PlatformWebView(
                 state,
                 Config.LOG_IN_URL,
@@ -178,7 +171,6 @@ fun LoginScreen(
             }
         }
 
-        // Top App Bar with haze effect
         TopAppBar(
             modifier =
                 Modifier

@@ -8,31 +8,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-// desktopApp — JVM application module for SimpMusic Desktop.
-//
-// Per JetBrains 2026 KMP guidance (AGP 9 + new default structure), the
-// platform-app entry points live in dedicated modules separate from the
-// shared KMP library. This module owns:
-//
-//   * the JVM main() entry
-//   * compose.desktop.application packaging (jpackage path, still used
-//     until Conveyor cutover lands in Task 14)
-//   * desktop packaging pipelines (Conveyor, AppImage wrapping)
-//   * desktop-only UI (CustomTitleBar, MiniPlayerWindow, CrashDialog, etc.)
-//
-// composeApp remains a pure KMP library — its src/jvmMain only carries the
-// expect/actual implementations the shared code needs on the JVM.
-//
-// Refs:
-//   https://blog.jetbrains.com/kotlin/2026/05/new-kmp-default-structure/
-//   https://github.com/HaroonBsf/kmp-conveyor-template
 plugins {
-    // Order matters: per the Bifrost reference (a known-good Conveyor 2.0
-    // + KMP setup), `conveyor` must apply BEFORE `kotlin.multiplatform`.
-    // Conveyor's task creation runs at apply time and only succeeds when
-    // a `jar` task already exists — the compose plugin (applied first)
-    // provides that, while kotlin.multiplatform would override it later
-    // with `jvmJar` if applied before conveyor.
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.conveyor)
     alias(libs.plugins.compose.compiler)
@@ -46,13 +22,8 @@ version =
         .removeSuffix("-hf")
 
 kotlin {
-    // JDK 21, the same toolchain as the rest of the desktop modules.
     jvmToolchain(21)
 
-    // KMP jvm() target — Conveyor 2.0's writeConveyorConfig task looks up
-    // `jvmRuntimeClasspath` (KMP convention), so we use the KMP plugin here
-    // even though desktopApp only has a single JVM target. Pattern adapted
-    // from https://github.com/zacharee/Bifrost desktop module.
     jvm {
         compilations.all {
             compileTaskProvider.configure {
@@ -66,46 +37,26 @@ kotlin {
     sourceSets {
         val jvmMain by getting {
             dependencies {
-                // Shared KMP library — pulls App.kt, expect/actual impls,
-                // view-models, MiniPlayer state object, etc.
                 implementation(project(":composeApp"))
 
-                // Compose Desktop runtime for the current OS.
                 implementation(compose.desktop.currentOs)
 
-                // Swing dispatcher for kotlinx.coroutines on the JVM.
                 implementation(libs.kotlinx.coroutinesSwing)
 
-                // Sentry crash reporting (full builds only via BuildKonfig).
                 implementation(libs.sentry.jvm)
 
-                // System tray icon for desktop builds.
                 implementation(libs.native.tray)
 
-                // Media player JVM UI primitives consumed by jvmMain expect/actuals.
-
-                // Commons-IO drives the custom AppImage packaging task below.
-                // org.json is bundled in the Android SDK but missing on JVM desktop; PipePipeExtractor
-                // references org.json.* so it must be provided explicitly here.
                 implementation(libs.org.json)
             }
         }
     }
 }
 
-// Workaround the Gradle "Cannot mutate configuration after observation" error
-// hit when Conveyor 2.0's per-arch deps mix with Conveyor / compose plugins
-// that resolve runtimeClasspath at configuration time. Creating a sibling
-// `desktopRuntimeClasspath` configuration shifts Conveyor's resolution off
-// the primary jvmRuntimeClasspath, breaking the lock chain.
-// Source: https://github.com/zacharee/Bifrost/blob/main/desktop/build.gradle.kts
 project.configurations.create("desktopRuntimeClasspath") {
     extendsFrom(project.configurations.getByName("jvmRuntimeClasspath"))
 }
 
-// Conveyor per-arch artifacts. These configurations are created by the
-// Conveyor plugin's `apply()`; we just feed them the right native compose
-// binaries for cross-build from any host OS.
 dependencies {
     linuxAarch64(libs.compose.linux.arm64)
     linuxAmd64(libs.compose.linux.x64)
@@ -115,11 +66,6 @@ dependencies {
     windowsAmd64(libs.compose.windows.x64)
 }
 
-// Append SimpMusic-specific keys to Conveyor's generated config file and
-// — crucially — replace the auto-detected `app.inputs` classpath with
-// ProGuard's shrunk jar directory so the packaged AppImage carries
-// obfuscated + size-reduced bytecode instead of raw Gradle output.
-// `dependsOn(proguardReleaseJars)` builds the shrunk jars first.
 tasks.named<hydraulic.conveyor.gradle.WriteConveyorConfigTask>("writeConveyorConfig") {
     dependsOn(tasks.named("proguardReleaseJars"))
     val proguardJarsDir = layout.buildDirectory.dir("compose/tmp/main-release/proguard")
@@ -212,9 +158,6 @@ compose.desktop {
                         .get()
                         .removeSuffix("-hf")
                 iconFile.set(rootDir.resolve("composeApp/icon/circle_app_icon.ico"))
-                // Installer (packageMsi, attached to each GitHub Release). The upgrade UUID must
-                // never change: it is how Windows knows a new MSI replaces the installed version
-                // instead of installing a second copy beside it.
                 upgradeUuid = "83ce44d7-5433-4a68-a7e8-4332347310fb"
                 perUserInstall = true
                 dirChooser = true
@@ -233,8 +176,6 @@ compose.desktop {
         }
 
         buildTypes.release.proguard {
-            // ProGuard 7.7.0 (Compose's default) can't read Java 25 bytecode (class v69) now shipped
-            // by PipePipeExtractor, which broke :desktopApp:proguardReleaseJars. 7.8.x supports Java 25.
             version.set("7.8.1")
             optimize.set(true)
             obfuscate.set(true)
@@ -249,12 +190,8 @@ afterEvaluate {
         jvmArgs("--add-opens", "java.desktop/java.awt.peer=ALL-UNNAMED")
         jvmArgs("--add-opens", "java.base/java.nio=ALL-UNNAMED")
 
-        // A native crash (SIGSEGV) leaves no Kotlin stack trace; the hs_err file is the only thing
-        // that names the library that died. Without an explicit path the JVM writes it to whatever
-        // directory the daemon happened to start in, where it is effectively lost.
         jvmArgs("-XX:ErrorFile=${rootProject.layout.buildDirectory.get().asFile}/hs_err_pid%p.log")
 
-        // Pass the bundled natives path to the runtime for `./gradlew desktopApp:run`.
         val osArch = System.getProperty("os.arch").lowercase()
         val osSubDir =
             when {
@@ -268,15 +205,6 @@ afterEvaluate {
                     "linux-x64"
                 }
             }
-        // libmpv is staged by `./gradlew :composeApp:mpvSetupAll`.
-        // MpvLibrary reads this property and feeds it to jna.library.path.
-        //
-        // Without it, JNA cannot find a system libmpv on macOS either: its
-        // default search list is /usr/lib + /lib, and dyld's leaf-name
-        // fallback is /usr/local/lib + /usr/lib, so a Homebrew install under
-        // /opt/homebrew/lib is invisible to both. The bundled path avoids the
-        // question entirely; `brew install mpv` is only a fallback for a
-        // checkout that hasn't run mpvSetup yet.
         val mpvNativesPath = rootDir.resolve("mpv-natives/$osSubDir")
         if (mpvNativesPath.isDirectory) {
             systemProperty("mpv.bundled.path", mpvNativesPath.absolutePath)
@@ -295,21 +223,6 @@ afterEvaluate {
     }
 }
 
-// ---------------------------------------------------------------------------
-// packageConveyorAppImage — wraps Conveyor's `linux-app` directory tree
-// (project root /output) into a single-file .AppImage. Conveyor 2.0 dropped
-// native AppImage support (only .deb + .tar.gz remain), so we keep the
-// "one-for-all-distros" .AppImage by piping its output through appimagetool
-// — identical to the previous jpackage-based pipeline, just sourced from
-// Conveyor instead.
-//
-// Usage: run AFTER `conveyor -Kapp.machines=linux.amd64.glibc make linux-app`
-//        then `./gradlew :desktopApp:packageConveyorAppImage`
-// ---------------------------------------------------------------------------
-// Step 1 of the AppImage chain — invoke the external `conveyor` CLI to
-// produce ./output (the relocatable linux-app directory tree).
-// Conveyor 2.0 prompts once for a root-key passphrase on first run; press
-// Enter to use no passphrase. Subsequent runs are fully non-interactive.
 val conveyorMakeLinuxApp =
     tasks.register<Exec>("conveyorMakeLinuxApp") {
         group = "distribution"
@@ -329,11 +242,6 @@ val conveyorMakeLinuxApp =
 tasks.register("packageConveyorAppImage") {
     group = "distribution"
     description = "Wrap Conveyor's linux-app output (./output) into a portable .AppImage."
-    // Captures project references (rootDir, layout, libs catalog) inside
-    // doLast — necessary for the per-build paths, incompatible with the
-    // Gradle 9 configuration cache. This is a manual one-shot packaging
-    // task invoked after `conveyor make linux-app`, not part of the
-    // critical CI path, so opting out is acceptable.
     notCompatibleWithConfigurationCache(
         "Reads project/layout/libs from within doLast to compute appimage paths.",
     )
@@ -373,7 +281,6 @@ tasks.register("packageConveyorAppImage") {
             appDir.deleteRecursively()
         }
 
-        // Stage scaffold (icon source) + Conveyor binary tree.
         val appDirSrc = rootDir.resolve("composeApp/appimage")
         if (appDirSrc.exists()) {
             FileUtils.copyDirectory(appDirSrc, appDir)
@@ -382,7 +289,6 @@ tasks.register("packageConveyorAppImage") {
         }
         FileUtils.copyDirectory(conveyorOutput, appDir)
 
-        // Ensure top-level PNG icon expected by appimagetool exists.
         val iconSrc = rootDir.resolve("composeApp/icon/circle_app_icon.png")
         val iconDst = appDir.resolve("simpmusic.png")
         if (!iconDst.exists() && iconSrc.exists()) {
@@ -393,12 +299,6 @@ tasks.register("packageConveyorAppImage") {
             libs.versions.version.name
                 .get()
         val desktopFile = appDir.resolve("simpmusic.desktop")
-        // This file, not Conveyor's, is what actually reaches the user: AppRun installs it into
-        // ~/.local/share/applications and runs update-desktop-database. So every scheme listed in
-        // `app.url-schemes` in conveyor.conf has to be repeated here as an x-scheme-handler MIME
-        // type, or xdg-open finds no handler for it and the redirect dies in the browser.
-        // "wordbyword" is the Last.fm auth callback and was missing, which is why Last.fm login
-        // could never come back to the app on Linux.
         desktopFile.writeText(
             """[Desktop Entry]
             |Type=Application
@@ -457,7 +357,6 @@ tasks.register("packageConveyorAppImage") {
         )
         appRun.setExecutable(true, false)
 
-        // Conveyor's launcher lives at output/bin/simpmusic (lowercase).
         val appExecutable = appDir.resolve("bin/simpmusic")
         if (appExecutable.exists() && !appExecutable.canExecute()) {
             appExecutable.setExecutable(true)
@@ -482,8 +381,6 @@ tasks.register("packageConveyorAppImage") {
     }
 }
 
-// End-to-end: mpvSetupAll → conveyor make linux-app → wrap as .AppImage.
-// Single command for users: `./gradlew :desktopApp:buildLinuxAppImage --no-configuration-cache`
 tasks.register("buildLinuxAppImage") {
     group = "distribution"
     description = "Full SimpMusic Desktop Linux AppImage build pipeline (mpvSetupAll → conveyor → AppImage)."
@@ -491,11 +388,6 @@ tasks.register("buildLinuxAppImage") {
     finalizedBy("packageConveyorAppImage")
 }
 
-// macOS — Conveyor 2.0 ships .zip wrapping the .app bundle (no native
-// .dmg target). Run on a macOS host for proper code signing; cross-build
-// from Linux works but the app won't be signed.
-//
-// Run via: `./gradlew :desktopApp:buildMacZipAmd64 --no-configuration-cache`
 val conveyorMakeMacZipAmd64 =
     tasks.register<Exec>("conveyorMakeMacZipAmd64") {
         group = "distribution"
@@ -540,10 +432,6 @@ tasks.register("buildMacZipAarch64") {
     dependsOn(conveyorMakeMacZipAarch64)
 }
 
-// Windows — Conveyor 2.0 ships .msix (modern Windows 10+ app package).
-// NOTE: Unsigned .msix has rough UX (users must enable sideloading +
-// install certificate). Recommended path long-term: code-sign with an
-// EV cert OR switch to Inno Setup `.exe` wrap if signing budget unavailable.
 val conveyorMakeWindowsMsix =
     tasks.register<Exec>("conveyorMakeWindowsMsix") {
         group = "distribution"

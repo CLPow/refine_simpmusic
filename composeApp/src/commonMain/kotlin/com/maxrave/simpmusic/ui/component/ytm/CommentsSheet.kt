@@ -80,10 +80,8 @@ import simpmusic.composeapp.generated.resources.ytm_comments_placeholder
 import simpmusic.composeapp.generated.resources.ytm_comments_pinned
 import simpmusic.composeapp.generated.resources.retry
 
-/** YouTube's blue for "N replies" and the other links in the comments. */
 private val LinkBlue = Color(0xFF3EA6FF)
 
-/** A thread's replies as far as they are loaded. */
 data class ReplyThread(
     val replies: List<YouTubeComment> = emptyList(),
     val nextToken: String? = null,
@@ -91,10 +89,6 @@ data class ReplyThread(
     val loading: Boolean = false,
 )
 
-/**
- * The comments of one track (YouTube Music's Comments under the player). The first page is
- * loaded as soon as the player shows the track, for the count on the pill.
- */
 @Stable
 class CommentsState(
     private val repository: SongRepository,
@@ -111,14 +105,12 @@ class CommentsState(
     var failed by mutableStateOf(false)
         private set
 
-    /** Comments turned off (or a live stream with only its chat). */
     var turnedOff by mutableStateOf(false)
         private set
     val threads = mutableStateMapOf<String, ReplyThread>()
     var posting by mutableStateOf(false)
         private set
 
-    /** Signed in with a channel: YouTube sent a comment box. */
     val canWrite get() = header?.createParams != null
 
     fun load() {
@@ -192,7 +184,6 @@ class CommentsState(
         }
     }
 
-    /** Thumbs up, or takes it back. Shown at once; YouTube is told in the background. */
     fun like(comment: YouTubeComment) {
         val liked = comment.likeState == CommentLikeState.LIKED
         val action = (if (liked) comment.unlikeAction else comment.likeAction) ?: return
@@ -218,7 +209,6 @@ class CommentsState(
         }
     }
 
-    /** Posts [text] as a comment, or as a reply to [replyTo]. True when YouTube took it. */
     suspend fun post(
         text: String,
         replyTo: YouTubeComment?,
@@ -253,7 +243,6 @@ fun rememberCommentsState(videoId: String): CommentsState {
     return state
 }
 
-/** YouTube Music's comments sheet: the thread list, replies, and the comment box when signed in. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CommentsSheet(

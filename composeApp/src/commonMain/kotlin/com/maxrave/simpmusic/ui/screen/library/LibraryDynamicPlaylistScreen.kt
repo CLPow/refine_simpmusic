@@ -69,7 +69,6 @@ import simpmusic.composeapp.generated.resources.ytm_liked_music
 import simpmusic.composeapp.generated.resources.ytm_play
 import simpmusic.composeapp.generated.resources.ytm_shuffle
 
-/** The Library's built-in lists. [type] is "favorite" (Liked music) or "downloaded". */
 sealed class LibraryDynamicPlaylistType {
     data object Favorite : LibraryDynamicPlaylistType()
 
@@ -82,15 +81,10 @@ sealed class LibraryDynamicPlaylistType {
         }
 
     companion object {
-        /** Anything this build no longer knows (old analytics lists, recaps) opens Liked music. */
         fun toType(input: String): LibraryDynamicPlaylistType = if (input == "downloaded") Downloaded else Favorite
     }
 }
 
-/**
- * Liked music (while signed out; signed in, it is YouTube's own LM playlist) and Downloads, laid
- * out as YouTube Music's list pages: the cover tile, title and count, Play and Shuffle, the songs.
- */
 @Composable
 fun LibraryDynamicPlaylistScreen(
     navController: NavController,
@@ -107,7 +101,6 @@ fun LibraryDynamicPlaylistScreen(
 
     val selection = rememberSongSelectionState()
     Column(Modifier.fillMaxSize().background(Ytm.Background)) {
-        // The selection bar takes the top bar's place rather than stacking above it.
         if (selection.isActive) {
             SongSelectionOverlay(selection, songs.orEmpty().map { it.toTrack() })
         } else {
@@ -137,8 +130,6 @@ fun LibraryDynamicPlaylistScreen(
                     Text(pluralStringResource(Res.plurals.n_song, list.size, list.size), style = typo().bodyMedium, color = Ytm.TextSecondary)
                     if (list.isNotEmpty()) {
                         Spacer(Modifier.height(16.dp))
-                        // The same action row as YouTube Music's other list pages: shuffle beside
-                        // the white play button.
                         val playLabel = stringResource(Res.string.ytm_play)
                         Row(horizontalArrangement = Arrangement.spacedBy(24.dp), verticalAlignment = Alignment.CenterVertically) {
                             YtmRoundAction(
@@ -173,7 +164,6 @@ fun LibraryDynamicPlaylistScreen(
                     title = song.title,
                     subtitle = song.artistName?.joinToString(", ").orEmpty(),
                     thumbnail = song.thumbnails,
-                    // The whole list in order, starting at the tapped song, as in YouTube Music.
                     onClick = {
                         if (selection.isActive) {
                             selection.toggle(song.videoId)

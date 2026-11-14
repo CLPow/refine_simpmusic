@@ -31,17 +31,6 @@ import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Keeps every Refine widget in step with playback — one collector for the whole process.
- *
- * The widgets used to start their own collectors in `provideGlance`, on the shared service scope.
- * `provideGlance` runs again for every new Glance session (sessions close after a short idle), so
- * each one added another collector that was never cancelled, and every collector called
- * `update()` on every change. After a day of use that was dozens of loops re-rendering the same
- * widgets. Now `provideGlance` only renders; this object owns the one subscription, on its own
- * scope that no service teardown can cancel, and debounces bursts (a track change emits several
- * fields in a row) into a single update.
- */
 object WidgetUpdater : KoinComponent {
     private val started = AtomicBoolean(false)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -73,7 +62,7 @@ object WidgetUpdater : KoinComponent {
                     hasPrevious = controller.isPreviousAvailable,
                 )
             }.distinctUntilChanged()
-                .drop(1) // the first value is what the widgets were just rendered with
+                .drop(1)
                 .debounce(UPDATE_DEBOUNCE_MS)
                 .collect { signature ->
                     try {
@@ -85,16 +74,12 @@ object WidgetUpdater : KoinComponent {
         }
     }
 
-
     private const val UPDATE_DEBOUNCE_MS = 400L
 }
 
-/** Shared look for every Refine widget. */
 internal object WidgetStyle {
-    /** Near-black base the artwork colour is blended into — the mini player's recipe. */
     private val Base = Color(0xFF121212)
 
-    /** A dark surface tinted by the artwork, so white text always reads on it. */
     fun surfaceFor(palette: Color): Color = lerp(palette, Base, 0.62f)
 
     val OnSurface = Color.White
@@ -105,18 +90,11 @@ internal object WidgetStyle {
     val LabelSize = 11.sp
 }
 
-/**
- * Decodes an artwork for a widget. Software bitmaps only: RemoteViews cannot carry hardware ones.
- * The "BIGGER" disk key is shared with the player so every surface reads the identical decode,
- * which keeps the palette — and so the widget colour — consistent across them.
- */
 internal suspend fun Context.loadWidgetArtwork(
     url: String?,
     px: Int = WIDGET_ART_PX,
 ): Bitmap? {
     if (url.isNullOrBlank()) return null
-    // Never throws: an exception here surfaces inside the widget's composition, and Glance then
-    // replaces the whole widget with "Can't show content". A cover that fails is just no cover.
     return runCatching { decodeWidgetArtwork(url, px) }.getOrNull()
 }
 
@@ -133,21 +111,11 @@ private suspend fun Context.decodeWidgetArtwork(
             .allowHardware(false)
             .size(px, px)
             .build()
-    // The app's own loader: a new one per image (six per update) each opened its own caches.
     return (SingletonImageLoader.get(this).execute(request) as? SuccessResult)?.image?.toBitmap()
 }
 
-/**
- * Every bitmap in a widget travels in one binder transaction, capped near 1 MB. The 4x2 layout
- * carries the cover and five recent covers; at 360 px and 160 px that came to about 1 MB and a
- * large enough set failed the update outright. 240 px is still sharp at widget size.
- */
 private const val WIDGET_ART_PX = 240
 
-/**
- * The bitmap cut to a circle, centre-cropped. Done on the bitmap rather than with a corner radius
- * because Glance only clips views from Android 12, and the 2×2 widget's round cover is its shape.
- */
 internal fun Bitmap.toCircle(): Bitmap {
     val side = minOf(width, height)
     val out = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)

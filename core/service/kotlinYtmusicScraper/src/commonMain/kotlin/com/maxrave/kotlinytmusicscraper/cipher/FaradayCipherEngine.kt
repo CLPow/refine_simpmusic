@@ -10,30 +10,11 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
 
-/**
- * Solves YouTube's signature and `n` challenges locally, using the remote player table published at
- * [PLAYER_CONFIG_URL].
- *
- * The table does NOT contain decoded signatures — it only names the function and class inside
- * YouTube's own player JS that perform the work. The player script is still downloaded and executed
- * here, in QuickJS. What the table buys is the one step that breaks whenever YouTube reshuffles its
- * obfuscation: guessing those names by regex.
- *
- * This engine is deliberately platform-agnostic and knows nothing about any extractor. The adapter
- * that plugs it into PipePipe lives in the platform source sets, because PipePipe is not available
- * on iOS.
- */
 class FaradayCipherEngine(
     private val httpClient: HttpClient,
-    /**
-     * The single thread every QuickJS runtime built here will live on. It must be created with a
-     * large stack — see [QuickJsEngine]. Passed in rather than made here so the platform that owns
-     * threads decides how big.
-     */
     private val jsThread: CoroutineDispatcher,
     private val logger: InnerTubeLogger = InnerTubeLogger.NONE,
 ) {
-    /** What PipePipe needs before it can ask for anything to be decoded. */
     data class PlayerInfo(
         val playerId: String,
         val signatureTimestamp: Int,
@@ -44,22 +25,11 @@ class FaradayCipherEngine(
         val nParameters: Map<String, String>,
     )
 
-    // Metrolist's table first, upstream SimpMusic's to fill the player hashes Metrolist has not
-    // published yet (port of maxrave-dev/core f4de76a8). The two agree on sig/nClass/sts, so the
-    // order only decides which is asked first.
     private val stores =
         listOf(PLAYER_CONFIG_URL, SIMPMUSIC_PLAYER_CONFIG_URL).map {
             RemotePlayerConfigStore(httpClient, InMemoryPlayerConfigRepository(it), logger)
         }
 
-    /**
-     * Serialises every public entry point.
-     *
-     * Two tracks resolve at once (the player pre-caches the next one), and without this both would
-     * miss the solver cache and each build its own QuickJS runtime — two native contexts holding a
-     * 192 MB limit apiece, one of which is then disposed while the other is mid-flight. Metrolist
-     * takes the same lock across the whole of its own entry point for this reason.
-     */
     private val operationMutex = Mutex()
 
     private val mutex = Mutex()
@@ -73,13 +43,6 @@ class FaradayCipherEngine(
         val solver: ZemerCipherSolver,
     )
 
-    /**
-     * The player YouTube is currently serving, plus the signature timestamp that must accompany
-     * player requests for it.
-     *
-     * Returns null when either half is unavailable — a partial answer is worse than none, because
-     * a wrong timestamp yields a response whose signatures cannot be made to work at all.
-     */
     suspend fun playerInfo(): PlayerInfo? = operationMutex.withLock { playerInfoLocked() }
 
     private suspend fun playerInfoLocked(): PlayerInfo? {
@@ -89,10 +52,6 @@ class FaradayCipherEngine(
         return PlayerInfo(playerId, timestamp)
     }
 
-    /**
-     * Solve every challenge in one pass. Values that cannot be solved are simply absent from the
-     * result; the caller decides whether a partial answer is usable.
-     */
     suspend fun decode(
         playerId: String,
         signatures: List<String>,
@@ -118,13 +77,6 @@ class FaradayCipherEngine(
         )
     }
 
-    /**
-     * Called when a URL this engine deciphered was rejected by the CDN.
-     *
-     * That is a different signal from "player hash unknown": a stale table produces a signature
-     * that is well-formed and still wrong, so nothing throws and nothing looks broken until the
-     * media request comes back 403.
-     */
     suspend fun invalidate() = operationMutex.withLock { invalidateLocked() }
 
     private suspend fun invalidateLocked() {
@@ -150,10 +102,6 @@ class FaradayCipherEngine(
         return fetched
     }
 
-    /**
-     * Read the player hash off `iframe_api`, the same source NewPipe uses. It is a small script that
-     * names the current player build, so it costs far less than the watch page.
-     */
     private suspend fun fetchPlayerId(): String? =
         try {
             val response = httpClient.getTextWithoutRedirects(Url(IFRAME_API_URL), MAX_IFRAME_BYTES) {
@@ -245,17 +193,9 @@ class FaradayCipherEngine(
     companion object {
         private const val TAG = "FaradayCipherEngine"
 
-        /**
-         * The published player table.
-         *
-         * Both gates inside [RemotePlayerConfigStore] have to accept this URL: it must end in
-         * `/player_configs.json`, and its path must sit under the repository the store whitelists.
-         * A URL that fails either gate makes the store return null with no error anywhere.
-         */
         const val PLAYER_CONFIG_URL: String =
             "https://raw.githubusercontent.com/MetrolistGroup/faraday/master/registry/player_configs.json"
 
-        /** Upstream SimpMusic's table: the fallback for hashes Metrolist's has not published. */
         const val SIMPMUSIC_PLAYER_CONFIG_URL: String =
             "https://raw.githubusercontent.com/maxrave-dev/simpmusic-files/main/registry/player_configs.json"
 
@@ -273,13 +213,6 @@ class FaradayCipherEngine(
     }
 }
 
-/**
- * Keeps the fetched table for the life of the process only.
- *
- * The table is ~46 kB and the store sends an `If-None-Match`, so a cold start costs one request that
- * usually answers 304. Persisting it would mean handing this module a storage dependency it does not
- * otherwise have.
- */
 internal class InMemoryPlayerConfigRepository(
     private val url: String,
 ) : PlayerConfigRepository {

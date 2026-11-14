@@ -47,8 +47,6 @@ internal class LyricsCanvasRepositoryImpl(
                     Lyrics(
                         lines =
                             lines
-                                // YouTube Music marks instrumental stretches with a lone "\u266a"
-                                // line and shows them as a gap, not as a lyric.
                                 .filter { it.text.isNotBlank() && it.text.trim() != "\u266a" }
                                 .map { Line(startTimeMs = it.startMs.toString(), endTimeMs = it.endMs.toString(), words = it.text) },
                         syncType = "LINE_SYNCED",
@@ -68,9 +66,6 @@ internal class LyricsCanvasRepositoryImpl(
 
     override fun getYouTubeCaption(videoId: String): Flow<Resource<Lyrics>> =
         flow {
-            // Always emits. The emit used to sit inside a runCatching: if turning the captions into
-            // lyrics threw, nothing was emitted, the caller never moved on to the next source and
-            // the lyrics search hung without ever saying "no lyrics".
             val lyrics = youTube.getYouTubeCaption(videoId).mapCatching { it.toLyrics() }
             val error = lyrics.exceptionOrNull()
             if (error != null) Logger.d("Lyrics", "Error: ${error.message}")
@@ -119,15 +114,9 @@ internal class LyricsCanvasRepositoryImpl(
                     q_track = qtrack,
                     q_artist = qartist,
                     duration = duration,
-                    // The loosened strings above are for finding candidates; the untouched ones
-                    // are for judging them. Matching on the stripped text is what let a cover
-                    // through: with the brackets gone, "Song (Live)" and "Song" read the same.
                     trackName = strack,
                     artistName = sartist,
                 ).onSuccess { matched ->
-                    // No match is a result, and it has to be emitted: the caller advances to the
-                    // next source when it sees an error, and a flow that ends without emitting
-                    // anything leaves the lyrics chain waiting for a value that never comes.
                     if (matched != null) {
                         emit(Resource.Success<Lyrics>(matched.toLyrics()))
                     } else {
@@ -199,7 +188,6 @@ internal class LyricsCanvasRepositoryImpl(
                             val logo = artist?.attributes?.editorialArtwork?.musicContentColorLogoTrimmed
                             val srcW = logo?.width ?: 0
                             val srcH = logo?.height ?: 0
-                            // Scale down to ~1000px wide, keeping the logo aspect ratio.
                             val targetW = 1000
                             val targetH = if (srcW > 0) (srcH.toLong() * targetW / srcW).toInt() else srcH
                             val url = logo?.toImageUrl(targetW, targetH)
@@ -225,7 +213,6 @@ internal class LyricsCanvasRepositoryImpl(
                 }
         }.flowOn(Dispatchers.IO)
 
-    // SimpMusic Lyrics
     private val simpMusicLyricsTag = "SimpMusicLyricsRepository"
 
     override fun getSimpMusicLyrics(videoId: String): Flow<Resource<Lyrics>> =

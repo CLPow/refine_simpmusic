@@ -39,8 +39,6 @@ internal class CommonRepositoryImpl(
     ) {
         youTube.cookiePath = cookiePath.toPath()
         coroutineScope.launch {
-            // The app is English-only, so YouTube is always asked for English (hl); the region (gl)
-            // still follows the Location setting.
             val localeJob =
                 launch {
                     dataStoreManager.location.collectLatest { location ->
@@ -108,7 +106,6 @@ internal class CommonRepositoryImpl(
         com.maxrave.data.db
             .getDatabasePath()
 
-    // Recently data
     override fun getAllRecentData(): Flow<List<RecentlyType>> =
         flow {
             emit(localDataSource.getAllRecentData())
@@ -130,9 +127,6 @@ internal class CommonRepositoryImpl(
         }
     }
 
-    /**
-     * Original from YTDLnis app
-     */
     override suspend fun getCookiesFromInternalDatabase(
         url: String,
         packageName: String,

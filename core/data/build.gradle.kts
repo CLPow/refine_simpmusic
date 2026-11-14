@@ -25,9 +25,6 @@ kotlin {
         freeCompilerArgs.add("-Xmulti-dollar-interpolation")
         freeCompilerArgs.add("-Xwhen-guards")
     }
-    // Target declarations - add or remove as needed below. These define
-    // which platforms this KMP module supports.
-    // See: https://kotlinlang.org/docs/multiplatform-discover-project.html#targets
     android {
         namespace = "com.maxrave.data"
         compileSdk = 37
@@ -38,13 +35,6 @@ kotlin {
         schemaDirectory("$projectDir/schemas")
     }
 
-    // For iOS targets, this is also where you should
-    // configure native binary output. For more information, see:
-    // https://kotlinlang.org/docs/multiplatform-build-native-binaries.html#build-xcframeworks
-
-    // A step-by-step guide on how to include this library in an XCode
-    // project can be found here:
-    // https://developer.android.com/kotlin/multiplatform/migrate
     val xcfName = "dataKit"
 
     listOf(
@@ -54,7 +44,6 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = xcfName
             isStatic = true
-            // Required when using NativeSQLiteDriver
             linkerOpts.add("-lsqlite3")
         }
     }
@@ -75,19 +64,14 @@ kotlin {
                 implementation(projects.kotlinYtmusicScraper)
 
                 implementation(libs.kotlin.stdlib)
-                // Add KMP dependencies here
-                // Kotlinx serialization
                 implementation(libs.kotlinx.serialization.json)
 
-                // DataStore
                 implementation(libs.datastore.preferences)
 
-                // Room
                 implementation(libs.room.runtime)
                 implementation(libs.androidx.sqlite.bundled)
                 implementation(libs.androidx.room.migration)
 
-                // Koin
                 implementation(libs.koin.core)
             }
         }
@@ -99,13 +83,8 @@ kotlin {
         }
 
         androidMain {
-            // Refine Control runs on java.net and javax.crypto, which Android and the desktop
-            // both have and iOS does not. Its code is one directory compiled into both targets.
             kotlin.srcDir("src/jvmShared/kotlin")
             dependencies {
-                // Add Android-specific dependencies here. Note that this source set depends on
-                // commonMain by default and will correctly pull the Android artifacts of any KMP
-                // dependencies declared in commonMain.
                 implementation(libs.koin.android)
                 implementation(projects.media3)
                 implementation(projects.refineControl)
@@ -115,11 +94,6 @@ kotlin {
 
         iosMain {
             dependencies {
-                // Add iOS-specific dependencies here. This a source set created by Kotlin Gradle
-                // Plugin (KGP) that each specific iOS target (e.g., iosX64) depends on as
-                // part of KMP’s default source set hierarchy. Note that this source set depends
-                // on common by default and will correctly pull the iOS artifacts of any
-                // KMP dependencies declared in commonMain.
             }
         }
 

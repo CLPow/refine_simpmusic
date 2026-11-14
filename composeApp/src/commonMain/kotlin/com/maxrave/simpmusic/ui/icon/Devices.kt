@@ -6,8 +6,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
-// The three icons of Refine Control: the "devices" button, a computer and a phone.
-
 private fun materialIcon(
     name: String,
     path: String,

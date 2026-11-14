@@ -102,8 +102,6 @@ data class ArtistPage(
                             ?.musicResponsiveListItemFlexColumnRenderer
                             ?.text
                             ?.runs
-                            // The column reads "Artist • Album • 13M plays"; only the first group
-                            // is artists, so everything after the first " • " is dropped.
                             ?.splitBySeparator()
                             ?.firstOrNull()
                             ?.oddElements()
@@ -213,7 +211,6 @@ data class ArtistPage(
 
                 renderer.isPlaylist -> {
                     print("isPlaylist")
-                    // Playlist from YouTube Music
                     PlaylistItem(
                         id =
                             renderer.navigationEndpoint.browseEndpoint

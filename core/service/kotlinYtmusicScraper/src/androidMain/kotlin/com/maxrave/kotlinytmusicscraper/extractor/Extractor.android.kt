@@ -34,9 +34,6 @@ actual class Extractor {
     }
 
     actual fun newPipePlayer(videoId: String): List<Pair<Int, String>> {
-        // Re-register unconditionally: PipePipe drops the local decoder for good the first time it
-        // throws, and the getter is package-private so its state cannot be read from here. Setting
-        // it again each time turns "disabled forever" into "skipped for one track".
         YoutubeApiDecoder.setLocalDecoder(faradayDecoder)
         try {
             val streamInfo =
@@ -56,8 +53,6 @@ actual class Extractor {
                     TAG,
                     "PipePipe stream URL HEAD check failed (non 2xx) for $videoId, falling back to BravePipe",
                 )
-                // A rejected URL is the one symptom of a stale player table: the signature is
-                // well-formed and still wrong, so nothing threw on the way here.
                 faradayDecoder.invalidate()
             } else {
                 ExtractSource.record(videoId, "PipePipe · ${faradayDecoder.lastOutcomeLabel}")
@@ -115,7 +110,6 @@ actual class Extractor {
                 command,
             )
         if (ReturnCode.isSuccess(session.returnCode)) {
-            // SUCCESS
             Logger.d(TAG, "Command succeeded ${session.state}, ${session.returnCode}")
             try {
                 FileSystem.SYSTEM.delete("$filePath.jpg".toPath())
@@ -126,7 +120,6 @@ actual class Extractor {
             }
             return (DownloadProgress.VIDEO_DONE)
         } else if (ReturnCode.isCancel(session.returnCode)) {
-            // CANCEL
             Logger.d(TAG, "Command cancelled ${session.state}, ${session.returnCode}")
             try {
                 FileSystem.SYSTEM.delete("$filePath.jpg".toPath())
@@ -137,7 +130,6 @@ actual class Extractor {
             }
             return (DownloadProgress.failed(session.failStackTrace ?: "Command cancelled"))
         } else {
-            // FAILURE
             Logger.d(TAG, "Command failed ${session.state}, ${session.returnCode}, ${session.failStackTrace}")
             try {
                 FileSystem.SYSTEM.delete("$filePath.jpg".toPath())
@@ -178,7 +170,6 @@ actual class Extractor {
                 command,
             )
         if (ReturnCode.isSuccess(session.returnCode)) {
-            // SUCCESS
             Logger.d(TAG, "Command succeeded ${session.state}, ${session.returnCode}")
             try {
                 FileSystem.SYSTEM.delete("$filePath.webm".toPath())
@@ -186,7 +177,6 @@ actual class Extractor {
                 e.printStackTrace()
             }
         } else if (ReturnCode.isCancel(session.returnCode)) {
-            // CANCEL
             Logger.d(TAG, "Command cancelled ${session.state}, ${session.returnCode}")
             try {
                 FileSystem.SYSTEM.delete("$filePath.jpg".toPath())
@@ -196,7 +186,6 @@ actual class Extractor {
             }
             return (DownloadProgress.failed("Error"))
         } else {
-            // FAILURE
             Logger.d(TAG, "Command failed ${session.state}, ${session.returnCode}, ${session.failStackTrace}")
             try {
                 FileSystem.SYSTEM.delete("$filePath.jpg".toPath())
@@ -230,7 +219,6 @@ actual class Extractor {
                 commandInject,
             )
         if (ReturnCode.isSuccess(sessionInject.returnCode)) {
-            // SUCCESS
             Logger.d(TAG, "Command succeeded ${sessionInject.state}, ${sessionInject.returnCode}")
             try {
                 FileSystem.SYSTEM.delete("$filePath.mp3".toPath())
@@ -241,7 +229,6 @@ actual class Extractor {
             }
             return (DownloadProgress.AUDIO_DONE)
         } else if (ReturnCode.isCancel(sessionInject.returnCode)) {
-            // CANCEL
             Logger.d(TAG, "Command cancelled ${sessionInject.state}, ${sessionInject.returnCode}")
             try {
                 FileSystem.SYSTEM.delete("$filePath.jpg".toPath())
@@ -252,7 +239,6 @@ actual class Extractor {
             }
             return (DownloadProgress.failed("Error"))
         } else {
-            // FAILURE
             Logger.d(TAG, "Command failed ${sessionInject.state}, ${sessionInject.returnCode}, ${sessionInject.failStackTrace}")
             try {
                 FileSystem.SYSTEM.delete("$filePath.jpg".toPath())

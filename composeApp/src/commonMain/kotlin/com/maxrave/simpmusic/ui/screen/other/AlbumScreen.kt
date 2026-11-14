@@ -93,11 +93,6 @@ import simpmusic.composeapp.generated.resources.ytm_saved_to_library
 import simpmusic.composeapp.generated.resources.ytm_explicit
 import simpmusic.composeapp.generated.resources.more
 
-/**
- * YouTube Music's album page: the cover centred on a wash of its colour, title, artist and
- * "Album • year", the action row (download, save, the white play button, shuffle, more), the
- * numbered tracks, the song count and length, then other versions.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AlbumScreen(
@@ -116,7 +111,6 @@ fun AlbumScreen(
 
     LaunchedEffect(browseId) { viewModel.updateBrowseId(browseId) }
 
-    // The page takes its colour from the cover, as YouTube Music's does.
     val paletteState = rememberPaletteState()
     var artwork by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     LaunchedEffect(artwork) { artwork?.let { paletteState.generate(it) } }
@@ -130,7 +124,6 @@ fun AlbumScreen(
     if (albumMenu) {
         PlaylistBottomSheet(
             onDismiss = { albumMenu = false },
-            // The album's own playlist id, so a shared link opens the album (port of maxrave-dev/SimpMusic 5a5ef03c).
             playlistId = uiState.audioPlaylistId.ifEmpty { browseId },
             playlistName = uiState.title,
             isYourYouTubePlaylist = false,
@@ -163,7 +156,6 @@ fun AlbumScreen(
                                 isPlaying = isPlayingThis && controllerState.isPlaying,
                                 onBack = { navController.navigateUp() },
                                 onMore = { albumMenu = true },
-                                // Already playing this album: the button pauses and resumes it, as in YouTube Music.
                                 onPlay = {
                                     if (isPlayingThis) {
                                         sharedViewModel.onUIEvent(UIEvent.PlayPause)
@@ -269,7 +261,6 @@ fun AlbumScreen(
     }
 }
 
-/** An album track row: its number in place of a cover, as YouTube Music lists album tracks. */
 @Composable
 fun NumberedTrackRow(
     number: Int,

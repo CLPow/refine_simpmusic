@@ -20,8 +20,6 @@ actual fun createRefineControlRepository(
 ): RefineControlRepository {
     val context = getKoin().get<Context>().applicationContext
     val audio = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    // The phone app has no volume of its own: a remote changes the media volume, as the volume
-    // keys do.
     val volume =
         object : SystemVolume {
             override fun get(): Float {
@@ -34,9 +32,6 @@ actual fun createRefineControlRepository(
                 runCatching { audio.setStreamVolume(AudioManager.STREAM_MUSIC, (volume * max).roundToInt().coerceIn(0, max), 0) }
             }
         }
-    // Many phones drop broadcast packets unless an app asks for them. Held only while the devices
-    // list is on screen; the rest of the time the other device finds the phone by the phone's own
-    // beacons.
     val wifi = context.getSystemService(Context.WIFI_SERVICE) as? WifiManager
     val broadcastLock = runCatching { wifi?.createMulticastLock("refine-control")?.apply { setReferenceCounted(false) } }.getOrNull()
     return RefineControlRepositoryImpl(

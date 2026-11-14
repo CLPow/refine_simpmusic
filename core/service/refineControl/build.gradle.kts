@@ -1,6 +1,3 @@
-// Refine Control: the LAN protocol that lets one Refine device control another and hand playback
-// over (see ControlEngine). Plain Kotlin/JVM on purpose: it has no project dependencies, so the
-// Android and desktop builds of core/data can both use the same jar.
 plugins {
     id("java-library")
     alias(libs.plugins.jetbrains.kotlin.jvm)

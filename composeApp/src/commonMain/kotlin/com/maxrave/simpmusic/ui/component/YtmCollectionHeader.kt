@@ -65,11 +65,6 @@ import simpmusic.composeapp.generated.resources.ytm_shuffle
 
 private val Secondary = Ytm.TextSecondary
 
-/**
- * The header of an album or playlist page as YouTube Music draws it on a phone: back and more on
- * a plain top row, a centred square cover, the title, the artist or owner, a meta line, then one
- * row of round actions around a large white play button.
- */
 @Composable
 fun YtmCollectionHeader(
     thumbnail: String?,
@@ -107,7 +102,6 @@ fun YtmCollectionHeader(
                     .data(thumbnail)
                     .diskCachePolicy(CachePolicy.ENABLED)
                     .diskCacheKey(thumbnail)
-                    // Shown at 240dp; the palette is built from this decode too.
                     .size(720)
                     .build(),
             placeholder = rememberHolderPainter(),
@@ -183,7 +177,6 @@ private fun ActionSlot(content: @Composable () -> Unit) {
     Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) { content() }
 }
 
-/** A secondary round action of the header row: a translucent disc with a white glyph. */
 @Composable
 fun YtmRoundAction(
     icon: ImageVector,
@@ -204,11 +197,6 @@ fun YtmRoundAction(
     }
 }
 
-/**
- * YouTube Music's bar over a scrolled album or playlist: back, the title fading in once the
- * header has scrolled away, and more. Drawn over the list; invisible (and not hit-testable) at
- * the top, where the header carries its own back and more.
- */
 @Composable
 fun YtmCollectionTopBar(
     listState: LazyListState,

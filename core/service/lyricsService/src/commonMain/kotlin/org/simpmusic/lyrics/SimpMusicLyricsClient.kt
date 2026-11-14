@@ -24,18 +24,6 @@ class SimpMusicLyricsClient {
             lyricsService.findLyricsByVideoId(videoId).bodyOrThrow<List<LyricsResponse>>()
         }
 
-    /**
-     * @param q_track loosened text for the search itself; LRCLIB matches it fuzzily on purpose.
-     * @param q_artist the same, for the artist.
-     * @param trackName the track's real title, used to judge the results rather than to find them.
-     * @param artistName the track's real artist credit, likewise.
-     *
-     * The search deliberately casts a wide net -- brackets, features and punctuation stripped --
-     * so it reaches entries whose metadata is written differently. That is also why the results
-     * cannot be trusted in the order they arrive: a search for a famous song returns its live
-     * recording, several covers and a karaoke track, all of them plausible on title and artist.
-     * [TrackMatch] decides which of them is this exact recording, from the untouched metadata.
-     */
     suspend fun searchLrclibLyrics(
         q_track: String,
         q_artist: String,
@@ -107,7 +95,6 @@ class SimpMusicLyricsClient {
             }
             val parsed = response.body<AMSearchResponse>()
             val resources = parsed.resources?.artists.orEmpty()
-            // Keep the search ranking from results.data; fall back to the resources map order.
             parsed.results
                 ?.artists
                 ?.data
@@ -115,10 +102,6 @@ class SimpMusicLyricsClient {
                 ?: resources.values.toList()
         }
 
-    /**
-     * Fetch a single artist by id, including [AMEditorialArtwork] (name-logo PNG) and keyColor.
-     * Returns null when the id is not present in the response.
-     */
     suspend fun getAMArtist(id: String): Result<AMArtistResource?> =
         runCatching {
             val response = lyricsService.getAMArtist(id)

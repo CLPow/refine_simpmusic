@@ -44,7 +44,6 @@ android {
 }
 
 dependencies {
-
     implementation(libs.core.ktx)
     implementation(libs.appcompat)
     testImplementation(libs.junit)
@@ -54,7 +53,6 @@ dependencies {
     implementation(projects.common)
     implementation(projects.domain)
 
-    // Koin
     implementation(platform(libs.koin.bom))
     implementation(libs.koin.core)
     implementation(libs.koin.android)
@@ -62,7 +60,6 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 
-    // Media3
     implementation(libs.media3.exoplayer)
     api(libs.media3.session)
     implementation(libs.media3.exoplayer.dash)
@@ -73,7 +70,6 @@ dependencies {
     implementation(libs.okhttp3.okhttp)
     implementation(libs.coroutines.guava)
 
-    // Google Cast (gated: real SDK for full builds, no-op stub for FOSS builds)
     if (isFullBuild) {
         implementation(projects.cast)
     } else {

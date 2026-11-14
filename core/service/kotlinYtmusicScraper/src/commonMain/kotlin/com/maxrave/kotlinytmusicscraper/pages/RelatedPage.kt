@@ -37,8 +37,6 @@ data class RelatedPage(
                         ?.musicResponsiveListItemFlexColumnRenderer
                         ?.text
                         ?.runs
-                        // The column reads "Artist • Album • 13M plays"; only the first group is
-                        // artists, so everything after the first " • " is dropped.
                         ?.splitBySeparator()
                         ?.firstOrNull()
                         ?.oddElements()
@@ -215,7 +213,6 @@ data class RelatedPage(
                                 ?.musicPlayButtonRenderer
                                 ?.playNavigationEndpoint
                                 ?.watchPlaylistEndpoint ?: return null,
-                        // If the playlist is radio, shuffle is not available
                         shuffleEndpoint =
                             renderer.menu
                                 ?.menuRenderer
@@ -277,7 +274,6 @@ data class RelatedPage(
                 }
 
                 renderer.isUserChannel -> {
-                    // User channels have no shuffle/radio; surface them as an artist card.
                     ArtistItem(
                         id = renderer.navigationEndpoint?.browseEndpoint?.browseId ?: return null,
                         title =

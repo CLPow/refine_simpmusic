@@ -116,17 +116,14 @@ import simpmusic.composeapp.generated.resources.ytm_list_view
 import simpmusic.composeapp.generated.resources.ytm_new
 import simpmusic.composeapp.generated.resources.ytm_new_playlist
 
-/** One row/tile of the Library, whatever kind of thing it stands for. */
 private data class LibraryEntry(
     val key: String,
     val title: String,
-    /** The fixed part of the second line; [songCount] is appended as a localised plural. */
     val subtitle: String,
     val thumbnail: String?,
     val round: Boolean = false,
     val songCount: Int? = null,
     val sortKey: Long = 0,
-    /** Pinned to the top of the Library, as YouTube Music lets you pin. */
     val pinned: Boolean = false,
     val onClick: () -> Unit,
 )
@@ -137,12 +134,6 @@ private fun LibraryEntry.secondLine(): String {
     return listOfNotNull(subtitle.ifBlank { null }, count).joinToString(" • ")
 }
 
-/**
- * YouTube Music's Library: the logo bar, chips (Playlists · Songs · Albums · Artists ·
- * Downloads), a sort menu with the list/grid switch, then the items. With no chip selected it is
- * the unfiltered Library (playlists, albums and artists together); Playlists starts with Liked
- * music, and carries the white "New" button for a new playlist.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
@@ -167,7 +158,6 @@ fun LibraryScreen(
     val pinnedKeys by dataStoreManager.pinnedLibraryKeys.collectAsStateWithLifecycle(emptySet())
     val scope = rememberCoroutineScope()
     val selection = rememberSongSelectionState()
-    // Picks belong to the chip they were made in (Songs and Downloads list different songs).
     LaunchedEffect(chip) { selection.exit() }
     val onPinChange: (LibraryEntry) -> Unit = { entry ->
         scope.launch { dataStoreManager.setLibraryPinned(entry.key, !entry.pinned) }
@@ -209,7 +199,6 @@ fun LibraryScreen(
         sharedViewModel.loadMediaItem(start.toTrack(), Config.PLAYLIST_CLICK, songs.indexOf(start).coerceAtLeast(0))
     }
 
-    // Built once per change of the underlying lists, not on every recomposition.
     val entries: List<LibraryEntry> =
         remember(chip, sort, loggedIn, youTubePlaylists, localPlaylists, liked, albums, artists, downloads, likedMusic, pinnedKeys) {
             fun playlistEntries() =
@@ -301,12 +290,9 @@ fun LibraryScreen(
                 }
             val sorted =
                 when (sort) {
-                    // Most recently touched first. The sort is stable, so the account's YouTube
-                    // playlists (no local timestamp) keep the order YouTube sent them in.
                     LibrarySort.RecentActivity, LibrarySort.RecentlyAdded -> list.sortedByDescending { it.sortKey }
                     LibrarySort.Alphabetical -> list.sortedBy { if (it.key == "liked") "" else it.title.lowercase() }
                 }
-            // Pins come first under every sort, after Liked Music, which keeps its fixed place.
             val (likedMusicEntry, rest) = sorted.partition { it.key == "liked" }
             val (pinned, others) = rest.partition { it.key in pinnedKeys }
             likedMusicEntry + pinned.map { it.copy(pinned = true) } + others
@@ -320,7 +306,6 @@ fun LibraryScreen(
 
     Box(Modifier.fillMaxSize().background(Ytm.Background)) {
         Column(Modifier.fillMaxSize()) {
-            // The selection bar takes the top bar's place rather than stacking above it.
             if (songChip && selection.isActive) {
                 SongSelectionOverlay(selection, entries.mapNotNull { songsById[it.key]?.toTrack() })
             } else {
@@ -410,8 +395,6 @@ private fun SortRow(
 ) {
     var open by remember { mutableStateOf(false) }
     Row(
-        // The toggle's 48dp touch target carries its own inset, so the row's end padding is
-        // trimmed by it, never below zero: the grid passes 0dp, and negative padding crashes.
         Modifier.fillMaxWidth().padding(start = horizontalPadding, end = (horizontalPadding - 8.dp).coerceAtLeast(0.dp), bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -441,7 +424,6 @@ private fun SortRow(
         Spacer(Modifier.weight(1f))
         if (showGridToggle) {
             IconButton(onClick = onToggleGrid) {
-                // YouTube Music shows the layout a tap switches to.
                 Icon(
                     if (grid) SimpIcons.ViewList else SimpIcons.GridView,
                     contentDescription = stringResource(if (grid) Res.string.ytm_list_view else Res.string.ytm_grid_view),
@@ -516,7 +498,6 @@ private fun GridTile(
     }
 }
 
-/** The grey second line, after YouTube Music's pin when the entry is pinned. */
 @Composable
 private fun SecondLine(
     entry: LibraryEntry,
@@ -537,7 +518,6 @@ private fun SecondLine(
     }
 }
 
-/** Long-press menu on a Library entry: pin it to the top, or unpin it. Liked Music stays put. */
 @Composable
 private fun PinMenu(
     entry: LibraryEntry,
@@ -558,7 +538,6 @@ private fun PinMenu(
     }
 }
 
-/** YouTube Music's white "New" pill, for a new playlist. */
 @Composable
 private fun NewButton(
     modifier: Modifier,
@@ -617,5 +596,5 @@ internal fun NewPlaylistDialog(
 private fun kotlinx.datetime.LocalDateTime.toEpochKey(): Long =
     ((((year * 12L + month.ordinal) * 31 + day) * 24 + hour) * 60 + minute) * 60 + second
 
-/** Liked Music's entry: always first, never pinned. */
+// Liked Music's entry: always first, never pinned.
 private const val LIKED_KEY = "liked"

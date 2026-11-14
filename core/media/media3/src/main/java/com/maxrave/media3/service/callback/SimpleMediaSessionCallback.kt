@@ -75,7 +75,6 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "AndroidAuto"
 
-
 @UnstableApi
 internal class SimpleMediaSessionCallback(
     private val context: Context,
@@ -91,15 +90,9 @@ internal class SimpleMediaSessionCallback(
     private val albumRepository: AlbumRepository,
     dataStoreManager: DataStoreManager,
 ) : MediaLibrarySession.Callback {
-    /** Read on every media key, so kept warm instead of read from disk on the main thread. */
     private val externalStartAllowed =
         dataStoreManager.allowExternalStartPlayback.stateIn(scope, SharingStarted.Eagerly, true)
 
-    /**
-     * Whether the listener has had music playing since the app started or since the audio
-     * output last went away. While it is true, a headset or car may resume what they paused.
-     * A disconnect clears it, so a car that connects later cannot start playback on its own.
-     */
     @Volatile private var listeningSession = false
 
     init {
@@ -111,7 +104,6 @@ internal class SimpleMediaSessionCallback(
                     context: Context?,
                     intent: Intent?,
                 ) {
-                    // Headphones unplugged or Bluetooth dropped: the same moment the player pauses itself.
                     listeningSession = false
                 }
             },
@@ -125,23 +117,18 @@ internal class SimpleMediaSessionCallback(
     var toggleRadio: () -> Unit = {
         mediaPlayerHandler.toggleRadio()
     }
-    /** Results of each recent search, by query; the host asks for them in a second call. */
     private val searchResults = java.util.concurrent.ConcurrentHashMap<String, List<Track>>()
 
-    /** Tracks of the YouTube playlist last browsed, so playback need not re-fetch it. */
     private val onlinePlaylistCache = java.util.concurrent.ConcurrentHashMap<String, List<Track>>()
 
-    /** Songs of the artist last browsed, so playback can build a queue without a second fetch. */
     private val artistSongCache = java.util.concurrent.ConcurrentHashMap<String, List<Track>>()
 
-    /** Tracks of the albums browsed, by browse id, for the same reason. */
     private val albumCache = java.util.concurrent.ConcurrentHashMap<String, List<Track>>()
 
-    /** The Recent tab as last served (the account's YouTube history), so a press plays from it. */
     @Volatile
     private var recentTracks: List<Track> = emptyList()
 
-    /** The Home shelves last served; replaced whole, never mutated, since browse runs on IO threads. */
+    // The Home shelves last served; replaced whole, never mutated, since browse runs on IO threads.
     @Volatile
     private var listHomeItem: List<HomeItem> = emptyList()
 
@@ -153,7 +140,6 @@ internal class SimpleMediaSessionCallback(
         val sessionCommands =
             MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                 .buildUpon()
-                // Add custom commands
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.LIKE, Bundle()))
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.REPEAT, Bundle()))
                 .add(SessionCommand(MEDIA_CUSTOM_COMMAND.RADIO, Bundle()))
@@ -178,12 +164,6 @@ internal class SimpleMediaSessionCallback(
         playerCommand: Int,
     ): Int {
         Logger.d(TAG, "Player Command $playerCommand")
-        // Nothing is intercepted. On RESULT_SUCCESS the session runs the command on its player
-        // itself: Next/Previous reach DelegatingForwardingPlayer → ExoPlayerAdapter.skipTo*, which
-        // also plays a paused queue. This used to send PlayerEvent.Next/Previous to the handler
-        // as well, so every car or notification skip ran twice.
-        // Do NOT intercept COMMAND_SET_SHUFFLE_MODE / COMMAND_SET_REPEAT_MODE either: toggling
-        // here raced the session's own write and left the car UI's shuffle/repeat icons stuck.
         return super.onPlayerCommandRequest(session, controller, playerCommand)
     }
 
@@ -200,7 +180,6 @@ internal class SimpleMediaSessionCallback(
             }
 
             MEDIA_CUSTOM_COMMAND.REPEAT -> {
-                // Toggle through the adapter so listeners fire and the host refreshes the icon.
                 val player = session.player
                 player.repeatMode =
                     when (player.repeatMode) {
@@ -234,38 +213,6 @@ internal class SimpleMediaSessionCallback(
         return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
     }
 
-    /**
-     * Playback resumption: a `play` command that arrives with nothing loaded in the player.
-     *
-     * This is how a Samsung Routine (and any headset or Bluetooth `play` button, and the system
-     * resumption chip) reaches the app when it is not running: `MediaButtonReceiver` starts
-     * [com.maxrave.media3.service.SimpleMediaService] with `startForegroundService()`, Media3
-     * sees a play request against an empty player, and calls this.
-     *
-     * Leaving it unimplemented is what caused a background ANR. The default returns
-     * `Futures.immediateFailedFuture(UnsupportedOperationException())`; Media3 logs that and
-     * still calls `prepare() + play()`, but on an empty player that lands in ENDED rather than
-     * BUFFERING, so `MediaNotificationManager` never considers the session user-engaged and
-     * never calls `startForeground()`. Nothing is blocked - the main thread sits in
-     * `nativePollOnce`, which is exactly what the ANR trace shows - the service simply misses
-     * the foreground-start deadline and the system tears it down with "Context
-     * .startForegroundService() did not then call Service.startForeground()".
-     *
-     * The queue is loaded through [MediaPlayerHandler] instead of being handed back to Media3.
-     * The session player is a single-item delegate in front of `ExoPlayerAdapter`,
-     * which owns the real playlist, so a playlist pushed in through `setMediaItems` here would
-     * desync the two. Returning an empty list with [C.INDEX_UNSET] leaves the player alone -
-     * the same contract [onSetMediaItems] already relies on for Android Auto.
-     *
-     * Ordering matters: Media3 runs its own success handling inline the moment this future
-     * completes, so the restore is deliberately started on a later main-thread message. Priming
-     * the player first would have it cleared right back out.
-     *
-     * `isForPlayback == false` is a different question - Android Auto asking for the recent item
-     * to show after a device boot - and is left answered the way the default answered it, with
-     * nothing. A raw song `MediaItem` would show up there as an entry [onSetMediaItems] cannot
-     * parse (it wants a `song/<id>` style media id), i.e. one that does nothing when tapped.
-     */
     override fun onPlaybackResumption(
         mediaSession: MediaSession,
         controller: MediaSession.ControllerInfo,
@@ -278,14 +225,6 @@ internal class SimpleMediaSessionCallback(
         )
     }
 
-    /**
-     * YouTube Music's "Allow external devices to start playback". When it is off, a play key
-     * from a headset or car (which reaches the session as a media button) cannot start music
-     * that the listener did not have playing: nothing is loaded, or nothing has played since
-     * the app started or the audio output last disconnected. Pausing always works, and so does
-     * resuming within a listening session. The notification's own buttons also arrive here on
-     * Android 12 and older, and always pass.
-     */
     override fun onMediaButtonEvent(
         session: MediaSession,
         controllerInfo: MediaSession.ControllerInfo,
@@ -335,20 +274,16 @@ internal class SimpleMediaSessionCallback(
                         MediaMetadata
                             .Builder()
                             .setIsPlayable(false)
-                            // A media root has to be browsable: it is what Android Auto opens.
                             .setIsBrowsable(true)
                             .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
                             .build(),
                     ).build(),
-                // Declared once at the root: collections default to artwork tiles, tracks to
-                // rows. Individual items override this where they differ.
                 MediaLibraryService.LibraryParams
                     .Builder()
                     .setExtras(
                         Bundle().apply {
                             putBoolean(MEDIA_SEARCH_SUPPORTED, true)
                             putBoolean(CONTENT_STYLE_SUPPORTED, true)
-                            // Home · Recent · Library as AA's tabs, opted in as YouTube Music does.
                             putBoolean(AUTO_TABS_OPT_IN_HINT, true)
                             putInt(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_GRID_ITEM)
                             putInt(CONTENT_STYLE_PLAYABLE_HINT, CONTENT_STYLE_LIST_ITEM)
@@ -415,8 +350,6 @@ internal class SimpleMediaSessionCallback(
                     .build()
             val children: List<MediaItem> =
                 when (parentId) {
-                    // Three tabs, like YouTube Music's own car root (Home | Library, plus Recent
-                    // here). Android Auto draws at most four; the old five-tab root lost one.
                     ROOT -> {
                         listOf(
                             browsableMediaItem(
@@ -453,7 +386,6 @@ internal class SimpleMediaSessionCallback(
                         )
                     }
 
-                    // Saved albums, each opening its tracks.
                     ALBUM -> {
                         albumRepository
                             .getLikedAlbums()
@@ -507,10 +439,6 @@ internal class SimpleMediaSessionCallback(
                                         MediaMetadata.MEDIA_TYPE_PLAYLIST,
                                     )
                                 }
-                        // The account's own playlists, and the mixes YouTube builds from what it
-                        // has heard. Both were missing entirely: this tab only ever listed
-                        // playlists created inside the app, so a signed-in user saw nothing here.
-                        // Failures degrade to the local list rather than emptying the tab.
                         val online =
                             runCatching {
                                 (playlistRepository.getLibraryPlaylist().lastOrNull().orEmpty() +
@@ -543,9 +471,6 @@ internal class SimpleMediaSessionCallback(
                                 ).lastOrNull()
                                 ?.data
                         val shelves = ArrayList(temp?.second ?: emptyList())
-                        // Bounded, never `while (continuation != null)`: YouTube's home feed keeps
-                        // offering continuations, and the old unbounded loop fetched every one of
-                        // them before the head unit saw a single row.
                         var continueParam = temp?.first
                         var pages = 0
                         while (!continueParam.isNullOrEmpty() && pages < HOME_CONTINUATION_PAGES) {
@@ -562,9 +487,6 @@ internal class SimpleMediaSessionCallback(
                             pages++
                         }
                         listHomeItem = shelves.filter { it.title.isNotBlank() }
-                        // One flat list, each shelf's items carrying the shelf title as their group
-                        // — how YouTube Music lays out its car Home. Songs play straight from it;
-                        // playlists and albums open one level down.
                         listHomeItem.flatMap { shelf ->
                             shelfItems(shelf)
                                 .take(HOME_ITEMS_PER_SHELF)
@@ -593,12 +515,6 @@ internal class SimpleMediaSessionCallback(
 
                     "$HOME/$ARTIST" -> {
                         val followed = artistRepository.getFollowedArtists().first()
-                        // Some artists carry no stored image — followed before the importer
-                        // existed, or a subscription row that arrived without a thumbnail — and a
-                        // tile with nothing to draw is the broken-image placeholder again.
-                        // Backfilled here, but strictly bounded: an unbounded sweep over a long
-                        // follow list is the same burst of requests that got the session
-                        // throttled before. The rest fill in on later visits.
                         followed
                             .filter { it.thumbnails.isNullOrBlank() }
                             .take(ARTWORK_BACKFILL_PER_BROWSE)
@@ -633,13 +549,8 @@ internal class SimpleMediaSessionCallback(
 
                     else -> {
                         when {
-                            // A YouTube playlist or mix. Cached on the way through so pressing a
-                            // track does not have to fetch the whole playlist a second time.
                             parentId.startsWith("$ONLINE_PLAYLIST/") -> {
                                 val playlistId = parentId.substringAfter("$ONLINE_PLAYLIST/")
-                                // The first page only, as YouTube Music's car does: fetching every
-                                // page of a long playlist (Liked music) before answering ran past
-                                // the head unit's wait, and it showed the list empty.
                                 val tracks =
                                     playlistRepository
                                         .getPlaylistData(playlistId, context.getString(R.string.view_count))
@@ -658,7 +569,6 @@ internal class SimpleMediaSessionCallback(
                                 }
                             }
 
-                            // An album opens its tracks, in order.
                             parentId.startsWith("$ALBUM/") -> {
                                 val browseId = parentId.substringAfter("$ALBUM/")
                                 val tracks =
@@ -672,8 +582,6 @@ internal class SimpleMediaSessionCallback(
                                 tracks.map { it.toMediaItemWithoutPath("$ALBUM/$browseId") }
                             }
 
-                            // An artist tile opens their songs. Cached on the way through so
-                            // playback does not have to re-fetch the artist page to build a queue.
                             parentId.startsWith("$ARTIST/") -> {
                                 val channelId = parentId.substringAfter("$ARTIST/")
                                 val tracks =
@@ -691,8 +599,6 @@ internal class SimpleMediaSessionCallback(
 
                             parentId.startsWith("$HOME/") -> {
                                 if (parentId.split("/").size == 2) {
-                                    // A whole shelf, from an older head-unit cache that still
-                                    // holds the previous two-level layout.
                                     listHomeItem
                                         .find { it.title == Uri.decode(parentId.split("/")[1]) }
                                         ?.let { shelfItems(it) }
@@ -752,8 +658,6 @@ internal class SimpleMediaSessionCallback(
                         }
                     }
                 }
-            // Media3 hands the host's page window through; honour it instead of answering every
-            // request with the whole list (1 000 songs in one Binder transaction).
             val paged =
                 if (pageSize in 1 until Int.MAX_VALUE) {
                     children.drop(page * pageSize).take(pageSize)
@@ -763,14 +667,6 @@ internal class SimpleMediaSessionCallback(
             return@future LibraryResult.ofItemList(paged, libraryParams)
         }
 
-    /**
-     * The browse items of one Home shelf, songs-only. Songs are playable rows; playlists and
-     * albums are browsable tiles keyed by their own id.
-     *
-     * Emptiness matters, not just nullity: the home parser gives an album `playlistId = null` and
-     * `videoId = ""`. Before albums were routed by browseId every album in a shelf got the same
-     * media id, and the head unit — which keys items by id — drew one cover for all of them.
-     */
     private fun shelfItems(shelf: HomeItem): List<MediaItem> {
         val shelfKey = Uri.encode(shelf.title)
         return shelf.contents.filterNotNull().mapNotNull { content ->
@@ -785,7 +681,6 @@ internal class SimpleMediaSessionCallback(
                             .toSongEntity()
                             .toMediaItem("$HOME/$shelfKey/$SONG", asTile = true)
                     } else {
-                        // A live station or an upload: its radio of songs, played on press.
                         playableMediaItem("$RADIO/${content.videoId}", content.title, artists, art)
                     }
 
@@ -809,7 +704,6 @@ internal class SimpleMediaSessionCallback(
         }
     }
 
-    /** A tile that plays on press rather than opening a list. */
     private fun playableMediaItem(
         id: String,
         title: String,
@@ -832,7 +726,6 @@ internal class SimpleMediaSessionCallback(
                 .build(),
         ).build()
 
-    /** Marks [this] as part of a titled section in a flat list (Android Auto groups consecutive items). */
     private fun MediaItem.withGroupTitle(title: String): MediaItem {
         val extras = Bundle(mediaMetadata.extras ?: Bundle()).apply { putString(CONTENT_STYLE_GROUP_TITLE_HINT, title) }
         return buildUpon()
@@ -840,7 +733,6 @@ internal class SimpleMediaSessionCallback(
             .build()
     }
 
-    /** A plain list row that opens a library folder. */
     private fun folderRow(
         id: String,
         title: String,
@@ -875,20 +767,6 @@ internal class SimpleMediaSessionCallback(
         }
 
     @UnstableApi
-    /**
-     * The queue as [mediaPlayerHandler] has just staged it on the player.
-     *
-     * Every branch below used to hand back an empty list. media3 applies this result to the player
-     * *after* the future resolves, so an empty list wiped the queue `loadMediaItem` had just built:
-     * the `play()` that Android Auto sends straight after then ran against an empty timeline and
-     * nothing was heard. Skipping to the next track repopulated the queue through the handler's own
-     * path, which is why sound only ever arrived one track late.
-     *
-     * Handing back what is already on the player makes media3 re-apply the same queue — a no-op
-     * instead of a wipe. Error paths keep returning the empty result, since nothing was staged.
-     *
-     * Safe to touch the player here: the service scope is [Dispatchers.Main], the app thread.
-     */
     private fun stagedQueue(
         mediaSession: MediaSession,
         fallback: MediaSession.MediaItemsWithStartPosition,
@@ -914,7 +792,6 @@ internal class SimpleMediaSessionCallback(
         startPositionMs: Long,
     ): ListenableFuture<MediaSession.MediaItemsWithStartPosition> =
         scope.future {
-            // Play from Android Auto
             val defaultResult =
                 MediaSession.MediaItemsWithStartPosition(emptyList(), startIndex, startPositionMs)
             val path =
@@ -1014,7 +891,6 @@ internal class SimpleMediaSessionCallback(
                     stagedQueue(mediaSession, defaultResult)
                 }
 
-                // A station or upload pressed on Home: its radio of songs, from the first.
                 RADIO -> {
                     val videoId = path.getOrNull(1) ?: return@future defaultResult
                     val radio =
@@ -1040,8 +916,6 @@ internal class SimpleMediaSessionCallback(
                 ARTIST -> {
                     val channelId = path.getOrNull(1) ?: return@future defaultResult
                     val songId = path.getOrNull(2) ?: return@future defaultResult
-                    // Populated while browsing the artist; re-fetched only if the session was
-                    // restarted between browsing and pressing play.
                     val tracks =
                         artistSongCache[channelId]
                             ?: artistRepository
@@ -1190,9 +1064,6 @@ internal class SimpleMediaSessionCallback(
                     if (type == SONG) {
                         val songId = path.getOrNull(3) ?: return@future defaultResult
                         val songs =
-                            // isNullOrEmpty, not != null: the home parser gives albums and
-                            // artists videoId = "", which is non-null and would otherwise be
-                            // treated as a playable track here.
                             content
                                 ?.filter {
                                     !it?.videoId.isNullOrEmpty() &&
@@ -1314,9 +1185,6 @@ internal class SimpleMediaSessionCallback(
                 .setIsPlayable(false)
                 .setIsBrowsable(true)
                 .setMediaType(mediaType)
-                // A tile is a picture with a caption; asking for one without artwork gets a
-                // broken-image placeholder, which is worse than the row it replaced. Nodes that
-                // have no icon stay rows.
                 .setExtras(
                     contentStyle(
                         browsable = if (iconUri != null) CONTENT_STYLE_GRID_ITEM else CONTENT_STYLE_LIST_ITEM,
@@ -1324,12 +1192,6 @@ internal class SimpleMediaSessionCallback(
                 ).build(),
         ).build()
 
-    /**
-     * [asTile] renders the track as an artwork tile rather than a row. Used for the top-level
-     * tabs, where there is nothing to read your way through and a cover is recognised faster;
-     * the contents of a playlist or album stay rows, because there the point is picking a
-     * specific track out of an order.
-     */
     private fun SongEntity.toMediaItem(
         path: String,
         asTile: Boolean = false,
@@ -1353,22 +1215,6 @@ internal class SimpleMediaSessionCallback(
                 ).build(),
         ).build()
 
-    /**
-     * Rewrites a Google image URL to a square centre crop.
-     *
-     * Artist photos come back at whatever aspect ratio the channel art happens to be — some
-     * portrait, some 16:9 — so a grid built from them looks ragged. The size suffix is a
-     * server-side transform, so asking for a square costs nothing: no download, no scaling here.
-     *
-     * The trailing `-dc<token>` must go. It is bound to the original rendition, and changing the
-     * size while it is present makes the server answer 400 — measured, not assumed. That is why a
-     * handful of artists lost their images when this transform was first added while the rest kept
-     * theirs. Dropping the token, the resized URL serves normally.
-     *
-     * `-c` is crop; `-p` (pad) would letterbox, which is the ragged look again with bars. The
-     * optional group swallows whichever fit flag is already there rather than stacking a second
-     * one, since `-c-p` is contradictory and also rejected.
-     */
     private fun String.asSquareArtwork(size: Int = ARTWORK_SQUARE_PX): String {
         if (!contains("googleusercontent.com") && !contains("ggpht.com")) return this
         val base = replace(RENDITION_TOKEN_SUFFIX, "")
@@ -1379,7 +1225,6 @@ internal class SimpleMediaSessionCallback(
         }
     }
 
-    /** Per-item override of the root's default browse styling. */
     private fun contentStyle(
         browsable: Int? = null,
         playable: Int? = null,
@@ -1419,13 +1264,6 @@ internal class SimpleMediaSessionCallback(
         const val SONG = "song"
         const val HOME = "home"
 
-        /**
-         * Android Auto's classic browse surface picks list-or-grid from these extras. Without
-         * them the host has nothing to go on and renders every level as a plain text list, which
-         * is what SimpMusic showed however much artwork the items carried.
-         *
-         * Names and values are fixed by the platform contract, not by us.
-         */
         const val CONTENT_STYLE_SUPPORTED = "android.media.browse.CONTENT_STYLE_SUPPORTED"
         const val AUTO_TABS_OPT_IN_HINT = "android.media.browse.AUTO_TABS_OPT_IN_HINT"
         const val CONTENT_STYLE_BROWSABLE_HINT = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
@@ -1436,37 +1274,23 @@ internal class SimpleMediaSessionCallback(
 
         const val LIBRARY = "library"
 
-        /** Home feed continuation pages fetched per browse, on top of the first page. */
         private const val HOME_CONTINUATION_PAGES = 2
 
-        /** Items shown per Home shelf; the rest are a scroll too far while driving. */
         private const val HOME_ITEMS_PER_SHELF = 10
 
-        /**
-         * Synthetic Home shelves, prefixed so they cannot collide with a YouTube shelf that
-         * happens to be titled "recent" or "artist" — the generic handler below matches shelves
-         * by their display title.
-         */
         const val RECENT = "__recent"
 
-        /** Rows the Recently played shelf offers; the car host trims further to its own budget. */
         private const val RECENT_LIMIT = 50
 
-        /** Square artwork edge requested from Google's image server for browse tiles. */
-        /** Artists whose missing image is fetched per browse; bounded to avoid a request burst. */
         private const val ARTWORK_BACKFILL_PER_BROWSE = 5
 
-        /** Square artwork edge requested from Google's image server for browse tiles. */
         private const val ARTWORK_SQUARE_PX = 544
 
-        /** Google image size suffixes: `=w1200-h675-p-...` and `=s176-...`. */
         private val WIDTH_HEIGHT_SUFFIX = Regex("""=w\d+-h\d+(-[pc])?""")
         private val SIZE_SUFFIX = Regex("""=s\d+""")
 
-        /** Trailing `-dc<token>`, valid only for the rendition it came with. */
         private val RENDITION_TOKEN_SUFFIX = Regex("""-dc[A-Za-z0-9]+$""")
 
-        /** Google image size suffixes: `=w1200-h675-...` and `=s176-...`. */
         const val ARTIST = "__artist"
         const val ONLINE_PLAYLIST = "online_playlist"
         const val ALBUM = "album"

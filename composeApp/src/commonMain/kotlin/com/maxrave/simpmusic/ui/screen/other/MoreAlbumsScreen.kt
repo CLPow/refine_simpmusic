@@ -44,7 +44,6 @@ import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.albums
 import simpmusic.composeapp.generated.resources.ytm_singles_eps
 
-/** An artist's albums, or singles & EPs, as YouTube Music's grid page. */
 @Composable
 fun MoreAlbumsScreen(
     innerPadding: PaddingValues,

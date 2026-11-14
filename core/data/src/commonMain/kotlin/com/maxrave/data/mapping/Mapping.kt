@@ -193,8 +193,6 @@ internal fun YouTubeInitialPage.toTrack(): Track {
                 ?.toListThumbnail() ?: listOf(),
         title = initialPage.videoDetails?.title ?: "",
         videoId = initialPage.videoDetails?.videoId ?: "",
-        // The plain-YouTube player response has no musicVideoType; only the YouTube *Music* one
-        // (PlayerResponse.VideoDetails) carries it.
         videoType = null,
         category = "",
         feedbackTokens = null,
@@ -248,7 +246,6 @@ internal fun AlbumItem.toAlbumsResult(): AlbumsResult =
         year = this.year?.toString() ?: "",
     )
 
-// SimpMusic Lyrics Extension
 internal fun LyricsResponse.toLyrics(): Lyrics? =
     (
         richSyncLyrics?.takeIf { it.isNotEmpty() }?.let {
@@ -269,7 +266,6 @@ internal fun SearchSuggestions.toDomainSearchSuggestions(): com.maxrave.domain.d
         queries = this.queries,
         recommendedItems =
             this.recommendedItems
-                // Songs only: no video cards among the suggestions either.
                 .filterNot { it is VideoItem || (it is SongItem && !MusicVideoType.isPlayableSong(it.musicVideoType)) }
                 .map {
                 when (it) {

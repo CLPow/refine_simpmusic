@@ -22,17 +22,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.simpmusic.cast.currentCastDeviceName
 
-/**
- * Owns the local ↔ Cast-receiver handoff.
- *
- * The adapter keeps every ExoPlayer at a single-item timeline and simulates the playlist
- * itself, so Media3's default state transfer cannot populate the remote queue. Instead this
- * manager watches the session player's [DeviceInfo]: on remote it snapshots the adapter,
- * silences local playback and pushes a small window of resolved-URL items to the receiver;
- * on return to local it restores the adapter at the last remote position. While remote,
- * the adapter routes transport calls to the session player and playback-start requests to
- * [ExoPlayerAdapter.castPlaybackRouter], which lands in [pushQueueWindow].
- */
 @UnstableApi
 internal class CastHandoffManager(
     private val adapter: ExoPlayerAdapter,
@@ -42,7 +31,6 @@ internal class CastHandoffManager(
 ) {
     private var isRemote = false
 
-    /** Receiver queue position -> playlist index in the adapter. */
     private var remoteToPlaylist = listOf<Int>()
     private var pushJob: Job? = null
     private var positionPollJob: Job? = null
@@ -54,7 +42,6 @@ internal class CastHandoffManager(
     private var retryMediaId: String? = null
     private var retryCount = 0
 
-    /** Consecutive current-track resolve failures while casting; bounds auto-skip so a network outage can't spin the whole queue. */
     private var resolveFailureCount = 0
 
     private val playerListener =
@@ -83,8 +70,6 @@ internal class CastHandoffManager(
                 if (!isRemote) return
                 adapter.notifyRemotePlaybackState(playbackState)
                 if (playbackState == Player.STATE_ENDED && adapter.hasNextMediaItem()) {
-                    // Single-item window (shuffle) or exhausted queue: advance through the
-                    // adapter so shuffle/repeat logic stays the single source of truth.
                     Logger.d(TAG, "Receiver queue ended — advancing via adapter")
                     adapter.seekToNext()
                 }
@@ -110,7 +95,6 @@ internal class CastHandoffManager(
     }
 
     private fun onCastConnected() {
-        // Snapshot BEFORE setCastActive: afterwards the adapter getters route to the receiver.
         val startIndex = adapter.currentMediaItemIndex
         val startPositionMs = adapter.currentPosition
         val playWhenReady = adapter.isPlaying || adapter.playWhenReady
@@ -137,18 +121,12 @@ internal class CastHandoffManager(
         resolveFailureCount = 0
         val resumeIndex = adapter.currentMediaItemIndex
         val resumePositionMs = lastKnownRemotePositionMs
-        // Clear remote routing first so the seek below starts the local machinery again;
-        // seekTo() resumes with the adapter's playWhenReady, which tracked the remote state.
         adapter.setCastActive(null, null)
         if (resumeIndex >= 0) {
             adapter.seekTo(resumeIndex, resumePositionMs)
         }
     }
 
-    /**
-     * Resolve URLs and (re)load the receiver queue starting at [startIndex].
-     * With shuffle on, only the current item is pushed — "next" stays adapter-driven.
-     */
     private fun pushQueueWindow(
         startIndex: Int,
         startPositionMs: Long,
@@ -167,9 +145,6 @@ internal class CastHandoffManager(
                         } else {
                             (startIndex until minOf(startIndex + INITIAL_WINDOW_SIZE, itemCount)).toList()
                         }
-                    // Snapshot the items here (main thread) before going to IO: the adapter's playlist
-                    // is a plain ArrayList mutated on the main thread, so reading it from
-                    // Dispatchers.IO races with queue edits.
                     val window = windowIndices.mapNotNull { index -> adapter.getMediaItemAt(index)?.let { index to it } }
                     val resolved =
                         window
@@ -189,11 +164,6 @@ internal class CastHandoffManager(
                     resolveFailureCount = 0
                     Logger.d(TAG, "pushQueueWindow: resolved ${resolved.size}/${window.size} items, playlistIndices=${resolved.map { it.first }}")
                     remoteToPlaylist = resolved.map { it.first }
-                    // The receiver only ever holds this small window, so forwarding REPEAT_ALL would
-                    // loop the window forever instead of the real playlist. Map it to OFF and let
-                    // STATE_ENDED bubble back to the adapter, which owns shuffle/repeat. REPEAT_ONE is
-                    // safe to forward — it loops the current item, which is exactly the intent.
-                    // PlayerConstants repeat values match Player.REPEAT_MODE_* 1:1.
                     sessionPlayer.repeatMode =
                         if (adapter.repeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
                     sessionPlayer.setMediaItems(resolved.map { it.second }, 0, startPositionMs)
@@ -208,12 +178,6 @@ internal class CastHandoffManager(
             }
     }
 
-    /**
-     * The current track's stream URL could not be resolved while casting. Instead of leaving the
-     * receiver idle, advance to the next track — bounded by [MAX_RESOLVE_FAILURES] consecutive
-     * misses so a network-wide outage (or REPEAT_ONE on a dead track) can't spin the whole queue.
-     * After the cap, surface the end state so the UI doesn't freeze mid-track.
-     */
     private fun onResolveFailedWhileRemote(failedIndex: Int) {
         resolveFailureCount++
         if (resolveFailureCount <= MAX_RESOLVE_FAILURES && adapter.hasNextMediaItem()) {
@@ -234,7 +198,6 @@ internal class CastHandoffManager(
         retryMediaId = null
         retryCount = 0
         resolveFailureCount = 0
-        // Keep one resolved item ahead of the receiver for near-gapless auto-advance.
         if (remoteIndex == remoteToPlaylist.lastIndex && !adapter.shuffleModeEnabled) {
             appendNextToRemoteQueue(playlistIndex + 1)
         }
@@ -257,10 +220,6 @@ internal class CastHandoffManager(
         }
     }
 
-    /**
-     * Remote 403/expiry recovery: invalidate the cached format, re-resolve and re-push at
-     * the last known position. After [MAX_STREAM_RETRIES] the track is skipped instead.
-     */
     private fun recoverFromRemoteError() {
         val remoteIndex = sessionPlayer.currentMediaItemIndex
         val playlistIndex = remoteToPlaylist.getOrNull(remoteIndex) ?: adapter.currentMediaItemIndex
@@ -277,17 +236,12 @@ internal class CastHandoffManager(
                     retryCount++
                     Logger.w(TAG, "Refreshing stream URL for $mediaId (attempt $retryCount/$MAX_STREAM_RETRIES)")
                     withContext(Dispatchers.IO) { resolver.invalidate(mediaId) }
-                    // The session can end while invalidate() suspends above; without this re-check the
-                    // push below would land a resolved-URL queue on the *local* player and break the
-                    // adapter's single-item-timeline invariant.
                     if (!isRemote) return@launch
                     pushQueueWindow(playlistIndex, lastKnownRemotePositionMs, true)
                 } else if (adapter.hasNextMediaItem()) {
                     Logger.w(TAG, "Giving up on $mediaId — skipping to next track")
                     adapter.seekToNext()
                 } else {
-                    // No retries left and nothing to skip to — surface the end state instead of
-                    // leaving the receiver (and the UI) frozen mid-track.
                     Logger.e(TAG, "Giving up on $mediaId — no next track, ending remote playback")
                     adapter.notifyRemotePlaybackState(Player.STATE_ENDED)
                 }
@@ -298,12 +252,7 @@ internal class CastHandoffManager(
         positionPollJob?.cancel()
         positionPollJob =
             coroutineScope.launch {
-                // The CastPlayer's position resets once the session ends, so the last remote
-                // position must be sampled continuously to restore local playback later.
                 while (isActive) {
-                    // Only sample once the receiver actually holds our queue: until pushQueueWindow
-                    // lands, the CastPlayer reports position 0, which would wipe the snapshot taken in
-                    // onCastConnected() and resume local playback from the start of the track.
                     if (sessionPlayer.mediaItemCount > 0 && sessionPlayer.playbackState != Player.STATE_IDLE) {
                         lastKnownRemotePositionMs = sessionPlayer.currentPosition
                     }

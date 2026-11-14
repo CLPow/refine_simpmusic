@@ -7,10 +7,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * On-device crash log. The FOSS build ships without Sentry, so without this a crash leaves no
- * trace the user can hand over. Kept small: the file is trimmed to its newest [MAX_BYTES].
- */
 object CrashLog {
     private const val FILE_NAME = "crash-log.txt"
     private const val MAX_BYTES = 256 * 1024

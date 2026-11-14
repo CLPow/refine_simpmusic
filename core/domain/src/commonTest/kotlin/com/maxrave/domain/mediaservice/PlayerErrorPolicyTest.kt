@@ -27,7 +27,6 @@ class PlayerErrorPolicyTest {
 
     @Test
     fun aConnectionProblemPausesAndMayResumeByItself() {
-        // Offline: the resolver fails with a plain error no code tells apart.
         assertTrue(assertIs<PlayerErrorAction.Pause>(playerErrorAction(error(2000), online = false, hasNext = true, skips = 0)).network)
         assertTrue(assertIs<PlayerErrorAction.Pause>(playerErrorAction(error(2001), online = true, hasNext = true, skips = 0)).network)
         val timeout = playerErrorAction(error(PlayerConstants.ERROR_CODE_TIMEOUT), online = true, hasNext = true, skips = 0)

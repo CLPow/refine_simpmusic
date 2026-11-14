@@ -10,18 +10,6 @@ import java.net.URI
 
 private const val TAG = "OpenUrl"
 
-/**
- * Opens [url] in the user's browser. Never throws, and never fails silently.
- *
- * `java.awt.Desktop` is tried first because it is the one path that honours the user's
- * configured default handler on every OS — but it cannot be relied on. On Linux it hangs off a
- * dlopen of the system libgio, which fails outright once another native library has claimed the
- * libglib soname (see the Desktop API warm-up at the top of `runDesktopApp`). This used to be
- * the ONLY path, wrapped in an `if` with no `else`, so the moment the Desktop API went
- * unsupported every external link in the app quietly did nothing — no error, no log, no toast.
- *
- * Hence the per-OS launcher below it, and a toast when even that fails.
- */
 actual fun openUrl(url: String) {
     if (openWithDesktopApi(url)) return
     if (openWithSystemLauncher(url)) return
@@ -42,15 +30,6 @@ private fun openWithDesktopApi(url: String): Boolean =
         false
     }
 
-/**
- * Hands the URL to whatever the platform ships for the job.
- *
- * The Linux list is ordered by how likely each one is to be present: `xdg-open` is the
- * convention but is not guaranteed to be installed, `gio` comes with glib so it is on every
- * desktop that runs GTK at all, and `$BROWSER` is the last thing a minimal setup may still
- * honour. A successful `start()` only proves the binary exists — waiting for an exit code would
- * block the caller (these run on the AWT event thread), so we take that as good enough.
- */
 private fun openWithSystemLauncher(url: String): Boolean {
     val os = System.getProperty("os.name", "").lowercase()
     val candidates =

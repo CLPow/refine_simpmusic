@@ -6,8 +6,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
-// Material icons "comment" and "send" (Apache 2.0), for the Now Playing comments.
-
 private fun materialIcon(
     name: String,
     pathData: String,

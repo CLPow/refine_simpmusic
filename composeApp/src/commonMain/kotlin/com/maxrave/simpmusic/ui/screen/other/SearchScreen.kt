@@ -128,7 +128,6 @@ import simpmusic.composeapp.generated.resources.ytm_search_failed
 import simpmusic.composeapp.generated.resources.ytm_search_hint
 import simpmusic.composeapp.generated.resources.ytm_video
 
-/** YouTube's chip ids, mapped to the filtered lists Refine has. */
 private val chipTypes =
     mapOf(
         "Songs" to SearchType.SONGS,
@@ -139,13 +138,6 @@ private val chipTypes =
         "Featured playlists" to SearchType.FEATURED_PLAYLISTS,
     )
 
-/**
- * YouTube Music's search, the Search tab: the field on top; while typing, recent searches and
- * YouTube's suggestions (the arrow fills the field without searching) with the songs, artists and
- * albums it suggests below them; after searching, YouTube's chips in the order it ranks them for
- * the query, then its results page as sent: the top result card with its buttons and rows, and
- * the ranked rows under it. A chip shows that one kind, a page at a time.
- */
 @Composable
 fun SearchScreen(
     navController: NavController,
@@ -181,8 +173,6 @@ fun SearchScreen(
         )
     }
 
-    // System back steps back the way the arrow does: typing over results returns to them, and
-    // results return to the field, before back leaves Search.
     PlatformBackHandler(enabled = submitted != null) {
         if (editing) {
             query = submitted.orEmpty()
@@ -204,7 +194,6 @@ fun SearchScreen(
             viewModel.suggestQuery(query)
         }
     }
-    // Tapping the Search tab again: back to an empty field, ready to type.
     LaunchedEffect(reload) {
         if (reload == SearchDestination::class) {
             query = ""
@@ -257,7 +246,6 @@ fun SearchScreen(
     }
 
     Column(Modifier.fillMaxSize().background(Ytm.Background)) {
-        // The search field, YouTube Music's top bar on this page.
         Row(
             Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.statusBars).height(64.dp).padding(end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -265,7 +253,6 @@ fun SearchScreen(
             if (submitted != null || navController.previousBackStackEntry != null) {
                 IconButton(onClick = {
                     if (submitted != null && !editing) {
-                        // Back from results returns to the field, as YouTube Music does.
                         submitted = null
                         editing = true
                         focus.requestFocus()
@@ -317,7 +304,6 @@ fun SearchScreen(
                     Icon(SimpIcons.Close, contentDescription = stringResource(Res.string.ytm_clear), tint = Color.White)
                 }
             } else if (isSongRecognitionSupported) {
-                // YouTube Music's song search: name what is playing nearby.
                 IconButton(onClick = { songSearch = true }) {
                     Icon(SimpIcons.GraphicEq, contentDescription = stringResource(Res.string.ytm_song_search), tint = Color.White)
                 }
@@ -354,7 +340,6 @@ fun SearchScreen(
             return@Column
         }
 
-        // YouTube's chips for this query, in its order.
         val chips = state.summary?.chips.orEmpty().mapNotNull { chip -> chipTypes[chip.id]?.let { it to chip.label } }
         if (chips.isNotEmpty()) {
             val selected = chips.indexOfFirst { it.first == state.searchType }.takeIf { it >= 0 }
@@ -461,7 +446,6 @@ private fun NoResults() {
     )
 }
 
-/** The unfiltered page: the top result card, then each of YouTube's shelves with its rows. */
 private fun LazyListScope.summaryPage(
     summary: com.maxrave.domain.data.model.searchResult.SearchSummary?,
     onRow: (SearchRow) -> Unit,
@@ -484,11 +468,6 @@ private fun LazyListScope.summaryPage(
     }
 }
 
-/**
- * YouTube Music's top result: a raised card with the picture (round for an artist), the name and
- * YouTube's line under it, its buttons (Shuffle and Mix for an artist, Play for an album or song),
- * and the rows YouTube puts under it.
- */
 @Composable
 private fun TopResultCard(
     top: SearchTopResult,
@@ -609,14 +588,12 @@ private fun Suggestions(
 ) {
     val recent = if (query.isBlank()) history else history.filter { it.contains(query, ignoreCase = true) }.take(3)
     LazyColumn(Modifier.fillMaxSize()) {
-        // A long press offers to remove a recent search, as in YouTube Music.
         itemsIndexed(recent, key = { i, it -> "h-$i-$it" }) { _, text ->
             SuggestionRow(SimpIcons.History, text, { onSearch(text) }, onLongClick = { onRemoveHistory(text) }) { onFill(text) }
         }
         itemsIndexed(suggestions.filter { it !in recent }, key = { i, it -> "s-$i-$it" }) { _, text ->
             SuggestionRow(SimpIcons.Search, text, { onSearch(text) }) { onFill(text) }
         }
-        // The songs, artists and albums YouTube suggests for what is typed so far.
         itemsIndexed(items, key = { index, _ -> "i-$index" }) { _, item ->
             when (item) {
                 is SongsResult -> SongResultRow(item, { onSong(item) }, null)
@@ -653,7 +630,6 @@ private fun SuggestionRow(
         Spacer(Modifier.width(20.dp))
         Text(text, style = typo().bodyLarge, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
         IconButton(onClick = onFill) {
-            // The arrow points up-left: it puts the suggestion in the field without searching.
             Icon(SimpIcons.ArrowOutward, contentDescription = stringResource(Res.string.ytm_fill_in), tint = Ytm.TextSecondary, modifier = Modifier.size(20.dp).rotate(-90f))
         }
     }
@@ -713,7 +689,6 @@ private fun PlaylistResultRow(
 
 private enum class ThumbShape { Square, Round, Wide }
 
-/** A result row: picture (square, round for an artist, 16:9 for a video), title, YouTube's line, ⋮. */
 @Composable
 private fun ResultRow(
     title: String,

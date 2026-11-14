@@ -21,14 +21,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
-/**
- * HTTP(S) images use cache for 24 hours, then try the network with stale-cache fallback.
- * Expiry never deletes an image, and a failed refresh never renews its TTL.
- *
- * Coil writes network responses to disk before decoding them, including some HTTP failures.
- * Stage each response under a temporary key in the SAME disk cache and promote it only after
- * decoding succeeds. This keeps a 404 or an undecodable 200 from replacing the offline fallback.
- */
+// Expiry never deletes an image, and a failed refresh never renews its TTL.
 class NetworkFirstInterceptor(
     private val ttlMillis: Long = 24L * 60 * 60 * 1000,
     private val nowMillis: () -> Long = { System.currentTimeMillis() },
@@ -56,7 +49,6 @@ class NetworkFirstInterceptor(
         }
 
         val diskKey = request.diskCacheKey ?: url
-        // Serialize only requests for the same disk entry so promotion and RAM updates agree.
         // Remove the lock after its last user; browsing new URLs must not grow a permanent map.
         val requestLock = registryMutex.withLock {
             requestLocks.getOrPut(diskKey) { RequestLock() }.also { it.users++ }
@@ -99,14 +91,11 @@ class NetworkFirstInterceptor(
                 (cachedValue?.takeIf { it.image === cachedResult.image }?.extras?.get(CACHED_AT_KEY) as? Long)
                     ?: readCachedAt(diskCache, cachedResult.diskCacheKey ?: diskKey)
             if (cachedAtMillis != null) {
-                // Warming RAM from disk must carry the original age, not start a new TTL.
                 updateMemoryEntry(loader.memoryCache, cachedResult, cachedAtMillis = cachedAtMillis)
             }
             if (isFresh(cachedAtMillis)) return cachedResult.copy(request = request)
         }
 
-        // Keep a successfully decoded stale image alive while refreshing. A failed refresh can
-        // return it even if another request evicts its disk entry in the meantime.
         val temporaryKey = "coil-network-first:${UUID.randomUUID()}"
         val networkRequest = request.newBuilder()
             .memoryCachePolicy(if (request.memoryCachePolicy.writeEnabled) CachePolicy.WRITE_ONLY else CachePolicy.DISABLED)
@@ -130,18 +119,13 @@ class NetworkFirstInterceptor(
                 return networkResult.copy(request = request, diskCacheKey = savedDiskKey)
             }
 
-            // Force the stale cache on failure without changing its age. Retry cache-only if it
-            // was initially missing, in case another producer filled it during the network attempt.
             val fallbackResult = if (cachedResult is SuccessResult) cachedResult else chain.withRequest(cacheRequest).proceed()
             return if (fallbackResult is SuccessResult) {
                 fallbackResult.copy(request = request)
             } else {
-                // Keep the real network error, not the cache-only miss (usually HTTP 504).
                 (networkResult as ErrorResult).copy(request = request)
             }
         } catch (cancelled: CancellationException) {
-            // The engine may have written RAM just before cancellation prevented it returning a
-            // result. Drop only entries still pointing at this request's soon-to-be-deleted file.
             val memoryCache = loader.memoryCache
             if (memoryCache != null) {
                 memoryCache.keys.forEach { key ->
@@ -178,7 +162,6 @@ class NetworkFirstInterceptor(
             }
         } catch (error: Exception) {
             if (error is CancellationException) throw error
-            // Unknown/older metadata is stale, not grounds to delete its still-usable image.
             null
         }
     }
@@ -193,7 +176,6 @@ class NetworkFirstInterceptor(
             snapshot.use {
                 val editor = diskCache.openEditor(diskKey) ?: return@withContext false
                 try {
-                    // Copy encoded bytes, not a recompressed bitmap: format and quality stay intact.
                     diskCache.fileSystem.copy(snapshot.metadata, editor.metadata)
                     diskCache.fileSystem.copy(snapshot.data, editor.data)
                     coroutineContext.ensureActive()
@@ -224,8 +206,6 @@ class NetworkFirstInterceptor(
         val value = cache[memoryKey] ?: return
         if (value.image !== result.image) return
 
-        // Coil keeps the source disk key in value extras. Replace only our unique temporary value,
-        // without depending on Coil's private extra names or altering sampling/size information.
         val extras = value.extras.toMutableMap()
         if (temporaryKey != null) {
             value.extras.forEach { (key, extra) ->

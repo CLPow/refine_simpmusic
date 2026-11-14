@@ -104,7 +104,6 @@ class SharedViewModel(
     private val lyricsCanvasRepository: LyricsCanvasRepository,
     private val cacheRepository: CacheRepository,
 ) : BaseViewModel() {
-    /** See [StreamRepository.lastPlaybackPingStatus]. Null until a track has played. */
     fun lastPlaybackPingStatus(): PlaybackPingStatus? = streamRepository.lastPlaybackPingStatus()
 
     var isFirstLiked: Boolean = false
@@ -123,12 +122,6 @@ class SharedViewModel(
     private var _format: MutableStateFlow<NewFormatEntity?> = MutableStateFlow(null)
     val format: SharedFlow<NewFormatEntity?> = _format.asSharedFlow()
 
-    /**
-     * Which extractor and cipher decoder produced the current track's URLs, shown in the info sheet.
-     *
-     * Read alongside the format rather than stored with it: the format row is cached and reused,
-     * while this describes the extraction that happened in this run of the app.
-     */
     private val _extractSource: MutableStateFlow<String?> = MutableStateFlow(null)
     private val _intent: MutableStateFlow<GenericIntent?> = MutableStateFlow(null)
     val intent: StateFlow<GenericIntent?> = _intent
@@ -181,7 +174,6 @@ class SharedViewModel(
     init {
         viewModelScope.launch {
             log("SharedViewModel init")
-            // Before anything reads a cached lyric.
             runCatching { lyricsCanvasRepository.purgeLyricsCacheIfStale(dataStoreManager) }
             val timeLineJob =
                 launch {
@@ -237,23 +229,6 @@ class SharedViewModel(
                     Logger.w(tag, "NowPlayingState is $state")
                     _nowPlayingState.value = state
 
-                    // Seed the timeline from METADATA as soon as the track is known, instead of
-                    // waiting for the player. SimpleMediaState.Ready carries a duration and only
-                    // fires once the container is parsed; after a queue restore nothing plays, the
-                    // position poll never starts (it runs only while isPlaying), and so nothing
-                    // ever reports a length — which is why a restored queue showed no times at all.
-                    // SongEntity has known the length since the song was first seen.
-                    //
-                    // Written on EVERY track change, not just when missing: leaving the old value
-                    // in place would show the previous track's length over the new one.
-                    // Order matters: metadata first because it is available immediately, then the
-                    // player's own duration, and only -1 ("not known yet") when neither has one.
-                    //
-                    // Writing -1 whenever metadata is missing — which this did at first — makes
-                    // every radio track and every first-time track flash NA:NA on the clock until
-                    // the container is parsed, because those rows have no durationSeconds stored.
-                    // Asking the player before giving up covers exactly that case: on a normal
-                    // track change it usually already knows.
                     val metadataDurationMs = (state.songEntity?.durationSeconds ?: 0).toLong() * 1000L
                     val seededTotal =
                         metadataDurationMs.takeIf { it > 0L }
@@ -317,13 +292,6 @@ class SharedViewModel(
                             }
 
                             SimpleMediaState.Ended -> {
-                                // Park at the end of the track rather than at -1. The only formatter
-                                // for these fields renders any negative as "NA:NA", and nothing here
-                                // is guaranteed to follow: at the end of the queue the player simply
-                                // stays ended, so a -1 written here stays on screen. Worse, the
-                                // Progress branch below ignores negative values and the Loading
-                                // branch restores `total` without touching `current`, which is how
-                                // the player ends up showing a correct duration next to "NA:NA".
                                 _timeline.update {
                                     it.copy(
                                         current = it.total.coerceAtLeast(0L),
@@ -353,12 +321,7 @@ class SharedViewModel(
                                         }
                                     }
                                 }
-                                // When progress hasn't changed (same value polled again) or is negative,
-                                // don't modify loading state. The loading flag is already managed by
-                                // Buffering/Ready/Loading state events. Setting loading=true here would
-                                // cause rapid flickering because the progress poll interval (100ms) is
-                                // shorter than the adapter's position cache update interval (200ms),
-                                // resulting in duplicate position values that incorrectly triggered loading.
+                                // When progress hasn't changed (same value polled again) or is negative, don't modify loading state.
                             }
 
                             is SimpleMediaState.Loading -> {
@@ -376,12 +339,6 @@ class SharedViewModel(
                                     it.copy(
                                         current = mediaPlayerHandler.getProgress(),
                                         loading = false,
-                                        // The player's own duration wins, but ONLY when it has one.
-                                        // ExoPlayer answers C.TIME_UNSET (a large negative, not
-                                        // null) until it has parsed the container, and Ready is
-                                        // also published from onIsLoadingChanged — which fires
-                                        // before STATE_READY. Writing that would throw away the
-                                        // metadata duration seeded on the track change above.
                                         total = mediaState.duration.takeIf { d -> d > 0L } ?: it.total,
                                     )
                                 }
@@ -416,7 +373,6 @@ class SharedViewModel(
             sleepTimerJob.join()
             playlistNameJob.join()
         }
-        // Reset downloading songs & playlists to not downloaded
         checkAllDownloadingSongs()
         checkAllDownloadingPlaylists()
         checkAllDownloadingLocalPlaylists()
@@ -443,8 +399,6 @@ class SharedViewModel(
                 _likeStatus.value = false
                 songRepository.getLikeStatus(videoId).collectLatest { status ->
                     _likeStatus.value = status
-                    // Liked on YouTube elsewhere (the web, another phone): show it as liked here
-                    // too, the way YouTube Music's thumb follows the account.
                     val id = videoId.removePrefix(MERGING_DATA_TYPE.VIDEO)
                     if (status && !mediaPlayerHandler.controlState.value.isLiked) {
                         songRepository.updateLikeStatus(id, 1)
@@ -546,8 +500,6 @@ class SharedViewModel(
         }
     }
 
-    // A single read, inside the lyrics job: a collector of its own outlived the song and wrote a
-    // later database change for it over the next song's lyrics.
     private suspend fun getSavedLyrics(track: Track) {
         run {
             val lyrics = lyricsCanvasRepository.getSavedLyrics(track.videoId).firstOrNull()
@@ -562,11 +514,6 @@ class SharedViewModel(
                         LyricsProvider.OFFLINE,
                     )
                 } else {
-                    // The end of the chain, and the only place that can honestly say there are
-                    // none: every source has been asked and nothing was saved from an earlier run.
-                    // Previously this branch did not exist, so a track with no lyrics anywhere left
-                    // the screen in whatever state it was already in, with no indication that the
-                    // search had finished.
                     val plain = youTubePlainLyrics?.takeIf { it.first == track.videoId }?.second
                     if (plain != null) {
                         updateLyrics(track.videoId, track.durationSeconds ?: 0, plain, LyricsProvider.YOUTUBE_MUSIC)
@@ -671,20 +618,16 @@ class SharedViewModel(
 
                 PLAYLIST_CLICK -> {
                     if (index == null) {
-//                                        fetchSourceFromQueue(downloaded = downloaded ?: 0)
                         loadPlaylistOrAlbum(index = 0)
                     } else {
-//                                        fetchSourceFromQueue(index!!, downloaded = downloaded ?: 0)
                         loadPlaylistOrAlbum(index = index)
                     }
                 }
 
                 ALBUM_CLICK -> {
                     if (index == null) {
-//                                        fetchSourceFromQueue(downloaded = downloaded ?: 0)
                         loadPlaylistOrAlbum(index = 0)
                     } else {
-//                                        fetchSourceFromQueue(index!!, downloaded = downloaded ?: 0)
                         loadPlaylistOrAlbum(index = index)
                     }
                 }
@@ -756,8 +699,6 @@ class SharedViewModel(
 
                 is UIEvent.UpdateVolume -> {
                     val newVolume = uiEvent.newVolume
-                    // Apply to the player first: persisting to DataStore is a suspending disk write
-                    // and must not sit between the user's gesture and the audible change.
                     mediaPlayerHandler.onPlayerEvent(PlayerEvent.UpdateVolume(newVolume))
                     dataStoreManager.setPlayerVolume(newVolume)
                 }
@@ -798,7 +739,6 @@ class SharedViewModel(
                         }
 
                         else -> {
-                            // Skip
                         }
                     }
                 }
@@ -841,8 +781,6 @@ class SharedViewModel(
                         } else {
                             _format.emit(null)
                         }
-                        // Re-read on every emission: the first one usually lands before the
-                        // extractor has finished, so the source is only known on a later pass.
                         _extractSource.value = streamRepository.getExtractSource(mediaId)
                     }
                 }
@@ -888,8 +826,6 @@ class SharedViewModel(
             Logger.d(tag, "Dropping lyrics for $videoId: now showing $lyricsVideoId")
             return
         }
-        // YouTube Music's own text beats an untimed match from elsewhere (matched by title and
-        // length, possibly another song): only a timed source may replace it.
         val youTubePlain = youTubePlainLyrics?.takeIf { it.first == videoId }?.second
         val untimed = foundLyrics?.syncType == null || foundLyrics.syncType == "UNSYNCED"
         val useYouTubePlain = youTubePlain != null && foundProvider != LyricsProvider.YOUTUBE_MUSIC && foundLyrics != null && untimed
@@ -925,7 +861,6 @@ class SharedViewModel(
                         ),
                 )
             }
-            // Save lyrics to database
             viewModelScope.launch {
                 lyricsCanvasRepository.insertLyrics(
                     LyricsEntity(
@@ -944,9 +879,6 @@ class SharedViewModel(
         song: SongEntity,
         duration: Int,
     ) {
-        // One search at a time: the previous song's is cancelled, so its late answers (or its
-        // final "none found") cannot land on this one. updateLyrics also drops anything not for
-        // this song, for the paths that run outside the job.
         lyricsJob?.cancel()
         lyricsVideoId = song.videoId
         lyricsJob = viewModelScope.launch {
@@ -967,12 +899,9 @@ class SharedViewModel(
                         ?.artist
                         ?: ""
                 }
-            // A fresh attempt: every source is eligible again for this track.
             triedLyricsSources.clear()
             youTubePlainLyrics = null
             youTubeMusicLyricsSource = null
-            // No per-user provider any more (the setting went with the other non-YouTube-Music
-            // options): every track takes the same best-timed-first order.
             tryLyricsSource(
                 preferred = null,
                 videoId = videoId,
@@ -983,36 +912,14 @@ class SharedViewModel(
         }
     }
 
-    /**
-     * Which sources have already been asked for the track being loaded.
-     *
-     * Confined to the single coroutine that loads lyrics, so no synchronisation is needed; cleared
-     * at the start of each attempt.
-     */
     private val triedLyricsSources = mutableSetOf<String>()
 
-    /** The running lyrics search; cancelled when the next song's starts. */
     private var lyricsJob: Job? = null
 
-    /** The song whose lyrics are being searched for; results for any other are dropped. */
     private var lyricsVideoId: String? = null
 
-    /**
-     * Order the sources are consulted in once the user's choice has been tried.
-     *
-     * Shared with the Android Auto overlay, which resolves lyrics on its own — the phone and the
-     * car asking in different orders would mean a track with lyrics in one and none in the other.
-     */
     private val lyricsSourceOrder = LyricsSourceOrder.DEFAULT
 
-    /**
-     * Runs the next source that has not been tried, starting with [preferred].
-     *
-     * Every source used to hard-code which one it fell back to, which left BetterLyrics and YouTube
-     * captions unreachable unless explicitly selected, and made LRCLIB a dead end. Routing every
-     * miss through here means a track is only reported as having no lyrics once every source has
-     * actually been asked.
-     */
     private suspend fun tryLyricsSource(
         preferred: String?,
         videoId: String,
@@ -1025,9 +932,6 @@ class SharedViewModel(
                 ?: lyricsSourceOrder.firstOrNull { it !in triedLyricsSources }
 
         if (next == null) {
-            // Everything has been asked. Fall through to whatever was saved locally on an earlier
-            // run; that function reports the empty case, so the user is told rather than left
-            // watching a spinner that never resolves.
             getSavedLyrics(song.toTrack().copy(durationSeconds = duration))
             return
         }
@@ -1039,26 +943,14 @@ class SharedViewModel(
             DataStoreManager.LRCLIB -> getLrclibLyrics(song, artist, duration)
             DataStoreManager.BETTER_LYRICS -> getBetterLyrics(song, artist, duration)
             DataStoreManager.YOUTUBE -> getYouTubeCaption(videoId, song, artist, duration)
-            // An unrecognised stored value used to fall through the `when` and quietly load nothing.
             else -> tryLyricsSource(null, videoId, song, artist, duration)
         }
     }
 
-    /**
-     * YouTube Music's plain-text lyrics for the track being loaded, held back while the other
-     * sources are asked for timed ones; shown only if none has any. Confined to the lyrics
-     * coroutine like [triedLyricsSources].
-     */
     private var youTubePlainLyrics: Pair<String, Lyrics>? = null
 
-    /** The credit line for the YouTube Music lyrics being shown. */
     private var youTubeMusicLyricsSource: String? = null
 
-    /**
-     * YouTube Music's own lyrics: timed for this recording when YouTube has timing, which ends the
-     * search. Plain text only is kept for the end of the chain, since a later source may still
-     * have timing for it.
-     */
     private suspend fun getYouTubeMusicLyrics(
         videoId: String,
         song: SongEntity,
@@ -1102,9 +994,6 @@ class SharedViewModel(
                     data.toLyricsEntity(videoId),
                 )
             } else {
-                // Spotify used to sit here behind its own toggle, and LRCLIB was the hard-coded
-                // tail. Both are now just entries in the chain, so nothing is skipped because a
-                // switch happened to be off.
                 tryLyricsSource(null, videoId, song, artist ?: "", duration)
             }
         }
@@ -1233,11 +1122,6 @@ class SharedViewModel(
         _recreateActivity.value = false
     }
 
-    /**
-     * YouTube Music's "Add to queue" for a song, album or playlist ([kind] picks its wording).
-     * A single song used to be turned into "play next" while Autoplay was on, because the queue
-     * end was behind every Autoplay song; it now goes ahead of them, as in YouTube Music.
-     */
     fun addListToQueue(
         listTrack: ArrayList<Track>,
         kind: QueueItemKind = QueueItemKind.SONGS,
@@ -1256,7 +1140,6 @@ class SharedViewModel(
         }
     }
 
-    /** Swiping a song row: one song to the queue, with YouTube Music's confirmation. */
     fun addSongToQueue(track: Track) = addListToQueue(arrayListOf(track))
 
     fun addToYouTubeLiked() {
@@ -1293,11 +1176,6 @@ class SharedViewModel(
         }
     }
 
-    /**
-     * Starts the radio behind [endpoint] (a mix, a station, an artist's shuffle) and plays its first
-     * song, as YouTube Music's Mix and Shuffle buttons do. Songs only: video rows are left out by
-     * the repository, so a station that is itself a live video plays the music around it.
-     */
     fun playRadio(
         endpoint: YouTubeWatchEndpoint,
         title: String,
@@ -1340,16 +1218,12 @@ class SharedViewModel(
         }
     }
 
-    // Kept warm so these synchronous checks (an activity's onDestroy, the player) never block on
-    // DataStore, whose reads now wait for pending writes.
     private val killServiceOnExit = dataStoreManager.killServiceOnExit.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val signedInCookie = dataStoreManager.cookie.stateIn(viewModelScope, SharingStarted.Eagerly, "")
     fun shouldStopMusicService(): Boolean = killServiceOnExit.value == TRUE
 
     fun isUserLoggedIn(): Boolean = signedInCookie.value.isNotEmpty()
 
-    // Flow-based variant of [isUserLoggedIn] so composables can collect login state once
-    // instead of calling runBlocking inside composition (used by NowPlayingScreenContent).
     fun isUserLoggedInFlow(): Flow<Boolean> = dataStoreManager.cookie.map { it.isNotEmpty() }
 }
 
@@ -1364,11 +1238,6 @@ sealed class UIEvent {
 
     data object Previous : UIEvent()
 
-    /**
-     * Always advances to the previous track — bypasses the 3-second
-     * "seek to start of current track" rule used by [Previous]. Used by the
-     * NowPlaying artwork pager swipe.
-     */
     data object SkipToPrevious : UIEvent()
 
     data object Stop : UIEvent()
@@ -1387,7 +1256,6 @@ sealed class UIEvent {
 
     data object ToggleLike : UIEvent()
 
-    /** YouTube Music's thumbs down: rates the song down and skips it. */
     data object Dislike : UIEvent()
 }
 
@@ -1414,7 +1282,6 @@ data class NowPlayingScreenData(
     data class LyricsData(
         val lyrics: Lyrics,
         val lyricsProvider: LyricsProvider,
-        /** YouTube's own credit line ("Source: Musixmatch"), shown as is when present. */
         val sourceText: String? = null,
     )
 
@@ -1432,5 +1299,4 @@ data class NowPlayingScreenData(
     }
 }
 
-/** What "Add to queue" was used on, for YouTube Music's wording of the confirmation. */
 enum class QueueItemKind { SONGS, ALBUM, PLAYLIST }

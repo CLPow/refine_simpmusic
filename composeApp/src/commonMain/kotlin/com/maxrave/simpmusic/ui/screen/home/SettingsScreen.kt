@@ -160,7 +160,6 @@ import simpmusic.composeapp.generated.resources.ytm_start_on_boot_summary
 import simpmusic.composeapp.generated.resources.ytm_using_space
 import kotlin.time.Clock
 
-/** YouTube Music's settings sections, in its order (memberships and developer pages left out). */
 enum class SettingsCategory(
     val key: String,
     val title: StringResource,
@@ -178,7 +177,6 @@ enum class SettingsCategory(
     }
 }
 
-/** YouTube Music's Settings: a plain list of its sections. */
 @Composable
 fun SettingsHomeScreen(
     navController: NavController,
@@ -196,7 +194,6 @@ fun SettingsHomeScreen(
     }
 }
 
-/** One section of Settings. */
 @OptIn(ExperimentalMaterial3Api::class, coil3.annotation.ExperimentalCoilApi::class)
 @Composable
 fun SettingScreen(
@@ -220,7 +217,6 @@ fun SettingScreen(
     val cacheSize by viewModel.cacheSize.collectAsStateWithLifecycle()
     val downloadedSize by viewModel.downloadedCacheSize.collectAsStateWithLifecycle()
     val autoplay by dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }.collectAsStateWithLifecycle(false)
-    // Normalized like the Wi-Fi row: a label stored by an older build still shows as selected.
     val qualityMobile by dataStoreManager.qualityMobile.map { QUALITY.normalize(it) }.collectAsStateWithLifecycle(null)
     val streamOverWifiOnly by dataStoreManager.streamOverWifiOnly.collectAsStateWithLifecycle(false)
     val doubleTapSeekSeconds by dataStoreManager.doubleTapSeekSeconds.collectAsStateWithLifecycle(10)
@@ -286,7 +282,6 @@ fun SettingScreen(
                             }
                     }
                     if (getPlatform() == Platform.Desktop) {
-                        // ytmdesktop's window options.
                         if (isStartOnBootSupported()) {
                             var onBoot by remember { mutableStateOf(isStartOnBootEnabled()) }
                             SwitchRow(
@@ -392,8 +387,6 @@ fun SettingScreen(
                         summary = stringResource(Res.string.ytm_pause_history_summary),
                         checked = sendBackToGoogle == DataStoreManager.FALSE,
                     ) { paused -> viewModel.setSendBackToGoogle(!paused) }
-                    // Whether listening is reaching the account: the one thing that makes Home
-                    // learn from what is played, and otherwise invisible.
                     if (sendBackToGoogle != DataStoreManager.FALSE) {
                         val ping by produceState<PlaybackPingStatus?>(null) {
                             while (true) {
@@ -537,7 +530,6 @@ fun SettingScreen(
     }
 }
 
-/** One line on what happened to the last listen sent to YouTube. */
 @Composable
 private fun pingStatusText(
     ping: PlaybackPingStatus?,
@@ -574,7 +566,6 @@ private class ConfirmDialog(
     val onConfirm: () -> Unit,
 )
 
-/** A YouTube Music settings row: title, grey summary, the whole row tappable. */
 @Composable
 private fun SettingRow(
     title: String,
@@ -595,7 +586,6 @@ private fun SettingRow(
     }
 }
 
-/** A settings row with a switch on the right; the row is the one switch for accessibility. */
 @Composable
 private fun SwitchRow(
     title: String,

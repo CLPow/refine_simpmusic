@@ -93,13 +93,6 @@ import simpmusic.composeapp.generated.resources.playlist
 import kotlin.math.roundToInt
 import com.maxrave.simpmusic.ui.component.ytm.Ytm
 
-/**
- * This is the song item in the playlist or other places.
- *
- * Multi-selection is opt-in per screen: pass [onLongClick] to let a long press start it, then
- * drive [selectionMode] and [isSelected] from the screen's
- * [com.maxrave.simpmusic.ui.component.selection.SongSelectionState].
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SongFullWidthItems(
@@ -184,8 +177,6 @@ fun SongFullWidthItems(
                                 null
                             },
                     ).animateContentSize()
-                    // Keyed on selectionMode so the swipe detector is torn down when selection
-                    // starts — keyed on Unit it would keep running with the stale flag captured.
                     .pointerInput(selectionMode) {
                         if (!isPlaying && onAddToQueue != null && !selectionMode) {
                             detectHorizontalDragGestures(
@@ -305,8 +296,6 @@ fun SongFullWidthItems(
                         .align(Alignment.CenterVertically),
                     verticalArrangement = Arrangement.SpaceEvenly,
                 ) {
-                    // YouTube Music row: one line each, ellipsised (a marquee on every row of a
-                    // long list was both noisy and a constant redraw).
                     Text(
                         text = track?.title ?: songEntity?.title ?: "",
                         style = typo().bodyLarge.copy(fontSize = 15.sp),
@@ -364,8 +353,6 @@ fun SongFullWidthItems(
                 if (rightView != null) {
                     rightView()
                 }
-                // Hidden while selecting: the per-item menu moves up to the selection app bar,
-                // so one tap cannot mean both "act on this song" and "pick this song".
                 if (onMoreClickListener != null && !selectionMode) {
                     RippleIconButton(imageVector = SimpIcons.MoreVert, fillMaxSize = false, tint = subtitleColor) {
                         if (itemVideoId.isNotBlank()) onMoreClickListener.invoke(itemVideoId)

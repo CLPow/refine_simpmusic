@@ -5,7 +5,6 @@ import co.touchlab.kermit.Logger
 object Logger {
     private val logger = Logger
 
-    /** Release builds keep warnings and errors only; debug/info lines sit on hot paths. */
     fun setMinLevel(level: LogLevel) {
         logger.setMinSeverity(
             when (level) {

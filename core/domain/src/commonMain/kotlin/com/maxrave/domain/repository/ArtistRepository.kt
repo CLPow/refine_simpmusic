@@ -24,13 +24,7 @@ interface ArtistRepository {
         nameLogoColor: String?,
     )
 
-    /**
-     * Records the follow locally, and mirrors it onto the YouTube account when that is enabled.
-     *
-     * Returns null when mirroring is off or was not attempted, true when the account was updated,
-     * false when the call failed — the caller decides whether that is worth telling the user
-     * about. The local flag is written either way: Follow must not depend on the network.
-     */
+    // Follow must not depend on the network.
     suspend fun updateFollowedStatus(
         channelId: String,
         followedStatus: Int,

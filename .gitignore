@@ -49,3 +49,10 @@ sentry.properties
 # Local build/compile scratch dumps that should never ship
 /*.log
 /artwork-capture.log
+
+# Local notes and tooling (kept on this PC, not published)
+CLAUDE.md
+SESSION_HANDOFF.md
+.claude/
+docs/ytm-car-reference.md
+desktopApp/MEMORY_TUNING.md

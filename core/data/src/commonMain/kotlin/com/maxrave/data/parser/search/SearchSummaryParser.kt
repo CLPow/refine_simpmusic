@@ -22,14 +22,8 @@ import com.maxrave.kotlinytmusicscraper.models.Run
 import com.maxrave.kotlinytmusicscraper.models.ThumbnailRenderer
 import com.maxrave.kotlinytmusicscraper.models.response.SearchResponse
 
-/** Chips Refine has pages for. Profiles, episodes and podcasts have none, so they are left out. */
 private val SUPPORTED_CHIPS = setOf("Songs", "Videos", "Albums", "Artists", "Community playlists", "Featured playlists")
 
-/**
- * Reads YouTube Music's unfiltered search page as YouTube laid it out: the top result card, then
- * each shelf ("Listen again", "More results", or the older per-type shelves) with its rows in
- * YouTube's ranking. Rows Refine cannot open (profiles, episodes, podcasts) are skipped.
- */
 internal fun parseSearchSummary(response: SearchResponse): SearchSummary {
     val sectionList =
         response.contents
@@ -97,7 +91,6 @@ internal fun parseSearchSummary(response: SearchResponse): SearchSummary {
         }
         section.itemSectionRenderer?.contents?.forEach { item ->
             item.musicShelfRenderer?.let { shelf ->
-                // A titled, empty shelf ("More results") heads the rows that follow it.
                 val title = shelf.title?.runs?.joinToString("") { it.text }.orEmpty()
                 val rows = shelf.contents.orEmpty().mapNotNull { it.musicResponsiveListItemRenderer?.toSearchRow() }
                 sections += title to rows.toMutableList()
@@ -160,7 +153,6 @@ private fun rowFrom(
             videoId.isNullOrEmpty() -> return null
             videoType == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE" -> return null
             MusicVideoType.isPlayableSong(videoType) -> SearchRowKind.SONG
-            // Official videos, and the rest a "Videos" row can hold, play as audio.
             else -> SearchRowKind.VIDEO
         }
     val artists =
@@ -173,8 +165,6 @@ private fun rowFrom(
                     ?.pageType == MUSIC_PAGE_TYPE_ARTIST
             }.map { Artist(id = it.navigationEndpoint?.browseEndpoint?.browseId, name = it.text) }
             .ifEmpty {
-                // Rows whose artist is not linked: the plain run after the type label ("Song •
-                // YOASOBI"). A row with only a type and a length ("Song • 3:22") has none.
                 val parts = secondLine.joinToString("") { it.text }.split(" • ")
                 if (kind == SearchRowKind.SONG || kind == SearchRowKind.VIDEO) {
                     parts.getOrNull(1)?.takeIf { it.isNotBlank() && !it.contains(':') }
@@ -208,8 +198,6 @@ private fun rowFrom(
             ?.map { Thumbnail(height = it.height ?: 0, url = it.url, width = it.width ?: 0) }
             .orEmpty()
             .let { list ->
-                // The list carries 60/120 px renditions; the largest is asked for at 544, as the
-                // other result parsers do, so covers stay sharp.
                 list.lastOrNull()?.let { best ->
                     listOf(best.copy(url = Regex("([wh])(60|120)").replace(best.url, "$1544")))
                 }.orEmpty()

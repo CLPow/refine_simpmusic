@@ -45,7 +45,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 actual fun createWebViewCookieManager(): WebViewCookieManager =
     object : WebViewCookieManager {
-        // getCookie is null when no cookie matches this url, even if hasCookies() is true for others.
         override fun getCookie(url: String): String = CookieManager.getInstance().getCookie(url).orEmpty()
 
         override fun removeAllCookies() {
@@ -62,8 +61,6 @@ actual fun PlatformWebView(
     clearCookies: Boolean,
     onPageFinished: (String) -> Unit,
 ) {
-    // Once per visit: Retry rebuilds the WebView, and clearing again would drop a sign-in that
-    // finished before the renderer was killed.
     val cookiesCleared = remember { AtomicBoolean(false) }
     Box {
         ManagedWebView { onRendererGone ->
@@ -91,7 +88,6 @@ actual fun PlatformWebView(
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
 
-            // Runs inside the factory, so after ManagedWebView's startup has finished.
             if (clearCookies && cookiesCleared.compareAndSet(false, true)) {
                 createWebViewCookieManager().removeAllCookies()
             }
@@ -101,18 +97,6 @@ actual fun PlatformWebView(
     }
 }
 
-/**
- * Hosts a login WebView so that a low-RAM phone cannot take the whole app down with it.
- *
- * - The first WebView in a process starts Chromium on the main thread; on 3–4 GB phones that blocked
- *   for seconds and ended in an ANR (Sentry ANDROID-NFV). [WebViewCompat.startUpWebView] runs that
- *   startup off the main thread first, with a spinner in the meantime.
- * - When the system kills the renderer to reclaim memory, an unhandled `onRenderProcessGone` kills the
- *   app too. The page gets a Retry button instead, which builds a fresh WebView: a WebView whose
- *   renderer is gone cannot be reused.
- * - Leaving the screen destroys the WebView, so the heavy page it ended on (music.youtube.com,
- *   discord.com/app) stops holding memory right away instead of whenever it is finalized.
- */
 @Composable
 private fun ManagedWebView(configure: WebView.(onRendererGone: () -> Unit) -> Unit) {
     val appContext = LocalContext.current.applicationContext
@@ -122,9 +106,6 @@ private fun ManagedWebView(configure: WebView.(onRendererGone: () -> Unit) -> Un
     var rendererGone by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // startUpWebView runs its tasks on this executor with no try/catch of its own: on a device
-        // without a usable WebView the provider load throws, which would crash the process from an
-        // IO worker. Catch it here instead.
         val executor =
             Executor { task ->
                 Dispatchers.IO.asExecutor().execute {
@@ -140,12 +121,10 @@ private fun ManagedWebView(configure: WebView.(onRendererGone: () -> Unit) -> Un
             appContext,
             WebViewStartUpConfig.Builder(executor).build(),
             object : WebViewOutcomeReceiver<WebViewStartUpResult, WebViewStartupException> {
-                // Both callbacks arrive on the UI thread.
                 override fun onResult(result: WebViewStartUpResult) {
                     ready = true
                 }
 
-                // After a reported failure any WebView call may throw or crash natively, so none is made.
                 override fun onError(error: WebViewStartupException) {
                     Logger.e("PlatformWebView", "WebView startup failed", error)
                     startupFailed = true
@@ -169,7 +148,6 @@ private fun ManagedWebView(configure: WebView.(onRendererGone: () -> Unit) -> Un
 
         rendererGone -> {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                // Leaving this branch for the AndroidView below composes a new one, so factory runs again.
                 Button(onClick = { rendererGone = false }) {
                     Text(stringResource(Res.string.retry), color = LocalContentColor.current)
                 }
@@ -199,11 +177,9 @@ private fun handleRendererGone(
 ): Boolean {
     Logger.w("PlatformWebView", "WebView renderer gone, crashed=${detail.didCrash()}")
     onRendererGone()
-    // true keeps the app alive; the WebView is destroyed when the Retry branch replaces it.
     return true
 }
 
-// Devices without a working WebView provider (watches, a WebView mid-update) throw from the constructor.
 private fun webViewOrFallback(
     context: Context,
     unavailable: String,
@@ -212,12 +188,10 @@ private fun webViewOrFallback(
     val webView = runCatching { WebView(context) }.getOrElse { e -> return unavailableView(context, unavailable, e) }
     return runCatching {
         webView.apply {
-            // Keep login pages off WebView's GPU draw path, which can crash the host RenderThread.
             setLayerType(View.LAYER_TYPE_SOFTWARE, null)
             setup()
         }
     }.getOrElse { e ->
-        // onRelease only ever sees the fallback view, so a WebView that failed setup is destroyed here.
         runCatching { webView.destroy() }
         unavailableView(context, unavailable, e)
     }

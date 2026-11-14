@@ -138,7 +138,6 @@ class SimpMusicLyrics {
         limit: Int,
     ): HttpResponse {
         val response = requestAMSearch(name, limit, amTokenManager.getToken(httpClient))
-        // Expired bearer -> refresh the token once and retry on a fresh request.
         if (response.status.value == 401) {
             amTokenManager.clearToken()
             return requestAMSearch(name, limit, amTokenManager.getToken(httpClient))
@@ -165,7 +164,6 @@ class SimpMusicLyrics {
 
     suspend fun getAMArtist(id: String): HttpResponse {
         val response = requestAMArtist(id, amTokenManager.getToken(httpClient))
-        // Expired bearer -> refresh the token once and retry on a fresh request.
         if (response.status.value == 401) {
             amTokenManager.clearToken()
             return requestAMArtist(id, amTokenManager.getToken(httpClient))

@@ -25,7 +25,6 @@ class MusicVideoTypeTest {
 
     @Test
     fun unknownAndLegacyLabelsAreKept() {
-        // Older builds wrote invented labels into song.videoType; those normalize to unknown.
         listOf(null, "", "Song", "video", "432K views").forEach {
             assertTrue(MusicVideoType.isPlayableSong(it), it.toString())
         }

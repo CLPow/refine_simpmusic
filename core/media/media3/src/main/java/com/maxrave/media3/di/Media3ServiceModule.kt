@@ -84,27 +84,20 @@ import org.simpmusic.cast.initCast
 import org.simpmusic.cast.wrapWithCastPlayer
 import kotlin.time.Duration.Companion.seconds
 
-/**
- * Required repository first initialization
- */
 @UnstableApi
 private val mediaServiceModule =
     module {
-        // Service
-        // CoroutineScope for service
         single<CoroutineScope>(
             createdAtStart = true,
             qualifier = named(SERVICE_SCOPE),
         ) {
             CoroutineScope(Dispatchers.Main + SupervisorJob())
         }
-        // Cache
         single<DatabaseProvider>(
             createdAtStart = true,
         ) {
             provideDatabaseProvider(androidContext())
         }
-        // Player Cache
         single<SimpleCache>(qualifier = named(PLAYER_CACHE), createdAtStart = true) {
             provideSimpleCache(
                 context = androidContext(),
@@ -113,7 +106,6 @@ private val mediaServiceModule =
                 databaseProvider = get<DatabaseProvider>(),
             )
         }
-        // Download Cache
         single<SimpleCache>(qualifier = named(DOWNLOAD_CACHE), createdAtStart = true) {
             provideSimpleCache(
                 context = androidContext(),
@@ -122,7 +114,6 @@ private val mediaServiceModule =
                 databaseProvider = get<DatabaseProvider>(),
             )
         }
-        // Spotify Canvas Cache
         single<SimpleCache>(qualifier = named(CANVAS_CACHE), createdAtStart = true) {
             provideSimpleCache(
                 context = androidContext(),
@@ -131,7 +122,6 @@ private val mediaServiceModule =
                 databaseProvider = get<DatabaseProvider>(),
             )
         }
-        // DownloadUtils
         single<DownloadHandler>(createdAtStart = true) {
             DownloadUtils(
                 context = androidContext(),
@@ -144,7 +134,6 @@ private val mediaServiceModule =
             )
         }
 
-        // AudioAttributes
         single<AudioAttributes>(createdAtStart = true) {
             provideAudioAttributes()
         }
@@ -160,17 +149,12 @@ private val mediaServiceModule =
             )
         }
 
-        // Player exposed for MediaSession + UI (video rendering via PlayerView/PlayerSurface).
-        // The adapter's ForwardingPlayer (delegating to the active ExoPlayer) is wrapped with
-        // Cast support in the full build; org.simpmusic.cast no-ops back to the same instance
-        // in the FOSS build, so this stays the stable session-level player either way.
         single<Player>(qualifier = named(MAIN_PLAYER)) {
             val adapter = get<MediaPlayerInterface>() as ExoPlayerAdapter
             initCast(androidContext())
             wrapWithCastPlayer(androidContext(), adapter.forwardingPlayer)
         }
 
-        // CoilBitmapLoader
         single<CoilBitmapLoader>(createdAtStart = true) {
             provideCoilBitmapLoader(androidContext(), get(named(SERVICE_SCOPE)))
         }
@@ -186,8 +170,6 @@ private val mediaServiceModule =
             )
         }
 
-        // Local ↔ Cast receiver handoff. No-op when wrapWithCastPlayer returned the plain
-        // ForwardingPlayer (FOSS build or no GMS on the device).
         single<CastHandoffManager>(createdAtStart = true) {
             CastHandoffManager(
                 adapter = get<MediaPlayerInterface>() as ExoPlayerAdapter,
@@ -197,13 +179,10 @@ private val mediaServiceModule =
             ).also { it.start() }
         }
 
-        // MediaSession Callback for main player
         single<MediaLibrarySession.Callback>(createdAtStart = true) {
             SimpleMediaSessionCallback(
                 androidApplication(),
                 get<CoroutineScope>(named(SERVICE_SCOPE)),
-                // Media buttons, Android Auto and the notification act on this phone's player,
-                // also while the app is controlling another device.
                 get<MediaPlayerHandler>(named(com.maxrave.common.Config.LOCAL_PLAYER)),
                 get<SearchRepository>(),
                 get<SongRepository>(),
@@ -237,33 +216,19 @@ private fun provideResolvingDataSourceFactory(
     coroutineScope: CoroutineScope,
 ): DataSource.Factory {
     val chunkLength = 10 * 512 * 1024L
-    // Read on every chunk, so kept warm rather than read from disk each time.
     val streamOverWifiOnly = dataStoreManager.streamOverWifiOnly.stateIn(coroutineScope, SharingStarted.Eagerly, false)
-    // Tracks that started streaming from the network, so leaving Wi-Fi does not cut them off
-    // mid-song. A few, not one: the next tracks are precached through this same resolver.
     val streamingIds = java.util.Collections.synchronizedSet(LinkedHashSet<String>())
-    // Tracks whose cached copy was already replaced by a better one in this run: one try each, so
-    // a track that only exists in a lower format is not fetched again on every play.
     val upgradedIds = java.util.Collections.synchronizedSet(HashSet<String>())
     return ResolvingDataSource.Factory(cacheDataSourceFactory) { dataSpec ->
-        // Songs only: a legacy VIDEO-prefixed id (a queue restored from an older build) resolves
-        // to the same recording's audio.
         val mediaId = (dataSpec.key ?: error("No media id")).removePrefix(MERGING_DATA_TYPE.VIDEO)
-        // A play from the start is a new decision, even if the start comes from the cache.
         if (dataSpec.position == 0L) streamingIds.remove(mediaId)
         if (downloadCache.isFullyCached(mediaId, dataSpec.position)) {
-            // Only on the first chunk: the subrange below makes the resolver run once per
-            // chunk, and updateFormat is a fire-and-forget youTube.player() call with no
-            // in-flight dedup, so leaving it ungated would fan out one request per 5 MiB.
             if (dataSpec.position == 0L) {
                 coroutineScope.launch(Dispatchers.IO) { streamRepository.updateFormat(mediaId) }
             }
             return@Factory dataSpec.subrange(dataSpec.uriPositionOffset, chunkLength)
         }
-        // A copy cached at a lower quality than the settings now ask for (cached on mobile data at
-        // Low, played again on Wi-Fi) used to be played for as long as it stayed in the cache.
-        // At the start of a play, on an unmetered connection, it is dropped and fetched again at
-        // the wanted quality. Never on mobile data, and never mid-song.
+        // Never on mobile data, and never mid-song.
         if (dataSpec.position == 0L &&
             context.hasUnmeteredNetwork() &&
             mediaId !in upgradedIds &&
@@ -281,29 +246,11 @@ private fun provideResolvingDataSourceFactory(
             }
         }
         if (playerCache.isFullyCached(mediaId, dataSpec.position)) {
-            // See the note above: once per track, not once per chunk.
             if (dataSpec.position == 0L) {
                 coroutineScope.launch(Dispatchers.IO) { streamRepository.updateFormat(mediaId) }
             }
-            // Every byte is on disk right now, so CacheDataSource can serve this chunk
-            // without ever reaching upstream, and the bare media id is safe as the URI.
-            //
-            // It is only safe for ONE chunk though. A bare id has no scheme, so
-            // DefaultDataSource routes it to FileDataSource, not to OkHttp — the failure
-            // is FileNotFoundException (ERROR_CODE_IO_FILE_NOT_FOUND), which Media3 lists
-            // as non-retriable and which ExoPlayerAdapter does not recover from
-            // either. Meanwhile CacheDataSource.read() walks span to span inside a single
-            // open() without consulting this resolver again, so an unbounded DataSpec
-            // would stake the whole remaining track on a snapshot taken here: one LRU
-            // eviction (precache and downloads write to playerCache concurrently) or one
-            // "clear cache" tap mid-song and playback dies with no way back.
-            // Capping to chunkLength forces a re-check at every chunk boundary, so a
-            // cache that shrinks under us falls back to resolving a real URL.
             return@Factory dataSpec.subrange(dataSpec.uriPositionOffset, chunkLength)
         }
-        // YouTube Music's "Stream via Wi-Fi only": downloads and fully cached tracks (served
-        // above) still play on mobile data; a track that needs the network does not start. One
-        // already streaming finishes. The adapter reports the refusal by name, without retrying.
         if (streamOverWifiOnly.value && context.isActiveNetworkMetered() && (dataSpec.position == 0L || mediaId !in streamingIds)) {
             throw WifiOnlyException(mediaId)
         }
@@ -316,15 +263,9 @@ private fun provideResolvingDataSourceFactory(
         // Runs on ExoPlayer's loader thread, never Main, so blocking here is the intended shape.
         runBlocking(Dispatchers.IO) {
             val stored = streamRepository.getNewFormat(mediaId).lastOrNull()
-            // The player cache keys bytes by video id alone, so a partly cached song must stay in
-            // the format those bytes are in: another one would be stitched onto them and fail to
-            // decode. With no format on record for the cached bytes, they are dropped instead.
             val hasCachedBytes = playerCache.getCachedSpans(mediaId).isNotEmpty()
             val keptItag = stored?.itag?.takeIf { hasCachedBytes }
             if (hasCachedBytes && keptItag == null) playerCache.removeResource(mediaId)
-            // Nothing cached: a URL resolved for the other network's quality is not reused. Compared
-            // by what the setting delivers, not by itag: an account that is not offered the
-            // requested format never matched it, and resolved the stream again on every play.
             val networkChanged =
                 !hasCachedBytes &&
                     stored != null &&
@@ -332,9 +273,6 @@ private fun provideResolvingDataSourceFactory(
             stored?.takeUnless { networkChanged }?.let {
                 val audioUrl = it.audioUrl
                 if (audioUrl != null && it.expiredTime > now()) {
-                    // A URL with hours of life left is used as is: probing it first cost a full
-                    // round trip before every song and every chunk. If it is rejected anyway, the
-                    // player's error recovery drops the format and resolves a fresh one.
                     val fresh = it.expiredTime > now().plusSeconds(FRESH_URL_MARGIN_S)
                     val is403Url = !fresh && streamRepository.is403Url(audioUrl).firstOrNull() != false
                     if (!is403Url) {
@@ -459,7 +397,6 @@ private fun provideCacheDataSource(
         ).setCacheWriteDataSinkFactory(null)
         .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
 
-/** Cached stream URLs with more than this left before expiry skip the 403 probe. */
 private const val FRESH_URL_MARGIN_S = 3 * 3600L
 
 @UnstableApi
@@ -508,7 +445,6 @@ fun startService(
     try {
         context.startService(intent)
     } catch (e: IllegalStateException) {
-        // BackgroundServiceStartNotAllowedException (Android 12+)
         ContextCompat.startForegroundService(context, intent)
     }
     context.bindService(intent, serviceConnection, BIND_AUTO_CREATE)
@@ -529,13 +465,11 @@ fun setServiceActivitySession(
     (musicService as? SimpleMediaService.MusicBinder)?.setActivitySession(context, cls)
 }
 
-/** A connection that is there and is not metered: the only kind a cached copy is replaced on. */
 private fun Context.hasUnmeteredNetwork(): Boolean {
     val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
     return manager.activeNetwork != null && !manager.isActiveNetworkMetered
 }
 
-/** False with no network at all: Android reports "metered" then, which showed a Wi-Fi-only refusal while offline. */
 private fun Context.isActiveNetworkMetered(): Boolean {
     val manager = getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
     return manager.activeNetwork != null && manager.isActiveNetworkMetered
@@ -543,11 +477,6 @@ private fun Context.isActiveNetworkMetered(): Boolean {
 
 private const val STREAMING_IDS_KEPT = 8
 
-/**
- * A stream refused under "Stream via Wi-Fi only". A FileNotFoundException because Media3's default
- * load-error policy never retries one, so the refusal surfaces at once instead of after seconds of
- * retries; the player adapter recognises it in the cause chain.
- */
 class WifiOnlyException(
     mediaId: String,
 ) : java.io.FileNotFoundException("Stream via Wi-Fi only: not streaming $mediaId on a metered network")

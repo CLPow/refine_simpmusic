@@ -43,11 +43,9 @@ class ArtistViewModel(
     private val songRepository: SongRepository,
     private val lyricsCanvasRepository: LyricsCanvasRepository,
 ) : BaseViewModel() {
-    // It is dynamic and can be changed by the user, so separate it from the ArtistScreenData
     private var _canvasUrl: MutableStateFlow<Pair<String, SongEntity>?> = MutableStateFlow(null)
     var canvasUrl: StateFlow<Pair<String, SongEntity>?> = _canvasUrl
 
-    // Artist name-logo image + accent color from the hidden catalog (immersive header).
     private val _artistLogo: MutableStateFlow<ArtistLogo?> = MutableStateFlow(null)
     private var _followed: MutableStateFlow<Boolean> = MutableStateFlow(false)
     var followed: StateFlow<Boolean> = _followed
@@ -78,9 +76,6 @@ class ArtistViewModel(
                         }
                         _artistScreenState.value =
                             Success(data.toArtistScreenData())
-                        // Canvas comes ONLY from the single most-popular song: take the first
-                        // popular result and use its canvas if it has one. If it doesn't,
-                        // leave canvas null (already reset above) — no fallback to other songs.
                         data.songs?.results?.firstOrNull()?.let { topSong ->
                             val entity = songRepository.getSongById(topSong.videoId).firstOrNull()
                             val canvasUrl = entity?.canvasUrl
@@ -127,7 +122,6 @@ class ArtistViewModel(
                     }
                     _followed.value = artistEntity.followed
                     log("insertArtist: ${artistEntity.followed}")
-                    // Name-logo: reuse the cached one if present, else fetch + persist it.
                     val cachedLogoUrl = artistEntity.nameLogoUrl
                     if (cachedLogoUrl != null) {
                         _artistLogo.value =
@@ -151,9 +145,6 @@ class ArtistViewModel(
     ) {
         viewModelScope.launch {
             _followed.value = (followed == 1)
-            // Both outcomes are reported; only null stays quiet, because that means mirroring
-            // is switched off and nothing was attempted. The local follow above stands either
-            // way — these toasts speak for the account, not for the follow itself.
             val synced = artistRepository.updateFollowedStatus(channelId, followed)
             when (synced) {
                 true ->

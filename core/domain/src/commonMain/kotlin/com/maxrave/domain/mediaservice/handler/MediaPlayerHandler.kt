@@ -12,14 +12,9 @@ import com.maxrave.domain.data.player.PlayerError
 import com.maxrave.domain.mediaservice.player.MediaPlayerInterface
 import kotlinx.coroutines.flow.StateFlow
 
-/**
- * Handler interface for managing media playback service operations
- */
 interface MediaPlayerHandler {
-    // Core player interface
     val player: MediaPlayerInterface
 
-    // State flows
     val simpleMediaState: StateFlow<SimpleMediaState>
     val nowPlaying: StateFlow<GenericMediaItem?>
     val queueData: StateFlow<QueueData?>
@@ -31,31 +26,26 @@ interface MediaPlayerHandler {
     val currentSongIndex: StateFlow<Int>
     val castState: StateFlow<GenericCastState>
 
-    // Listeners
     var onUpdateNotification: (List<GenericCommandButton>) -> Unit
     var pushPlayerError: (PlayerError) -> Unit
     var showToast: (ToastType) -> Unit
 
-    // Playback control
     suspend fun onPlayerEvent(playerEvent: PlayerEvent)
 
     fun toggleRadio()
 
     fun toggleLike()
 
-    /** YouTube Music's thumbs down: rates the playing song down on the account and skips it. */
     fun dislike()
 
     fun like(liked: Boolean)
 
     fun resetSongAndQueue()
 
-    // Sleep timer
     fun sleepStart(minutes: Int)
 
     fun sleepStop()
 
-    // Media management
     fun removeMediaItem(position: Int)
 
     fun addMediaItem(
@@ -71,7 +61,6 @@ interface MediaPlayerHandler {
 
     fun currentSongIndex(): Int
 
-    // Index of the currently playing item in the current queue data (shuffled or not)
     fun currentOrderIndex(): Int
 
     suspend fun swap(
@@ -79,7 +68,6 @@ interface MediaPlayerHandler {
         to: Int,
     )
 
-    // Queue management
     fun shufflePlaylist(randomTrackIndex: Int = 0)
 
     fun loadMore()
@@ -90,7 +78,6 @@ interface MediaPlayerHandler {
 
     fun getCurrentMediaItem(): GenericMediaItem?
 
-    // Track operations
     suspend fun moveItemUp(position: Int)
 
     suspend fun moveItemDown(position: Int)
@@ -125,17 +112,8 @@ interface MediaPlayerHandler {
 
     suspend fun playNext(track: Track)
 
-    /**
-     * YouTube Music's "Add to queue": after the songs already queued, ahead of anything Autoplay
-     * added (see [QueueData.Data.autoplayStartIndex]); at the end when there is no Autoplay part.
-     */
     suspend fun addToQueue(tracks: List<Track>)
 
-    /**
-     * Re-tunes the radio from one of Up next's chips (Familiar, Discover, …): keeps what has
-     * played, the current song and the songs you queued, and replaces only the radio part with
-     * [endpoint]'s. False when nothing changed.
-     */
     suspend fun replaceUpcomingRadio(endpoint: YouTubeWatchEndpoint): Boolean
 
     suspend fun <T> loadMediaItem(
@@ -144,7 +122,6 @@ interface MediaPlayerHandler {
         index: Int? = null,
     )
 
-    // Playback information
     fun getPlayerDuration(): Long
 
     fun getProgress(): Long
@@ -157,41 +134,21 @@ interface MediaPlayerHandler {
 
     fun stopBufferedUpdate()
 
-    // Settings
     fun mayBeSaveRecentSong(runBlocking: Boolean = false)
 
     fun mayBeSavePlaybackState()
 
     fun mayBeRestoreQueue()
 
-    /**
-     * Restores the persisted queue and starts playing it.
-     *
-     * This is the background playback resumption path: a `play` command that arrives with an
-     * empty player and no UI attached (a Bluetooth or headset button, a Samsung Routine, the
-     * system resumption chip). Unlike [mayBeRestoreQueue] it must end with the player actually
-     * playing, and it must get there quickly - see the implementation for why.
-     *
-     * Returns false when there is nothing to resume.
-     */
     suspend fun restoreQueueAndPlay(): Boolean
 
-    /**
-     * Replaces whatever is loaded with [snapshot]: its queue, the track at its index, and the
-     * position inside that track. Used when playback moves here from another device (Refine
-     * Control), so unlike [mayBeRestoreQueue] it loads over a queue that is already there.
-     *
-     * Returns once the queue is in the player; false when the snapshot has no track to play.
-     */
     suspend fun loadSnapshot(snapshot: PlaybackSnapshot): Boolean
 
-    // Lifecycle
     fun shouldReleaseOnTaskRemoved(): Boolean
 
     fun release()
 }
 
-// State classes and enums - these would need to be defined in domain layer
 sealed class RepeatState {
     data object None : RepeatState()
 
@@ -200,9 +157,7 @@ sealed class RepeatState {
     data object One : RepeatState()
 }
 
-/** A queue and the place in it: everything another device needs to carry on playing. */
 data class PlaybackSnapshot(
-    /** [QueueData.Data.listTracks] in play order. */
     val queue: QueueData.Data,
     val index: Int,
     val positionMs: Long,
@@ -222,11 +177,6 @@ sealed class PlayerEvent {
 
     data object Previous : PlayerEvent()
 
-    /**
-     * Always advances to the previous media item, bypassing the 3-second
-     * "seek to start of current track" behaviour of [Previous]. Used by UI
-     * affordances like the artwork pager swipe.
-     */
     data object SkipToPrevious : PlayerEvent()
 
     data object Shuffle : PlayerEvent()
@@ -274,7 +224,7 @@ data class ControlState(
     val isLiked: Boolean,
     val isNextAvailable: Boolean,
     val isPreviousAvailable: Boolean,
-    val volume: Float, // 0f..1f
+    val volume: Float,
 )
 
 data class NowPlayingTrackState(
@@ -310,43 +260,25 @@ data class QueueData(
         val playlistName: String? = null,
         val playlistType: PlaylistType? = null,
         val continuation: String? = null,
-        /**
-         * Where Autoplay's songs begin in [listTracks], or null before Autoplay has added any.
-         * YouTube Music keeps the songs you queued apart from what Autoplay adds after them:
-         * "Add to queue" lands before this point, and Up next draws an Autoplay header here.
-         */
         val autoplayStartIndex: Int? = null,
     ) {
-        /** Started as a radio (a song's mix, a station): already endless, with no Autoplay part. */
         val isRadio: Boolean get() = playlistType == PlaylistType.RADIO
 
-        /**
-         * Where "Add to queue" puts songs while the song at [current] plays: after the songs already
-         * queued and ahead of the radio or Autoplay part, never behind the playing song. Null means
-         * there is no such part yet (an album or playlist still playing): append at the end.
-         */
         fun addToQueueIndex(current: Int): Int? =
             autoplayStartIndex?.let { maxOf(it, current + 1) } ?: if (isRadio) current + 1 else null
 
-        /**
-         * After "Add to queue" put [count] songs at [position]: the queued part now ends after them,
-         * so the next song added lands behind these. Only when there is a part to keep apart.
-         */
         fun afterQueueAdd(
             position: Int,
             count: Int,
         ): Data = if (autoplayStartIndex != null || isRadio) copy(autoplayStartIndex = position + count) else this
 
-        /** After [count] songs were inserted at [position] by anything else ("Play next"). */
         fun afterInsert(
             position: Int,
             count: Int,
         ): Data = copy(autoplayStartIndex = autoplayStartIndex?.let { if (position <= it) it + count else it })
 
-        /** After the song at [position] was removed. */
         fun afterRemove(position: Int): Data = copy(autoplayStartIndex = autoplayStartIndex?.let { if (position < it) it - 1 else it })
 
-        /** Autoplay is about to append its first songs: they start at the current end, unless it already began. */
         fun withAutoplayStart(): Data = copy(autoplayStartIndex = autoplayStartIndex ?: listTracks.size)
     }
 
@@ -417,7 +349,6 @@ data class QueueData(
 
     fun isRadio(): Boolean = this.data.playlistType == PlaylistType.RADIO
 
-    /** True for both plain playlists and albums — an album queue is a playlist that knows its origin. */
     fun isPlaylist(): Boolean =
         this.data.playlistType == PlaylistType.PLAYLIST ||
             this.data.playlistType == PlaylistType.ALBUM
@@ -426,11 +357,6 @@ data class QueueData(
 enum class PlaylistType {
     PLAYLIST,
 
-    /**
-     * A queue loaded from an album. Behaves exactly like [PLAYLIST] everywhere else — it exists so
-     * playback can tell that the tracks were sequenced together deliberately, which is what lets
-     * crossfade step aside inside an album while still fading into whatever is queued after it.
-     */
     ALBUM,
     LOCAL_PLAYLIST,
     RADIO,
@@ -441,10 +367,8 @@ sealed class ToastType(
 ) {
     data object ExplicitContent : ToastType()
 
-    /** YouTube Music's "Track is unavailable. Skipping to the next one." */
     data object TrackSkipped : ToastType()
 
-    /** Streaming refused on a metered network under "Stream via Wi-Fi only". */
     data object WifiOnly : ToastType()
 
     data class PlayerError(

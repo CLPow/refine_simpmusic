@@ -19,11 +19,6 @@ interface DataStoreManager {
 
     val language: Flow<String>
 
-    /**
-     * Cover art resolved per browse category, keyed by its params. The category list itself
-     * carries no artwork, so each cover costs one full category browse — worth remembering on
-     * disk rather than paying again every time the search screen opens.
-     */
     val moodArtworkCache: Flow<String?>
 
     fun getString(key: String): Flow<String?>
@@ -86,19 +81,10 @@ interface DataStoreManager {
 
     suspend fun setLyricsProvider(provider: String)
 
-    /**
-     * Which generation of the lyrics matcher filled the local lyrics cache.
-     *
-     * A cached wrong match cannot be told from a right one — correct title, correct artist,
-     * somebody else's words — so fixing the matcher does nothing for a song whose lyrics are
-     * already stored. Bumping [Values.LYRICS_CACHE_GENERATION] empties the cache once, so the fix
-     * reaches songs that were already wrong instead of only new ones.
-     */
     val lyricsCacheGeneration: Flow<Int>
 
     suspend fun setLyricsCacheGeneration(generation: Int)
 
-    /** Skip radio/queue tracks shorter than this many seconds (0 = off). */
     val skipShortTrackSeconds: Flow<Int>
 
     val maxSongCacheSize: Flow<Int>
@@ -109,12 +95,6 @@ interface DataStoreManager {
 
     val videoQuality: Flow<String>
 
-    /**
-     * Whether following an artist in the app also subscribes to their YouTube channel.
-     *
-     * Off by default and only settable while signed in: Follow has always been local-only, and
-     * writing to someone's account is not something to start doing without being asked.
-     */
     val syncFollowToYouTube: Flow<String>
 
     val chartKey: Flow<String>
@@ -123,27 +103,22 @@ interface DataStoreManager {
 
     suspend fun setEndlessQueue(endlessQueue: Boolean)
 
-    /** Streaming quality on a metered (mobile) network; [quality] is the Wi-Fi one. */
     val qualityMobile: Flow<String>
 
     suspend fun setQualityMobile(quality: String)
 
-    /** YouTube Music's "Stream via Wi-Fi only": no streaming on a metered network. */
     val streamOverWifiOnly: Flow<Boolean>
 
     suspend fun setStreamOverWifiOnly(enabled: Boolean)
 
-    /** YouTube Music's "Double-tap to seek" step, in seconds. */
     val doubleTapSeekSeconds: Flow<Int>
 
     suspend fun setDoubleTapSeekSeconds(seconds: Int)
 
-    /** YouTube Music's "Allow external devices to start playback" (car Bluetooth, headsets). */
     val allowExternalStartPlayback: Flow<Boolean>
 
     suspend fun setAllowExternalStartPlayback(enabled: Boolean)
 
-    /** Library entries pinned to the top, by their Library key. */
     val pinnedLibraryKeys: Flow<Set<String>>
 
     suspend fun setLibraryPinned(
@@ -177,21 +152,8 @@ interface DataStoreManager {
 
     val killServiceOnExit: Flow<String>
 
-    /**
-     * When on, liking a song also queues it for offline download, at the existing download quality.
-     *
-     * Off by default — it spends storage and data without the user asking each time. Only applies
-     * from the moment it is switched on: songs liked earlier are left alone, and unliking never
-     * removes a download that already exists.
-     */
     val autoDownloadLikedSongs: Flow<String>
 
-    /**
-     * Language code (e.g. "vi") of the audio track to prefer on videos that ship several — dubbed
-     * podcasts, mostly. Empty means the original track. Deliberately NOT defaulted to the app
-     * language the way [youtubeSubtitleLanguage] is: that would swap the speaker's own voice for an
-     * AI dub for every user whose app language has one.
-     */
     val preferredAudioLanguage: Flow<String>
 
     val explicitContentEnabled: Flow<String>
@@ -204,16 +166,7 @@ interface DataStoreManager {
         const val LRCLIB = "lrclib"
         const val BETTER_LYRICS = "better_lyrics"
 
-        /**
-         * Raise this whenever a change makes previously cached lyrics untrustworthy. Costs each
-         * user one re-fetch per song they play, and nothing else.
-         *
-         * 1 — the matcher that took the first search result, so live takes, covers and karaoke
-         *     tracks were stored under the right song's name.
-         * 2 — 2.3.8: YouTube Music's own timed lyrics replace the older matched timings.
-         */
         const val LYRICS_CACHE_GENERATION = 2
-
 
         const val REPEAT_MODE_OFF = "REPEAT_MODE_OFF"
         const val REPEAT_ONE = "REPEAT_ONE"

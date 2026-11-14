@@ -8,11 +8,6 @@ import com.maxrave.kotlinytmusicscraper.models.BrowseEndpoint.BrowseEndpointCont
 import com.maxrave.kotlinytmusicscraper.models.BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.Companion.MUSIC_PAGE_TYPE_USER_CHANNEL
 import kotlinx.serialization.Serializable
 
-/**
- * Two row: a big thumbnail, a title, and a subtitle
- * Used in [GridRenderer] and [MusicCarouselShelfRenderer]
- * Item type: song, video, album, playlist, artist
- */
 @Serializable
 data class MusicTwoRowItemRenderer(
     val title: Runs,
@@ -72,7 +67,6 @@ data class MusicTwoRowItemRenderer(
                 ?.pageType ==
                 MUSIC_PAGE_TYPE_ARTIST
 
-    /** A YouTube user channel card (e.g. "Music channels you may like"); shown as an artist. */
     val isUserChannel: Boolean
         get() =
             navigationEndpoint
@@ -82,7 +76,6 @@ data class MusicTwoRowItemRenderer(
                 ?.pageType ==
                 MUSIC_PAGE_TYPE_USER_CHANNEL
 
-    /** A podcast show card (e.g. the Home "Shows for you" shelf); browseId starts with "MPSP". */
     val isPodcast: Boolean
         get() =
             navigationEndpoint
@@ -108,11 +101,6 @@ data class MusicTwoRowItemRenderer(
                     }
                 )
 
-    /**
-     * What YouTube says this card actually is. [isSong]/[isVideo] above answer a different
-     * question — they read the thumbnail aspect ratio to pick a card layout, which is why they
-     * stay as they are; this is the API's own classification of the track behind the card.
-     */
     val musicVideoType: String?
         get() =
             navigationEndpoint
@@ -130,7 +118,6 @@ data class MusicTwoRowItemRenderer(
                     ?.watchEndpointMusicConfig
                     ?.musicVideoType
 
-    /** Album/playlist id from the card play button; play endpoint switched watchPlaylistEndpoint -> watchEndpoint (2026 web). */
     val playlistId: String?
         get() =
             thumbnailOverlay

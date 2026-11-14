@@ -35,33 +35,26 @@ import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
-/** Another Refine device, as the devices list shows it. */
 data class PeerDevice(
     val id: String,
     val name: String,
     val type: String,
     val paired: Boolean,
-    /** An encrypted connection to it is open. */
     val connected: Boolean,
-    /** Its beacon was heard in the last few seconds. */
     val visible: Boolean,
     val host: String?,
 )
 
-/** The last thing a connected device said it is playing. */
 data class RemotePlayer(
     val state: PlayerState,
     val queue: QueueState?,
-    /** `System.nanoTime()` when [state] arrived; the position is counted forward from here. */
     val receivedAtNanos: Long,
 )
 
-/** The code to compare with the other screen. */
 data class PairingPrompt(
     val deviceId: String,
     val deviceName: String,
     val code: String,
-    /** Confirmed on this device; waiting for the other one. */
     val confirmedHere: Boolean,
 )
 
@@ -70,26 +63,22 @@ data class PairedPeer(
     val id: String,
     val name: String,
     val type: String,
-    /** Base64 of the 32-byte secret agreed while pairing. */
     val key: String,
     val lastHost: String? = null,
 )
 
-/** Where the paired devices are kept. The caller decides how (and encrypts them). */
 interface PairStore {
     fun load(): List<PairedPeer>
 
     fun save(peers: List<PairedPeer>)
 }
 
-/** This device's own player, as the engine reaches it. Each call returns null, or what went wrong. */
 interface LocalPlayerPort {
     suspend fun onCommand(
         from: DeviceInfo,
         command: Command,
     ): String?
 
-    /** Returns once playback has been taken over (when asked to play: once audio really plays). */
     suspend fun onTransfer(
         from: DeviceInfo,
         player: PlayerState,
@@ -97,7 +86,6 @@ interface LocalPlayerPort {
         play: Boolean,
     ): String?
 
-    /** [from] wants to play what this device plays. */
     suspend fun onTransferRequest(from: DeviceInfo): String?
 }
 
@@ -110,13 +98,10 @@ private const val PAIRING_TIMEOUT_MS = 120_000
 private const val IDLE_TIMEOUT_MS = 30_000
 private const val PING_INTERVAL_MS = 10_000L
 
-/** How long the device with the higher id waits for the other one to call first. */
 private const val DIAL_YIELD_MS = 2_500L
 
-/** Connections that have not proved who they are yet; more than this are turned away. */
 private const val MAX_UNPROVEN_CONNECTIONS = 16
 
-/** After a pairing request was declined here, further ones are refused for this long. */
 private const val PAIRING_COOLDOWN_NANOS = 8_000_000_000L
 private const val HANDSHAKE_LINE_MAX = 8 * 1024
 private const val LINE_MAX = 16 * 1024 * 1024
@@ -124,21 +109,6 @@ private const val LINE_MAX = 16 * 1024 * 1024
 const val ERROR_NOT_CONNECTED = "not_connected"
 const val ERROR_TIMEOUT = "timeout"
 
-/**
- * Refine Control on one device: finds other Refine devices on the network, pairs with them, keeps
- * an encrypted connection to each paired one, and carries player state, commands and transfers.
- *
- * It works the way Spotify Connect does, without a server:
- * - Every device tells its peers what it is playing ([publishState], [publishQueue]). A controller
- *   mirrors that; audio is never sent. Each device fetches its own stream.
- * - A controller sends a [Command]; the playing device runs it and its next state shows the result.
- * - A transfer hands the other device the queue and position; it loads them and plays.
- *
- * Discovery is a UDP beacon every few seconds, to the broadcast address and directly to the last
- * known address of each paired device. Whoever hears one answers the sender directly, so finding
- * each other needs only one of the two to receive broadcasts. Both devices listen on TCP and both
- * may call, so it also works when one of them cannot be reached from outside (a firewall).
- */
 class ControlEngine(
     private val scope: CoroutineScope,
     self: DeviceInfo,
@@ -205,15 +175,12 @@ class ControlEngine(
 
     private val _players = MutableStateFlow<Map<String, RemotePlayer>>(emptyMap())
 
-    /** What each connected device is playing, by device id. Kept after a disconnect. */
     val players: StateFlow<Map<String, RemotePlayer>> = _players.asStateFlow()
 
     private val _pairing = MutableStateFlow<PairingPrompt?>(null)
     val pairing: StateFlow<PairingPrompt?> = _pairing.asStateFlow()
 
     val isRunning: Boolean get() = synchronized(lock) { engineScope != null }
-
-    // ------------------------------------------------------------------ lifecycle
 
     fun start() {
         val running =
@@ -285,18 +252,14 @@ class ControlEngine(
         refreshDevices()
     }
 
-    /** The name other devices show for this one. */
     fun rename(name: String) {
         self = self.copy(name = name)
         wake.trySend(Unit)
     }
 
-    /** Send a beacon now instead of at the next tick (the devices list was opened). */
     fun announceNow() {
         wake.trySend(Unit)
     }
-
-    // ------------------------------------------------------------------ discovery
 
     private fun openDiscoverySocket(): DatagramSocket {
         val socket = DatagramSocket(null as SocketAddress?)
@@ -306,8 +269,6 @@ class ControlEngine(
             socket.bind(InetSocketAddress(discoveryPort))
             socket
         } catch (e: IOException) {
-            // The port is taken (another app, or a second Refine that does not share it). Beacons
-            // can still be sent from any port, and the answers come back to it.
             log("Discovery port $discoveryPort is taken: ${e.message}")
             socket.close()
             DatagramSocket().apply { broadcast = true }
@@ -344,8 +305,6 @@ class ControlEngine(
             val targets = LinkedHashSet<InetSocketAddress>()
             broadcastAddresses().forEach { targets += InetSocketAddress(it, discoveryPort) }
             synchronized(lock) {
-                // Straight to where each paired device was last seen: networks that drop broadcast
-                // still deliver this.
                 paired.values.forEach { peer ->
                     if (peer.id !in connections) peer.lastHost?.let { targets += InetSocketAddress(it, discoveryPort) }
                 }
@@ -384,9 +343,7 @@ class ControlEngine(
             var changed = false
             synchronized(lock) {
                 val before = seen[id]
-                // Answer the sender directly, so it finds this device even when this device's own
-                // broadcasts do not reach it. Not an answer to an answer, and not more often than
-                // needed.
+                // Answer the sender directly, so it finds this device even when this device's own broadcasts do not reach it.
                 answer = !beacon.reply && (before == null || now - before.repliedAtNanos > REPLY_GAP_NANOS)
                 seen[id] = Seen(beacon.device, host, beacon.tcpPort, now, if (answer) now else before?.repliedAtNanos ?: 0L)
                 changed = before == null || before.device != beacon.device || before.host != host
@@ -402,10 +359,7 @@ class ControlEngine(
         }
     }
 
-    /**
-     * Looks for a device at [address] ("192.168.1.20", or with ":port"), for networks where the
-     * devices do not find each other. True when it answered.
-     */
+    // Looks for a device at [address] ("192.168.1.20", or with ":port"), for networks where the devices do not find each other.
     suspend fun connectByAddress(address: String): Boolean {
         val running = synchronized(lock) { engineScope } ?: return false
         val text = address.trim()
@@ -434,8 +388,6 @@ class ControlEngine(
         return found.await()
     }
 
-    // ------------------------------------------------------------------ connections
-
     private inner class Conn(
         val socket: Socket,
     ) {
@@ -449,12 +401,10 @@ class ControlEngine(
         @Volatile
         var peer: DeviceInfo? = null
 
-        /** Called once the other side has proved it holds the pairing key. */
         var onProven: () -> Unit = {}
 
         val host: String? get() = socket.inetAddress?.hostAddress
 
-        /** Blocking. Sealing happens under the same lock as writing, so frames leave in order. */
         fun writeNow(message: Wire) {
             synchronized(output) {
                 val json = message.encode().toByteArray()
@@ -465,7 +415,6 @@ class ControlEngine(
             }
         }
 
-        /** Blocking. Throws when the connection ends or a frame does not open. */
         fun readNow(maxBytes: Int): Wire {
             val line = readLine(input, maxBytes) ?: throw EOFException()
             val json = cipher?.open(Base64.getDecoder().decode(line)) ?: line
@@ -492,8 +441,6 @@ class ControlEngine(
                         if (tcp.isClosed) return@coroutineScope
                         continue
                     }
-                // Anyone on the network can open a connection; only so many may sit in the
-                // handshake at once.
                 if (unproven.get() >= MAX_UNPROVEN_CONNECTIONS) {
                     socket.closeQuietly()
                     continue
@@ -544,9 +491,6 @@ class ControlEngine(
         }
         running.launch {
             try {
-                // Both devices hear each other at about the same time. The one with the lower id
-                // calls; the other gives it a moment and calls only if nothing arrived (the first
-                // one may be unable to: a firewall on this side).
                 if (self.id > id) delay(DIAL_YIELD_MS)
                 val target = synchronized(lock) { if (id in connections) null else seen[id] } ?: return@launch
                 dial(target) { conn -> callAuth(conn, id) }
@@ -585,7 +529,6 @@ class ControlEngine(
         conn.writeNow(Wire.AuthStart(self, Crypto.b64(nonce)))
         when (val reply = conn.readNow(HANDSHAKE_LINE_MAX)) {
             is Wire.Reject -> {
-                // The other device no longer knows this one ("Forget" was used there).
                 if (reply.reason == REJECT_NOT_PAIRED) dropPairing(id)
                 return
             }
@@ -619,16 +562,12 @@ class ControlEngine(
         runConnected(conn, readyExchanged = false)
     }
 
-    /** The life of one encrypted connection. Returns (or throws) when it ends. */
     private suspend fun runConnected(
         conn: Conn,
         readyExchanged: Boolean,
     ) {
         if (!readyExchanged) {
             conn.writeNow(Wire.Ready(self))
-            // Opening this frame is the proof: only the holder of the pairing key can have made
-            // it, and the nonces of this connection are part of the frame key, so it is not a
-            // recording of an earlier one.
             val ready = conn.readNow(HANDSHAKE_LINE_MAX) as? Wire.Ready ?: return
             conn.peer = ready.device.copy(id = conn.peer?.id ?: return)
         }
@@ -652,7 +591,6 @@ class ControlEngine(
                         conn.send(Wire.Ping)
                     }
                 }
-            // Requests run one after another, in the order they were sent.
             val requests = Channel<Wire>(Channel.UNLIMITED)
             val worker = launch { for (request in requests) answerRequest(conn, peer, request) }
             try {
@@ -761,7 +699,6 @@ class ControlEngine(
                 }
                 old
             }
-        // Both called at once: the newer connection is kept on both sides.
         if (replaced != null && replaced !== conn) replaced.close()
         log("Connected to ${peer.name}")
         localQueue?.let { conn.send(Wire.Queue(it)) }
@@ -790,9 +727,6 @@ class ControlEngine(
         }
     }
 
-    // ------------------------------------------------------------------ pairing
-
-    /** Starts pairing with a device from [devices]. The code then appears in [pairing]. */
     fun startPairing(deviceId: String) {
         val (running, target) =
             synchronized(lock) {
@@ -845,7 +779,6 @@ class ControlEngine(
         val reveal = conn.readNow(HANDSHAKE_LINE_MAX) as? Wire.PairReveal ?: return
         val peerKey = Crypto.unb64(reveal.pub)
         val peerNonce = Crypto.unb64(reveal.nonce)
-        // The caller fixed its key before it saw ours; a different one now means tampering.
         if (!MessageDigest.isEqual(Crypto.commitment(peerKey, peerNonce), Crypto.unb64(start.commit))) return
         val shared = Crypto.ecdh(keys, Crypto.decodePublicKey(peerKey))
         val transcript = Crypto.transcript(peerKey, peerNonce, publicKey, nonce)
@@ -862,7 +795,6 @@ class ControlEngine(
         }
         try {
             _pairing.value = PairingPrompt(session.peer.id, session.peer.name, session.code, confirmedHere = false)
-            // Nothing is stored and nothing else is accepted until both people confirmed.
             session.conn.socket.soTimeout = PAIRING_TIMEOUT_MS
             while (true) {
                 when (session.conn.readNow(HANDSHAKE_LINE_MAX)) {
@@ -901,7 +833,6 @@ class ControlEngine(
         }
     }
 
-    /** The code on both screens is the same. */
     fun confirmPairing() {
         val session = synchronized(lock) { pairingSession } ?: return
         val running = synchronized(lock) { engineScope } ?: return
@@ -920,7 +851,6 @@ class ControlEngine(
     fun cancelPairing() {
         val session = synchronized(lock) { pairingSession } ?: return
         _pairing.value = null
-        // Declined: the same device (or anyone else) cannot put the dialog straight back up.
         pairingRefusedUntilNanos = System.nanoTime() + PAIRING_COOLDOWN_NANOS
         val running = synchronized(lock) { engineScope }
         if (running == null) {
@@ -933,7 +863,6 @@ class ControlEngine(
         }
     }
 
-    /** Removes a paired device here, and tells it to do the same. */
     fun forget(deviceId: String) {
         val conn = synchronized(lock) { connections[deviceId] }
         if (conn != null) {
@@ -954,7 +883,6 @@ class ControlEngine(
             }
         _players.update { it - id }
         refreshDevices()
-        // Left open here when "Forget" is still telling the other side; it closes it afterwards.
         if (conn != null && synchronized(lock) { engineScope } == null) conn.close()
     }
 
@@ -963,9 +891,6 @@ class ControlEngine(
         runCatching { store.save(snapshot) }
     }
 
-    // ------------------------------------------------------------------ player traffic
-
-    /** Tells every connected device what this one is playing. */
     fun publishState(state: PlayerState) {
         localState = state
         synchronized(lock) { connections.values.toList() }.forEach { it.send(Wire.State(state)) }
@@ -976,14 +901,12 @@ class ControlEngine(
         synchronized(lock) { connections.values.toList() }.forEach { it.send(Wire.Queue(queue)) }
     }
 
-    /** Null when the device ran the command, otherwise what went wrong. */
     suspend fun send(
         deviceId: String,
         command: Command,
         timeoutMs: Long = 8_000,
     ): String? = request(deviceId, timeoutMs) { Wire.Cmd(it, command) }
 
-    /** Hands playback to [deviceId]. Returns once it has taken over. */
     suspend fun transfer(
         deviceId: String,
         player: PlayerState,
@@ -992,7 +915,6 @@ class ControlEngine(
         timeoutMs: Long = 30_000,
     ): String? = request(deviceId, timeoutMs) { Wire.Transfer(it, player, queue, play) }
 
-    /** Asks [deviceId] to hand its playback to this device. */
     suspend fun requestTransfer(
         deviceId: String,
         timeoutMs: Long = 40_000,
@@ -1017,13 +939,10 @@ class ControlEngine(
         }
     }
 
-    /** Suspends until a connection to [deviceId] is open, or [timeoutMs] passed. */
     suspend fun awaitConnected(
         deviceId: String,
         timeoutMs: Long,
     ): Boolean = withTimeoutOrNull(timeoutMs) { devices.first { list -> list.any { it.id == deviceId && it.connected } } } != null
-
-    // ------------------------------------------------------------------ devices list
 
     private fun refreshDevices() {
         val list =
@@ -1062,7 +981,6 @@ class ControlEngine(
         const val REJECT_NOT_PAIRED = "not_paired"
         const val REJECT_BUSY = "busy"
 
-        /** One line, without its newline. Null at a clean end of the stream. */
         fun readLine(
             input: InputStream,
             maxBytes: Int,

@@ -188,11 +188,6 @@ import simpmusic.composeapp.generated.resources.ytm_one_hour
 import simpmusic.composeapp.generated.resources.ytm_minutes
 import org.jetbrains.compose.resources.pluralStringResource
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sentinel value used by SleepTimerBottomSheet to signal "end of current song"
-// Handle this in NowPlayingBottomSheetViewModel / SharedViewModel:
-//   if (minutes == END_OF_SONG_SENTINEL) → stop after current track finishes
-// ─────────────────────────────────────────────────────────────────────────────
 const val END_OF_SONG_SENTINEL = Int.MAX_VALUE
 
 private enum class QueueItemAction {
@@ -201,11 +196,6 @@ private enum class QueueItemAction {
     DELETE,
 }
 
-/**
- * The menu of a song in Up next, in YouTube Music's style. It acts on the song, not on its row
- * number: the queue can change while the menu is open (a radio paging in, a removal), and an
- * index captured at opening could then move or remove the wrong song, or point past the end.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QueueItemBottomSheet(
@@ -219,7 +209,6 @@ fun QueueItemBottomSheet(
     val queue by musicServiceHandler.queueData.collectAsStateWithLifecycle()
     val tracks = queue?.data?.listTracks.orEmpty()
 
-    /** Where the song is now: the occurrence nearest to where it was when the menu opened. */
     fun currentIndex(): Int {
         val list = musicServiceHandler.queueData.value?.data?.listTracks.orEmpty()
         return list.indices.filter { list[it].videoId == videoId }.minByOrNull { kotlin.math.abs(it - indexHint) } ?: -1
@@ -291,8 +280,6 @@ fun NowPlayingBottomSheet(
     onDismiss: () -> Unit,
     navController: NavController,
     song: SongEntity?,
-    // One view model per song: a shared one opened the menu for song B showing song A, and
-    // taps in that moment acted on A.
     viewModel: NowPlayingBottomSheetViewModel = koinViewModel(key = "song-menu-" + (song?.videoId ?: "now-playing")),
     setSleepTimerEnable: Boolean = false,
     changeMainLyricsProviderEnable: Boolean = false,
@@ -353,8 +340,6 @@ fun NowPlayingBottomSheet(
             isBottomSheetVisible = true,
             artists = uiState.songUIState.listArtists,
             navController = navController,
-            // Going to the artist closes this menu too; on desktop it otherwise stayed open over
-            // the artist's page.
             onNavigateToOtherScreen = {
                 artist = false
                 onNavigateToOtherScreen()
@@ -423,8 +408,6 @@ fun NowPlayingBottomSheet(
     }
 
     if (isBottomSheetVisible) {
-        // YouTube Music's song menu: the song at the top, three big actions (Play next, Save to
-        // playlist, Share), then the list.
         val song = uiState.songUIState
         val liked = song.liked
         ModalBottomSheet(
@@ -474,7 +457,6 @@ fun NowPlayingBottomSheet(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    // YouTube Music's thumbs beside the song: the account's rating when signed in.
                     IconButton(onClick = {
                         viewModel.onUIEvent(NowPlayingBottomSheetUIEvent.Dislike)
                         hideModalBottomSheet()
@@ -554,7 +536,6 @@ fun NowPlayingBottomSheet(
                         },
                     ),
                 ) {
-                    // Removing a download deletes the file, so it asks first.
                     if (song.downloadState == DownloadState.STATE_DOWNLOADED) {
                         confirmRemoveDownload = true
                     } else {
@@ -577,7 +558,6 @@ fun NowPlayingBottomSheet(
                 }
                 if (setSleepTimerEnable) {
                     val sleepTimerState = uiState.sleepTimer
-                    // timeRemaining > 0 → countdown, -1 → end of song, 0 → off
                     val isEndOfSong = sleepTimerState.timeRemaining == -1
                     val isRunning = sleepTimerState.timeRemaining > 0 || isEndOfSong
                     YtmMenuRow(
@@ -598,7 +578,6 @@ fun NowPlayingBottomSheet(
     }
 }
 
-/** One of the three big actions at the top of YouTube Music's song menu. */
 @Composable
 private fun YtmMenuTile(
     icon: ImageVector,
@@ -620,7 +599,6 @@ private fun YtmMenuTile(
     }
 }
 
-/** A row of YouTube Music's song menu: icon, then label. */
 @Composable
 private fun YtmMenuRow(
     icon: ImageVector,
@@ -689,15 +667,6 @@ fun ActionButton(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// REDESIGNED SleepTimerBottomSheet
-// Quick presets (5, 10, 15, 30, 45 min, 1 hour) + End of Song + Custom input
-// Passes END_OF_SONG_SENTINEL (Int.MAX_VALUE) for "End of Song" option.
-// ─────────────────────────────────────────────────────────────────────────────
-/**
- * YouTube Music's sleep timer: a plain list of durations and "End of song"; a tap starts it.
- * [onSetTimer] gets minutes, or [END_OF_SONG_SENTINEL].
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SleepTimerBottomSheet(
@@ -755,10 +724,6 @@ private fun SleepTimerRow(
     )
 }
 
-/**
- * YouTube Music's "Save to playlist": the account's and this device's playlists in one list, each
- * with its cover. A playlist that already has the song is marked and cannot be picked again.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddToPlaylistModalBottomSheet(
@@ -863,7 +828,6 @@ private fun SavePlaylistRow(
     }
 }
 
-/** YouTube Music's artist picker, for "Go to artist" on a song with several artists. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ArtistModalBottomSheet(
@@ -1396,7 +1360,6 @@ fun EndOfModalBottomSheet() {
     ) {}
 }
 
-/** What the developer sign-in sheet asks for. Only YouTube is left; Spotify and Discord were removed with those features. */
 sealed class DevLogInType(
     val title: StringResource,
 ) {

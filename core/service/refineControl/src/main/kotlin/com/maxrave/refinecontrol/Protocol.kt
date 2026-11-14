@@ -4,10 +4,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/** Raised when a message changes in a way older builds cannot read. */
 const val PROTOCOL_VERSION = 1
 
-/** UDP port of the discovery beacon. The TCP port is picked by the system and sent in the beacon. */
 const val DEFAULT_DISCOVERY_PORT = 45654
 
 const val BEACON_APP = "refine-control"
@@ -30,7 +28,6 @@ data class DeviceInfo(
     val proto: Int = PROTOCOL_VERSION,
 )
 
-/** Sent by UDP: "I am here, and this is my TCP port". [reply] marks the direct answer to one. */
 @Serializable
 data class Beacon(
     val app: String = BEACON_APP,
@@ -39,30 +36,19 @@ data class Beacon(
     val reply: Boolean = false,
 )
 
-/**
- * What a device is playing. The device that plays sends this; a controller only mirrors it.
- *
- * [positionMs] is the position when the message was sent. The receiver notes when it arrived and
- * counts forward from there while [isPlaying], so no message is needed per second and the two
- * clocks never have to agree.
- */
 @Serializable
 data class PlayerState(
     val trackId: String? = null,
-    /** The playing track as the app's own Track JSON; opaque to this module. */
     val trackJson: String? = null,
     val title: String = "",
     val artist: String = "",
     val durationMs: Long = 0,
-    /** Place of the playing track in the queue, in play order. */
     val index: Int = -1,
-    /** The [QueueState.rev] this state belongs to. */
     val queueRev: Long = 0,
     val positionMs: Long = 0,
     val isPlaying: Boolean = false,
     val loading: Boolean = false,
     val shuffle: Boolean = false,
-    /** 0 off, 1 one, 2 all. */
     val repeat: Int = 0,
     val liked: Boolean = false,
     val volume: Float = 1f,
@@ -70,11 +56,9 @@ data class PlayerState(
     val prevAvailable: Boolean = false,
 )
 
-/** The queue, sent only when it changes: it is the large part. */
 @Serializable
 data class QueueState(
     val rev: Long = 0,
-    /** JSON array of the app's Track, in play order; opaque to this module. */
     val tracksJson: String = "[]",
     val playlistId: String? = null,
     val playlistName: String? = null,
@@ -164,7 +148,6 @@ sealed class Command {
         val tracksJson: String,
     ) : Command()
 
-    /** Start something new: the queue, the track to begin with, and how it was picked. */
     @Serializable
     @SerialName("play_queue")
     data class PlayQueue(
@@ -176,12 +159,8 @@ sealed class Command {
     ) : Command()
 }
 
-/** Every line on the TCP connection is one of these. */
 @Serializable
 internal sealed class Wire {
-    // ---- Pairing handshake (plain text; nothing secret is sent before the code is confirmed)
-
-    /** [commit] = SHA-256(public key ‖ nonce): fixes the caller's key before it sees ours. */
     @Serializable
     @SerialName("pair_start")
     data class PairStart(
@@ -204,8 +183,6 @@ internal sealed class Wire {
         val nonce: String,
     ) : Wire()
 
-    // ---- Connection between paired devices (plain text nonces, then everything is encrypted)
-
     @Serializable
     @SerialName("auth_start")
     data class AuthStart(
@@ -226,8 +203,6 @@ internal sealed class Wire {
         val reason: String,
     ) : Wire()
 
-    // ---- Encrypted from here on
-
     @Serializable
     @SerialName("pair_confirm")
     data object PairConfirm : Wire()
@@ -236,7 +211,6 @@ internal sealed class Wire {
     @SerialName("pair_cancel")
     data object PairCancel : Wire()
 
-    /** First encrypted message each way: being able to read it proves the sender holds the key. */
     @Serializable
     @SerialName("ready")
     data class Ready(
@@ -255,7 +229,6 @@ internal sealed class Wire {
     @SerialName("bye")
     data object Bye : Wire()
 
-    /** "Forget this device" on the other side: drop the pairing here as well. */
     @Serializable
     @SerialName("unpair")
     data object Unpair : Wire()
@@ -279,7 +252,6 @@ internal sealed class Wire {
         val command: Command,
     ) : Wire()
 
-    /** Hand playback over: load this, continue from [PlayerState.positionMs], play if [play]. */
     @Serializable
     @SerialName("transfer")
     data class Transfer(
@@ -289,7 +261,6 @@ internal sealed class Wire {
         val play: Boolean,
     ) : Wire()
 
-    /** "Play on me": asks the receiver to hand its playback to the sender. */
     @Serializable
     @SerialName("request_transfer")
     data class RequestTransfer(

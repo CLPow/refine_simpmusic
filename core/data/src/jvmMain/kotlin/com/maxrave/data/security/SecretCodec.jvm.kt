@@ -6,24 +6,11 @@ import java.util.Base64
 
 private const val TAG = "SecretCodec"
 
-/**
- * Marks a value this codec produced. Anything without it is plain text from an older install and
- * is returned as-is, then re-protected the next time it is written.
- */
 private const val DPAPI_PREFIX = "dpapi:"
 
 private val isWindows: Boolean
     get() = System.getProperty("os.name", "").contains("Windows", ignoreCase = true)
 
-/**
- * Windows DPAPI, user-scoped.
- *
- * `CryptProtectData` ties the ciphertext to the logged-in Windows account, so the file is useless
- * if copied to another machine or read by another user.
- *
- * Encrypt failure returns "" so the caller can skip the write and keep a previously protected
- * session rather than silently signing the user out.
- */
 internal actual object SecretCodec {
     actual fun encode(
         plain: String,

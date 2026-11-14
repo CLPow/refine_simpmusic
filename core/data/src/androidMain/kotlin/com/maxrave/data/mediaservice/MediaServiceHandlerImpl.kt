@@ -119,12 +119,6 @@ internal class MediaServiceHandlerImpl(
     private val context: Context = getKoin().get()
     override val player: MediaPlayerInterface = getKoin().get()
 
-
-    /**
-     * Built here rather than injected: it needs nothing this handler does not already hold, and
-     * threading it through [createMediaServiceHandler] would mean changing that expect signature
-     * and all three actuals for one dependency.
-     */
     override var onUpdateNotification: (List<GenericCommandButton>) -> Unit = {}
     override var showToast: (ToastType) -> Unit = {}
     override var pushPlayerError: (PlayerError) -> Unit = {}
@@ -181,7 +175,6 @@ internal class MediaServiceHandlerImpl(
     private val _sleepTimerState = MutableStateFlow<SleepTimerState>(SleepTimerState(false, 0))
     override val sleepTimerState: StateFlow<SleepTimerState> = _sleepTimerState.asStateFlow()
 
-    // SponsorBlock skip segments
     private val _skipSegments: MutableStateFlow<List<SponsorSkipSegments>?> = MutableStateFlow<List<SponsorSkipSegments>?>(null)
     override val skipSegments: StateFlow<List<SponsorSkipSegments>?> = _skipSegments.asStateFlow()
 
@@ -194,29 +187,17 @@ internal class MediaServiceHandlerImpl(
     private val _castState = MutableStateFlow(GenericCastState.NOT_CASTING)
     override val castState: StateFlow<GenericCastState> = _castState.asStateFlow()
 
-    // List of Specific variables
-
-
     private var skipSilent = false
-
 
     private val playbackReporter = PlaybackReporter(streamRepository, dataStoreManager, coroutineScope)
 
-    /** Read on every track change, so kept warm here instead of a blocking DataStore read each time. */
     private val endlessQueueOn: StateFlow<Boolean> =
         dataStoreManager.endlessQueue
             .map { it == TRUE }
             .stateIn(coroutineScope, SharingStarted.Eagerly, false)
 
-
-    /**
-     * Consecutive tracks skipped as unavailable. YouTube Music moves on from a track that will
-     * not play instead of stopping the queue; the cap stops a dead connection from skipping
-     * through everything. Reset once anything plays.
-     */
     private var unavailableSkips = 0
 
-    /** Resumes by itself after a pause the connection caused; see [NetworkResumeWatcher]. */
     private val networkResume = NetworkResumeWatcher(coroutineScope) { player.play() }
 
     private fun startReporting(videoId: String) {
@@ -229,34 +210,21 @@ internal class MediaServiceHandlerImpl(
         )
     }
 
-
     private var sleepTimerJob: Job? = null
 
-    /** How long the sleep timer spends ramping the volume down before it stops playback. */
     private val sleepFadeDurationMs = 5_000L
 
-    /** Steps in that ramp — 50, matching the crossfade ramp, so 100ms per step at 5 seconds. */
     private val sleepFadeSteps = 50
 
-    /**
-     * Silence held after the ramp before playback is actually stopped.
-     *
-     * The gain is applied in the audio pipeline, ahead of the sink, so it reaches the speaker one
-     * buffer late — AudioTrack alone holds 250–750 ms. Pausing the moment the ramp hits zero would
-     * therefore cut while the audible level is still around -12 dBFS, which is exactly the abrupt
-     * stop this feature exists to remove. Sized above the largest buffer media3 will allocate.
-     */
     private val sleepFadeTailMs = 800L
 
     private var getSkipSegmentsJob: Job? = null
 
-    /** The SponsorBlock switch, kept warm: it is checked on every progress tick. */
     private val sponsorBlockOn =
         dataStoreManager.sponsorBlockEnabled
             .map { it == TRUE }
             .stateIn(coroutineScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, false)
 
-    /** The categories to skip, read once per track with its segments. */
     @Volatile
     private var sponsorBlockCategories: List<String> = emptyList()
 
@@ -273,23 +241,13 @@ internal class MediaServiceHandlerImpl(
     private var loadJob: Job? = null
     private val restoreQueueMutex = Mutex()
 
-    // Set by restoreQueueAndPlay before it contends for restoreQueueMutex, so a startup
-    // restore already holding the lock can honour the play request itself instead of
-    // finishing paused. One-way for the life of the process: mayBeRestoreQueue only ever
-    // runs once, from init.
     @Volatile
     private var playRequestedDuringRestore = false
 
-    // Set by restoreSavedQueue once the saved track is in the player - i.e. once a play request
-    // can be honoured without the rest of the queue. Written after the addMediaItem that reads
-    // [playRequestedDuringRestore] and re-read immediately afterwards, so the restore and a
-    // resumption request racing it can never both miss the other's write: whichever runs second
-    // sees the first, and exactly one of them starts playback.
     @Volatile
     private var restoreHasPrimedPlayer = false
 
     private var songEntityJob: Job? = null
-
 
     private var getDataOfNowPlayingTrackStateJob: Job? = null
 
@@ -310,7 +268,6 @@ internal class MediaServiceHandlerImpl(
             null
         }
 
-    //
     init {
         player.addListener(this)
         progressJob = Job()
@@ -339,7 +296,6 @@ internal class MediaServiceHandlerImpl(
                 }
             player.shuffleModeEnabled = restoredShuffle
             player.repeatMode = restoredRepeatMode
-            // Ensure controlState is in sync after restore, regardless of listener callbacks
             _controlState.value =
                 _controlState.value.copy(
                     isShuffle = restoredShuffle,
@@ -359,8 +315,6 @@ internal class MediaServiceHandlerImpl(
                         updateNotification()
                     }
                 }
-            // Switched on (or off) while a song plays: fetch its segments now instead of from the
-            // next song on, or drop them.
             launch {
                 sponsorBlockOn.collect { on ->
                     val videoId = _nowPlaying.value?.mediaId?.removePrefix(MERGING_DATA_TYPE.VIDEO)
@@ -442,8 +396,7 @@ internal class MediaServiceHandlerImpl(
         }
         _format.value = null
         _skipSegments.value = null
-        // Reports this listen to the account (watch history -> recommendations). Its own job, so
-        // a cancelled metadata lookup below never takes the report down with it.
+        // Its own job, so a cancelled metadata lookup below never takes the report down with it.
         startReporting(videoId)
         getDataOfNowPlayingTrackStateJob?.cancel()
         getDataOfNowPlayingTrackStateJob =
@@ -465,10 +418,7 @@ internal class MediaServiceHandlerImpl(
                                 Logger.w(TAG, "getDataOfNowPlayingState: Updated thumbs $it")
                             }
                         }
-                        // Rows written before the parsers carried YouTube's real MUSIC_VIDEO_TYPE_*
-                        // hold an invented label ("Song", "video", a view count). They are corrected
-                        // here as the user plays them rather than by a migration. normalize() drops
-                        // anything that is not a real type, so an unknown never overwrites a known one.
+                        // normalize() drops anything that is not a real type, so an unknown never overwrites a known one.
                         MusicVideoType.normalize(track?.videoType)?.let { freshVideoType ->
                             if (songEntity.videoType != freshVideoType) {
                                 songRepository.updateVideoTypeSongEntity(freshVideoType, songEntity.videoId).singleOrNull()?.let {
@@ -553,8 +503,6 @@ internal class MediaServiceHandlerImpl(
 
     private fun getSkipSegments(videoId: String) {
         _skipSegments.value = null
-        // One fetch at a time: the previous song's is cancelled, so a slow answer for it cannot
-        // land after this song started and skip parts of the wrong track.
         getSkipSegmentsJob?.cancel()
         getSkipSegmentsJob =
             coroutineScope.launch {
@@ -613,7 +561,6 @@ internal class MediaServiceHandlerImpl(
         updateNextPreviousTrackAvailability()
     }
 
-    /** A move the user made in the Up next list: positions are those of the play order. */
     private fun moveInPlayOrder(
         fromPosition: Int,
         toPosition: Int,
@@ -667,17 +614,9 @@ internal class MediaServiceHandlerImpl(
 
     // Region: Override functions
     override fun startProgressUpdate() {
-        // Cancel any previous loop first: onIsPlayingChanged(true) can fire repeatedly
-        // (crossfade swap, rebuffer→ready, resume-on-focus-gain) and a leaked loop would
-        // otherwise multiply both the UI updates and the periodic position writes (#2152).
         progressJob?.cancel()
         progressJob =
             coroutineScope.launch {
-                // Persist the playback position to DataStore on this interval so a sudden
-                // service/process kill while playing in the background (aggressive OEMs)
-                // still restores the correct position instead of restarting the track from
-                // the beginning (#2152). The position is otherwise only saved on pause /
-                // track change / release, which misses uninterrupted background playback.
                 val positionPersistIntervalMs = 5_000L
                 var sinceLastPositionSaveMs = 0L
                 while (true) {
@@ -687,18 +626,12 @@ internal class MediaServiceHandlerImpl(
                     if (sinceLastPositionSaveMs >= positionPersistIntervalMs) {
                         sinceLastPositionSaveMs = 0
                         mayBeSaveRecentPosition()
-                        // Riding the existing 5s tick instead of adding one: the scrobble point is
-                        // half the track or four minutes, so five seconds of granularity is plenty
-                        // and the 100ms loop stays as cheap as it was.
                     }
                 }
             }
     }
 
     override fun startBufferedUpdate() {
-        // Same reason as startProgressUpdate above: this is reached once per track load and once
-        // per stall, and stopBufferedUpdate only cancels the newest job — so every earlier loop
-        // survives and keeps pushing Loading every 500 ms for the rest of the session.
         bufferedJob?.cancel()
         bufferedJob =
             coroutineScope.launch {
@@ -728,12 +661,9 @@ internal class MediaServiceHandlerImpl(
 
     override fun stopBufferedUpdate() {
         bufferedJob?.cancel()
-        // Deliberately emits nothing: this runs when buffering *ends*, so publishing Loading here
-        // said the opposite of what happened.
     }
 
     override suspend fun onPlayerEvent(playerEvent: PlayerEvent) {
-        // Anything the user does to playback takes over from waiting for the connection.
         if (playerEvent !is PlayerEvent.UpdateVolume) networkResume.disarm()
         when (playerEvent) {
             is PlayerEvent.UpdateVolume -> {}
@@ -775,7 +705,6 @@ internal class MediaServiceHandlerImpl(
             }
 
             is PlayerEvent.UpdateProgress -> {
-                // Unknown length (still loading, a live stream): nowhere to seek to yet.
                 if (player.duration > 0) {
                     player.seekTo((player.duration * playerEvent.newProgress.coerceIn(0f, 100f) / 100).toLong())
                 }
@@ -886,8 +815,6 @@ internal class MediaServiceHandlerImpl(
                 }
                 val liking = !(controlState.first().isLiked)
                 songRepository.updateLikeStatus(id, if (liking) 1 else 0)
-                // YouTube Music's thumbs up is the account's like: it lands in Liked music and
-                // teaches recommendations. Signed out, the like stays on this device.
                 if (dataStoreManager.cookie.first().isNotEmpty()) {
                     val code =
                         if (liking) {
@@ -905,7 +832,6 @@ internal class MediaServiceHandlerImpl(
         val id = player.currentMediaItem?.mediaId?.removePrefix(MERGING_DATA_TYPE.VIDEO) ?: return
         val wasLiked = controlState.value.isLiked
         coroutineScope.launch {
-            // As in YouTube Music, a thumbs down also moves on from the song.
             if (player.hasNextMediaItem()) onPlayerEvent(PlayerEvent.Next)
             if (wasLiked) songRepository.updateLikeStatus(id, 0)
             if (dataStoreManager.cookie.first().isNotEmpty()) {
@@ -931,15 +857,9 @@ internal class MediaServiceHandlerImpl(
                 var stoppedPlayback = false
                 try {
                     if (minutes == Int.MAX_VALUE) {
-                        // "End of current song" mode: use sentinel -1 to indicate this special state
                         _sleepTimerState.update {
                             it.copy(isDone = false, timeRemaining = -1)
                         }
-                        // Watched, not timed once: the wait used to be worked out a single time from
-                        // the position, so at 1.5x speed, or after a pause, a seek or a skip, it
-                        // fired at the wrong moment -- often part-way into the next song. The song
-                        // playing now is followed until what is left of it (in real time, at the
-                        // current speed) fits the fade.
                         var remaining: Long
                         while (true) {
                             val duration = player.duration
@@ -949,9 +869,6 @@ internal class MediaServiceHandlerImpl(
                             if (remaining <= sleepFadeDurationMs + sleepFadeTailMs) break
                             delay(250)
                         }
-                        // Fade over the tail of the track rather than after it, so the song is
-                        // already silent by the time it ends. A track with less time left than the
-                        // fade gets a shorter one instead of bleeding into whatever plays next.
                         val fadeMs = sleepFadeDurationMs.coerceAtMost(remaining)
                         val tailMs = sleepFadeTailMs.coerceAtMost(remaining - fadeMs)
                         fadeOutForSleep(fadeMs)
@@ -967,7 +884,6 @@ internal class MediaServiceHandlerImpl(
                         }
                         var count = minutes
                         while (count > 0) {
-                            // The fade belongs inside the final minute, so shorten that wait by its length.
                             val isFinalMinute = count == 1
                             delay(
                                 if (isFinalMinute) 60 * 1000L - sleepFadeDurationMs - sleepFadeTailMs else 60 * 1000L,
@@ -977,10 +893,6 @@ internal class MediaServiceHandlerImpl(
                                 delay(sleepFadeTailMs)
                             }
                             count--
-                            // Logged per tick so an early stop can be attributed. If playback ends
-                            // while these are still counting down, the timer did not do it -- on
-                            // Android the usual culprit is the OS killing the playback service, and
-                            // without this there is no way to tell that from a timer that fired early.
                             Logger.i(TAG, "Sleep timer: $count of $minutes minutes remaining")
                             _sleepTimerState.update {
                                 it.copy(isDone = false, timeRemaining = count)
@@ -994,28 +906,13 @@ internal class MediaServiceHandlerImpl(
                         }
                     }
                 } finally {
-                    // Only the cancelled path clears the attenuation here — sleepStop(), or the
-                    // scope going away mid-fade. When the timer runs to completion the adapter
-                    // clears it instead, from inside the pause it queued, because pause() is
-                    // asynchronous and this coroutine cannot tell when playback actually stopped.
-                    // Restoring it from here would lift the volume back over the last of the audio.
                     if (!stoppedPlayback) player.sleepFadeFactor = 1f
                 }
             }
     }
 
-    /**
-     * Ramps [player]'s sleep-fade attenuation down to silence over [durationMs].
-     *
-     * Uses the same equal-power (cosine) curve as the crossfade ramp: loudness is perceived
-     * logarithmically, so a linear ramp sounds like it drops away early and then lingers near the
-     * bottom. Leaves the factor at zero: the caller holds that silence for [sleepFadeTailMs] so the
-     * attenuated audio can drain through the sink, and only restores the factor after pausing.
-     */
     private suspend fun fadeOutForSleep(durationMs: Long) {
         if (durationMs <= 0L) return
-        // Fewer steps than the nominal 50 for a very short fade, so the ramp cannot outlast the
-        // budget it was given: 50 steps at the 1ms floor would take 50ms regardless of duration.
         val steps = sleepFadeSteps.toLong().coerceAtMost(durationMs).toInt()
         val delayPerStep = (durationMs / steps).coerceAtLeast(1L)
         for (step in 1..steps) {
@@ -1032,14 +929,10 @@ internal class MediaServiceHandlerImpl(
 
     override fun removeMediaItem(position: Int) {
         val listTracks = _queueData.value.data.listTracks
-        // [position] is a place in the queue as shown (play order). Out of range means the queue
-        // changed under the caller; removing anyway crashed or took the wrong song.
         if (position !in listTracks.indices) {
             Logger.w(TAG, "removeMediaItem: $position is outside the queue (${listTracks.size})")
             return
         }
-        // The player keeps its items in their original order; while shuffling, the shown order
-        // is the shuffle order, so the place has to be mapped back.
         val playerIndex = if (player.shuffleModeEnabled) player.getUnshuffledIndex(position) else position
         if (playerIndex in 0 until player.mediaItemCount) player.removeMediaItem(playerIndex)
         val temp = listTracks.toMutableList()
@@ -1088,15 +981,6 @@ internal class MediaServiceHandlerImpl(
         from: Int,
         to: Int,
     ) {
-//        if (from < to) {
-//            for (i in from until to) {
-//                moveItemDown(i)
-//            }
-//        } else {
-//            for (i in from downTo to + 1) {
-//                moveItemUp(i)
-//            }
-//        }
         moveInPlayOrder(from, to)
     }
 
@@ -1126,7 +1010,6 @@ internal class MediaServiceHandlerImpl(
                     listPosition.shuffle()
                     _queueData.update {
                         it.copy(
-                            // After shuffle prefix is offset and list position
                             data =
                                 it.data.copy(
                                     continuation = "SHUFFLE0_${fromListIntToString(listPosition)}",
@@ -1141,10 +1024,6 @@ internal class MediaServiceHandlerImpl(
 
     override fun loadMore() {
         if (queueData.value.queueState == QueueData.StateSource.STATE_INITIALIZING) return
-        // Separate local and remote data
-        // Local Add Prefix to PlaylistID to differentiate between local and remote
-        // Local: LC-PlaylistID
-        // A queue without a playlist id ("Play all", a single from a shelf) still reaches Autoplay below.
         val playlistId = _queueData.value.data.playlistId ?: ""
         Logger.w("Check loadMore", playlistId.toString())
         val continuation = _queueData.value.data.continuation
@@ -1624,9 +1503,6 @@ internal class MediaServiceHandlerImpl(
             )
             Logger.d("MusicSource", "updateCatalog: ${track.title}")
         }
-        // Intent, not observed: isPlaying is also false while paused OR while the next track
-        // is still preparing, so reading it here let a background queue append strip a live
-        // play-intent mid-load and the incoming track came up silent.
         if (!player.playWhenReady && isAddToQueue) {
             player.playWhenReady = false
         }
@@ -1651,7 +1527,6 @@ internal class MediaServiceHandlerImpl(
         val tempQueue: ArrayList<Track> = arrayListOf()
         tempQueue.addAll(queueData.value.data.listTracks)
         val chunkedList = tempQueue.chunked(100)
-        // Reset queue
         _queueData.update {
             it.copy(
                 data =
@@ -1890,8 +1765,6 @@ internal class MediaServiceHandlerImpl(
 
     override suspend fun addToQueue(tracks: List<Track>) {
         if (tracks.isEmpty()) return
-        // While shuffling, list positions are the shuffle order and there is no fixed place to keep
-        // apart; it appends, as before.
         if (player.shuffleModeEnabled) {
             loadMoreCatalog(ArrayList(tracks), isAddToQueue = true)
             return
@@ -1899,12 +1772,6 @@ internal class MediaServiceHandlerImpl(
         insertTracksAt(tracks, forQueue = true) { current -> queueData.value.data.addToQueueIndex(current) }
     }
 
-    /**
-     * The one insert path for "Play next" and "Add to queue". Missing artists are looked up first;
-     * the position is worked out only afterwards, from the queue as it is then (the song may have
-     * changed during the lookups), and the queue is updated from its fresh state in one step, so
-     * songs another load appended meanwhile are kept. A null position appends.
-     */
     private suspend fun insertTracksAt(
         tracks: List<Track>,
         forQueue: Boolean,
@@ -1964,18 +1831,14 @@ internal class MediaServiceHandlerImpl(
         if (player.shuffleModeEnabled) return false
         // Checked before claiming the queue, or it could never pass.
         if (queueData.value.queueState != QueueData.StateSource.STATE_INITIALIZED) return false
-        // Claimed for the whole fetch, so a loadMore set off meanwhile backs off instead of
-        // appending the old radio's next page and overwriting the continuation.
         _queueData.update { it.copy(queueState = QueueData.StateSource.STATE_INITIALIZING) }
         try {
             val response = songRepository.getRadioFromEndpoint(endpoint).lastOrNull()
             val (tracks, continuation) = (response as? Resource.Success)?.data ?: return false
             val data = queueData.value.data
             val current = player.currentMediaItemIndex
-            // The radio part starts after the current song, or after the songs you queued.
             val from = maxOf(current + 1, data.autoplayStartIndex ?: (current + 1))
             val kept = data.listTracks.take(from).map { it.videoId }.toSet()
-            // A radio starts with its seed, usually a song that is already kept.
             val radio = tracks.filter { it.videoId !in kept }
             if (radio.isEmpty()) return false
             for (index in data.listTracks.size - 1 downTo from) removeMediaItem(index)
@@ -2030,10 +1893,6 @@ internal class MediaServiceHandlerImpl(
     override fun mayBeSaveRecentSong(runBlocking: Boolean) {
         val unit =
             suspend {
-                // Skip while the playing song is unknown or the queue is mid-rebuild:
-                // updateCatalog clears listTracks and re-inserts the current track only at
-                // the end, so saving in that window persists a queue missing the current
-                // track (plus a blank media id), which desyncs the next restore.
                 val videoId = nowPlayingState.value.songEntity?.videoId
                 if (videoId != null && queueData.value.queueState == QueueData.StateSource.STATE_INITIALIZED) {
                     dataStoreManager.saveRecentSong(
@@ -2065,12 +1924,6 @@ internal class MediaServiceHandlerImpl(
         }
     }
 
-    /**
-     * Lightweight periodic persistence of just the playback position (#2152).
-     * Unlike [mayBeSaveRecentSong] this does NOT rewrite the whole saved queue, so it is
-     * cheap enough to call every few seconds while a track plays uninterrupted. The saved
-     * media id + position are what [mayBeRestoreQueue] reads to resume after a process kill.
-     */
     private fun mayBeSaveRecentPosition() {
         coroutineScope.launch {
             val videoId = nowPlayingState.value.songEntity?.videoId ?: return@launch
@@ -2095,14 +1948,6 @@ internal class MediaServiceHandlerImpl(
 
     override suspend fun restoreQueueAndPlay(): Boolean {
         playRequestedDuringRestore = true
-        // A restore that is already past its addMediaItem has the saved track in the player, so
-        // the request is served right here instead of queueing behind restoreQueueMutex. That
-        // restore is sitting on loadJob.join(), and the load it joins paces itself in chunks and
-        // can reach for the network, so waiting for the lock would put the whole queue in front
-        // of the first note - and in front of the BUFFERING/READY that lets Media3 call
-        // startForeground() before the system's deadline. Falling through is still correct when
-        // the player has not been primed yet: the restore has not read the flag either, so it
-        // starts the track playing itself.
         if (restoreHasPrimedPlayer && player.mediaItemCount > 0) {
             requestPlayWhenReady()
             return true
@@ -2110,51 +1955,13 @@ internal class MediaServiceHandlerImpl(
         return restoreSavedQueue(playWhenReady = true)
     }
 
-    /**
-     * Asks the player to start, in a way that survives the track still being mid-load.
-     *
-     * [MediaPlayerInterface.play] alone does not. The adapter answers it out of its own state
-     * machine and drops it outright while the track is still being set up, and a load that was
-     * started with "do not play" ends by pausing whatever intent arrived during it. Writing
-     * `playWhenReady` records the intent synchronously instead, and both the load and the READY
-     * transition it ends on honour it - which is the whole point on the resumption path, where
-     * the request routinely lands on a track the restore only just handed to the player.
-     */
     private fun requestPlayWhenReady() {
         player.playWhenReady = true
     }
 
-    /**
-     * Loads the persisted queue back into the player.
-     *
-     * [playWhenReady] is what separates the two callers. Startup restore only primes the
-     * player, but playback resumption (`MediaSession.Callback.onPlaybackResumption`, reached
-     * from a media button - a headset, a Bluetooth remote, a Samsung Routine) has to end up
-     * actually playing, and fast: `MediaButtonReceiver` started the service with
-     * `startForegroundService()`, and Media3 only calls `startForeground()` once the player
-     * reports BUFFERING or READY with `playWhenReady` set. Miss the system's foreground-start
-     * deadline and the service is torn down with "did not then call Service.startForeground()",
-     * which is reported as a background ANR with an idle main thread.
-     *
-     * That deadline is also why the resumption path starts the track loading before the rest of
-     * the queue: [load] paces itself in 100-track chunks and can reach for the network to fill
-     * in missing artists, so holding playback until it finishes is not safe here.
-     *
-     * Serialized because both callers can be in flight at once - the same service start that
-     * dispatches the media button event also creates this handler, whose init calls
-     * [mayBeRestoreQueue] - and a second unguarded pass would load the queue twice. That is the
-     * normal ordering rather than an edge case, which is why the play request is handed to the
-     * restore already in flight instead of queueing behind the lock, which would put the whole
-     * queue load in front of the first note. The handoff runs in both directions, because the
-     * request can arrive at any point of a restore that suspends repeatedly: before the track
-     * reaches the player it is read out of [playRequestedDuringRestore] here, and after that
-     * point [restoreHasPrimedPlayer] lets [restoreQueueAndPlay] start the track itself and
-     * return without touching the lock at all.
-     */
     private suspend fun restoreSavedQueue(playWhenReady: Boolean): Boolean =
         restoreQueueMutex.withLock {
             if (player.mediaItemCount > 0) {
-                // Already restored, or the app was running all along.
                 if (playWhenReady || playRequestedDuringRestore) requestPlayWhenReady()
                 return@withLock true
             }
@@ -2163,9 +1970,6 @@ internal class MediaServiceHandlerImpl(
                     .getSongById(dataStoreManager.recentMediaId.first())
                     .lastOrNull()
                     ?.toTrack() ?: return@withLock false
-            // Snapshot the position before touching the player: loading the queue fires
-            // onMediaItemTransition -> mayBeSaveRecentSong, which rewrites the stored
-            // position before the seek below would otherwise read it.
             val savedPosition = dataStoreManager.recentPosition.first().toLongOrNull() ?: 0L
             val savedQueueEntity =
                 songRepository
@@ -2173,11 +1977,6 @@ internal class MediaServiceHandlerImpl(
                     .singleOrNull()
                     ?.firstOrNull()
             val savedTracks = savedQueueEntity?.listTrack.orEmpty()
-            // The saved queue may not contain the saved track (e.g. persisted while the
-            // queue was being rebuilt). Put the track at the front then: updateCatalog
-            // skips listTracks[index] as "already in the player", so index must point at
-            // the playing track or the UI queue and the player playlist end up shifted
-            // against each other.
             var index = savedTracks.indexOfFirst { it.videoId == currentPlayingTrack.videoId }
             val listTracks =
                 if (index == -1) {
@@ -2199,49 +1998,21 @@ internal class MediaServiceHandlerImpl(
                     continuation = null,
                 ),
             )
-            // Playing is the whole difference: the track starts loading (and so reaches
-            // BUFFERING) right here, before the queue behind it. The flag is re-read at each use
-            // because a resumption request can arrive while the reads above are still running.
             addMediaItem(
                 currentPlayingTrack.toGenericMediaItem(),
                 playWhenReady = playWhenReady || playRequestedDuringRestore,
             )
-            // Land on the saved position now, not after the load: the track may already be
-            // playing (or start the moment it is primed below), and the queue load can take
-            // seconds. load() moves this item to [index] with moveMediaItem, which keeps both the
-            // item and its position, so nothing has to seek again afterwards.
             player.seekTo(0, savedPosition)
-            // From here the track is in the player, so [restoreQueueAndPlay] can start it itself
-            // rather than waiting for the load below. Publishing that first and then re-reading
-            // the request is what closes the window between the two: a request that arrived
-            // while addMediaItem was running - too late for the line above - is picked up here,
-            // and one that arrives after this point finds the player primed and starts it there.
             restoreHasPrimedPlayer = true
             if (playWhenReady || playRequestedDuringRestore) requestPlayWhenReady()
             loadPlaylistOrAlbum(index = index)
             loadJob?.join()
-            // Only a paused restore still needs this. While playing, the position set above has
-            // moved on during the load, and seeking back to savedPosition would rewind it.
             if (!(playWhenReady || playRequestedDuringRestore)) player.seekTo(index, savedPosition)
-            // Announce the restored position once. Nothing plays after a restore
-            // (playWhenReady = false above), and startProgressUpdate only runs while
-            // isPlaying — so no state is ever published and the UI sits at 0:00 on a
-            // queue the user left half-finished, until they press play.
             _simpleMediaState.value = SimpleMediaState.Progress(savedPosition)
-            // Backstop: playback has normally started well before this, above. It still matters
-            // for the startup restore, which reaches here with the request already set only when
-            // it lost the race described there.
             if (playWhenReady || playRequestedDuringRestore) requestPlayWhenReady()
             true
         }
 
-    /**
-     * Playback moved here from another device (Refine Control). The same steps as restoring the
-     * saved queue, with three differences: it loads over whatever is already in the player, it
-     * keeps the queue's own playlist id and continuation (so a radio keeps paging here), and the
-     * position is set on the first track before the rest of the queue is loaded, so a transfer
-     * that plays never starts from 0:00 and jumps.
-     */
     override suspend fun loadSnapshot(snapshot: PlaybackSnapshot): Boolean =
         restoreQueueMutex.withLock {
             val tracks = snapshot.queue.listTracks
@@ -2249,7 +2020,6 @@ internal class MediaServiceHandlerImpl(
             val current = tracks[index]
             loadJob?.cancel()
             networkResume.disarm()
-            // The queue arrives in the order it was being played, so it is loaded unshuffled.
             if (player.shuffleModeEnabled) player.shuffleModeEnabled = false
             songRepository.insertSong(current.toSongEntity()).lastOrNull()
             current.durationSeconds?.let { songRepository.updateDurationSeconds(it, current.videoId) }
@@ -2258,12 +2028,10 @@ internal class MediaServiceHandlerImpl(
             if (snapshot.positionMs > 0L) player.seekTo(0, snapshot.positionMs)
             loadPlaylistOrAlbum(index = index)
             loadJob?.join()
-            // Loading rebuilds the list and forgets where Autoplay's part began.
             snapshot.queue.autoplayStartIndex?.let { start ->
                 _queueData.update { it.copy(data = it.data.copy(autoplayStartIndex = start)) }
             }
             if (!snapshot.playWhenReady) {
-                // Paused, nothing reports a position: say it once (see restoreSavedQueue).
                 player.seekTo(index, snapshot.positionMs)
                 _simpleMediaState.value = SimpleMediaState.Progress(snapshot.positionMs)
             }
@@ -2278,14 +2046,11 @@ internal class MediaServiceHandlerImpl(
     override fun release() {
         Logger.w("ServiceHandler", "Starting release process")
         try {
-            // Save state first
             mayBeSaveRecentSong(true)
             mayBeSavePlaybackState()
 
-            // Stop and release player
             player.removeListener(this)
 
-            // Cancel all jobs
             progressJob?.cancel()
             progressJob = null
             bufferedJob?.cancel()
@@ -2308,7 +2073,6 @@ internal class MediaServiceHandlerImpl(
             getDataOfNowPlayingTrackStateJob?.cancel()
             getDataOfNowPlayingTrackStateJob = null
 
-            // Cancel coroutine scope
             coroutineScope.cancel()
             backgroundScope.cancel()
 
@@ -2360,9 +2124,6 @@ internal class MediaServiceHandlerImpl(
         }
     }
 
-    // Reset here, not in onIsPlayingChanged: that one is sent when a track starts LOADING, so each
-    // skipped track cleared the count before its own error arrived and the cap of three
-    // consecutive skips never held -- one fault could skip through the whole queue.
     override fun onPlaybackConfirmed() {
         unavailableSkips = 0
         networkResume.disarm()
@@ -2381,9 +2142,6 @@ internal class MediaServiceHandlerImpl(
     }
 
     override fun onSeeked(positionMs: Long) {
-        // System-panel / notification seeks bypass the handler and land straight on ExoPlayer.
-        // Paused, the progress ticker is stopped, so nothing else tells the UI the position
-        // moved: every seek bar, clock and lyric line would wait for play to catch up (#2480).
         if (!player.isPlaying) {
             _simpleMediaState.value = SimpleMediaState.Progress(positionMs)
         }
@@ -2411,8 +2169,6 @@ internal class MediaServiceHandlerImpl(
                 }
             }
         } else if (mediaItem != null) {
-            // Repeat-one replays the same mediaId without reloading now-playing data. Each replay
-            // is a listen of its own on YouTube, so it is reported again.
             startReporting(nowPlayingState.value.songEntity?.videoId ?: mediaItem.mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO))
         }
         queueData.value.data.listTracks.let { list ->
@@ -2436,7 +2192,6 @@ internal class MediaServiceHandlerImpl(
 
     override fun onPlayerError(error: PlayerError) {
         Logger.e("Player Error", "onPlayerError (${error.errorCode}): ${error.message}")
-        // Timeouts and Wi-Fi-only refusals are expected, not faults worth reporting.
         if (error.errorCode != PlayerConstants.ERROR_CODE_TIMEOUT && error.errorCodeName != WIFI_ONLY_ERROR_CODE_NAME) {
             pushPlayerError(error)
         }
@@ -2444,7 +2199,6 @@ internal class MediaServiceHandlerImpl(
             PlayerErrorAction.Skip -> {
                 unavailableSkips++
                 if (isAppInForeground()) showToast(ToastType.TrackSkipped)
-                // seekTo already loads and plays; prepare() here reloaded the failed track first.
                 player.seekToNext()
                 player.play()
             }
@@ -2494,19 +2248,10 @@ internal class MediaServiceHandlerImpl(
         }
     }
 
-    /**
-     * Publishes exactly one state, and it matches the argument.
-     *
-     * It used to write Loading unconditionally and then call stopBufferedUpdate, which wrote
-     * Loading again. `_simpleMediaState` is a StateFlow collected from another thread, so those
-     * writes conflate and the UI settled on Loading even when buffering had just *finished* —
-     * leaving a spinner over playback that was already running.
-     */
     override fun onIsLoadingChanged(isLoading: Boolean) {
         if (isLoading) {
             startBufferedUpdate()
-            // Already holding more than the playhead needs: the stall is nominal, so do not put a
-            // spinner over playback that is about to continue.
+            // Already holding more than the playhead needs: the stall is nominal, so do not put a spinner over playback that is about to continue.
             if (player.bufferedPosition > player.currentPosition) {
                 _simpleMediaState.value = SimpleMediaState.Ready(player.duration)
             } else {
@@ -2532,12 +2277,6 @@ internal class MediaServiceHandlerImpl(
         _castState.value = castState
     }
 
-    /**
-     * Puts the queue in the player's play order (its shuffle order while shuffling), so Up next and
-     * the artwork pager show what will really play next. Matching consumes each queued track once
-     * and ignores the "Video" prefix on video items; it used to look tracks up by bare id, so a
-     * video item or a song queued twice made the sizes differ and the reorder was silently skipped.
-     */
     private fun reorderShuffledQueue(list: List<GenericMediaItem>) {
         val listTrack = queueData.value.data.listTracks
         if (list.isEmpty()) return

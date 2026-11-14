@@ -212,16 +212,6 @@ class LocalPlaylistViewModel(
         _searchQuery.value = query
     }
 
-    /**
-     * Results for the search box, entirely separate from [tracksPagingState].
-     *
-     * Deliberately not a filter over the paged list: PagingData.filter only sees pages already
-     * loaded, so on a long playlist a track would be findable or not depending on how far the
-     * user had scrolled. This queries the database instead and returns a plain list.
-     *
-     * Below two characters it emits nothing — a single letter matches most of a playlist, which
-     * is neither useful to read nor cheap to fetch.
-     */
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     val searchResults: StateFlow<List<Pair<SongEntity, PairSongLocalPlaylist>>> =
         _searchQuery
@@ -406,46 +396,6 @@ class LocalPlaylistViewModel(
 
     val listJob: MutableStateFlow<ArrayList<SongEntity>> = MutableStateFlow(arrayListOf())
 
-//        var downloadState: StateFlow<List<Download?>>
-//        viewModelScope.launch {
-//            downloadState = downloadUtils.getAllDownloads().stateIn(viewModelScope)
-//            downloadState.collectLatest { down ->
-//                if (down.isNotEmpty()){
-//                    var count = 0
-//                    down.forEach { downloadItem ->
-//                        if (downloadItem?.state == Download.STATE_COMPLETED) {
-//                            count++
-//                        }
-//                        else if (downloadItem?.state == Download.STATE_FAILED) {
-//                            updatePlaylistDownloadState(id, DownloadState.STATE_DOWNLOADING)
-//                        }
-//                    }
-//                    if (count == down.size) {
-//                        mainRepository.getLocalPlaylist(id).collect{ playlist ->
-//                            mainRepository.getSongsByListVideoId(playlist.tracks!!).collect{ tracks ->
-//                                tracks.forEach { track ->
-//                                    if (track.downloadState != DownloadState.STATE_DOWNLOADED) {
-//                                        mainRepository.updateDownloadState(track.videoId, DownloadState.STATE_NOT_DOWNLOADED)
-//                                        Toast.makeText(getApplication(), "Download Failed", Toast.LENGTH_SHORT).show()
-//                                    }
-//                                }
-//                            }
-//                        }
-//                        Logger.d("Check Downloaded", "Downloaded")
-//                        updatePlaylistDownloadState(id, DownloadState.STATE_DOWNLOADED)
-//                        Toast.makeText(getApplication(), "Download Completed", Toast.LENGTH_SHORT).show()
-//                    }
-//                    else {
-//                        updatePlaylistDownloadState(id, DownloadState.STATE_DOWNLOADING)
-//                    }
-//                }
-//                else {
-//                    updatePlaylistDownloadState(id, DownloadState.STATE_NOT_DOWNLOADED)
-//                }
-//            }
-//        }
-//    }
-
     fun updatePlaylistTitle(
         title: String,
         id: Long,
@@ -607,37 +557,6 @@ class LocalPlaylistViewModel(
                         hideLoadingDialog()
                     },
                 )
-//            mainRepository.createYouTubePlaylist(playlist).collect {
-//                if (it != null) {
-//                    val ytId = "VL$it"
-//                    mainRepository.updateLocalPlaylistYouTubePlaylistId(playlist.id, ytId)
-//                    mainRepository.updateLocalPlaylistYouTubePlaylistSynced(playlist.id, 1)
-//                    mainRepository.getLocalPlaylistByYoutubePlaylistId(ytId).collect { yt ->
-//                        if (yt != null) {
-//                            mainRepository.updateLocalPlaylistYouTubePlaylistSyncState(
-//                                yt.id,
-//                                LocalPlaylistEntity.YouTubeSyncState.Synced,
-//                            )
-//                            mainRepository.getLocalPlaylist(playlist.id).collect { last ->
-//                                _localPlaylist.emit(last)
-//                                Toast
-//                                    .makeText(
-//                                        application,
-//                                        application.getString(Res.string.synced),
-//                                        Toast.LENGTH_SHORT,
-//                                    ).show()
-//                            }
-//                        }
-//                    }
-//                } else {
-//                    Toast
-//                        .makeText(
-//                            application,
-//                            application.getString(Res.string.error),
-//                            Toast.LENGTH_SHORT,
-//                        ).show()
-//                }
-//            }
         }
     }
 
@@ -748,7 +667,6 @@ class LocalPlaylistViewModel(
                             makeToast(it)
                             viewModelScope.launch {
                                 localPlaylistRepository.getPlaylistPairOfSong(id, track.videoId).lastOrNull()?.let { pair ->
-                                    // Add to UI
                                     onApplyActions(PagingActions.Insert(track.toSongEntity() to pair))
                                 }
                             }
@@ -1016,7 +934,6 @@ class LocalPlaylistViewModel(
         val isSynced =
             uiState.value.syncState == LocalPlaylistEntity.YouTubeSyncState.Synced
         if (isSynced) {
-            // Synced playlist: show loading dialog to block user interaction during API call
             showLoadingDialog(message = getString(Res.string.updating))
             localPlaylistRepository
                 .moveItemInSyncedPlaylist(
@@ -1038,7 +955,6 @@ class LocalPlaylistViewModel(
                     },
                 )
         } else {
-            // Unsynced playlist: local only, no loading dialog needed
             localPlaylistRepository
                 .moveItemInLocalPlaylist(
                     playlistId = uiState.value.id,

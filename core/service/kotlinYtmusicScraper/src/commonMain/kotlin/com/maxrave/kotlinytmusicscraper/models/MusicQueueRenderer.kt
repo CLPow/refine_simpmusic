@@ -5,7 +5,6 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class MusicQueueRenderer(
     val content: Content?,
-    /** The chips under Up next's header: Save, All, Familiar, Discover, … (radio tuning). */
     val subHeaderChipCloud: SubHeaderChipCloud? = null,
 ) {
     @Serializable
@@ -35,11 +34,6 @@ data class MusicQueueRenderer(
         val navigationEndpoint: ChipEndpoint? = null,
     )
 
-    /**
-     * A radio chip re-tunes the queue through `queueUpdateCommand.fetchContentsCommand.watchEndpoint`
-     * (measured on the web client, 2026-11); the plain endpoints are kept as fallbacks. The Save
-     * chip carries none of them, which is how it is told apart: its text is localised.
-     */
     @Serializable
     data class ChipEndpoint(
         val queueUpdateCommand: QueueUpdateCommand? = null,

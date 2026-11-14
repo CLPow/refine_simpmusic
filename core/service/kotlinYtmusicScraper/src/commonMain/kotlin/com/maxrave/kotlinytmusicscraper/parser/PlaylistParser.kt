@@ -39,11 +39,6 @@ fun BrowseResponse.fromPlaylistToTrackWithSetVideoId(): List<Pair<SongItem, Stri
         )
     } ?: emptyList()
 
-/**
- * The rows of a playlist continuation page. YouTube now sends them as
- * `onResponseReceivedActions` → `appendContinuationItemsAction.continuationItems`, with no
- * `continuationContents` at all; the two `continuationContents` shapes are the older ones.
- */
 fun BrowseResponse.playlistContinuationContents(): List<MusicShelfRenderer.Content>? =
     this.onResponseReceivedActions
         ?.firstNotNullOfOrNull { it.appendContinuationItemsAction }
@@ -377,9 +372,6 @@ fun MusicShelfRenderer.Content.toSongItem(): SongItem? {
     )
 }
 
-/**
- * Check if the browse response has reload params, if true, this has the suggestion tracks
- */
 fun BrowseResponse.hasReloadParams(): Boolean =
     this.continuationContents
         ?.sectionListContinuation

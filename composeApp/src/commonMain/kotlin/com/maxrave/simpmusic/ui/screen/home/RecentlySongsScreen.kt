@@ -48,11 +48,6 @@ import org.jetbrains.compose.resources.stringResource
 import simpmusic.composeapp.generated.resources.Res
 import simpmusic.composeapp.generated.resources.ytm_history
 
-/**
- * YouTube Music's History: the account's YouTube history grouped Today, Yesterday, This week…
- * When signed out there is no account history, so the songs played on this device stand in.
- * A tap plays the song's radio.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecentlySongsScreen(

@@ -1,8 +1,5 @@
 package com.maxrave.domain.data.player
 
-/**
- * Generic media item wrapper (no Media3 dependencies)
- */
 data class GenericMediaItem(
     val mediaId: String,
     val uri: String?,

@@ -181,7 +181,6 @@ class PlaylistViewModel(
     fun getData(id: String) {
         resetData()
         viewModelScope.launch {
-            // Check radio
             if (id.isRadioPlaylistId()) {
                 playlistRepository
                     .getRadio(
@@ -223,7 +222,6 @@ class PlaylistViewModel(
                         }
                     }
             } else {
-                // This is an online playlist
                 playlistRepository
                     .getPlaylistData(id, getString(Res.string.view_count))
                     .collect { res ->

@@ -3,7 +3,6 @@ package com.maxrave.kotlinytmusicscraper.extractor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-// xtags values copied from a live player response for 0e3GPea1Tyg (25 audio tracks per itag).
 private fun url(
     xtags: String?,
     clen: Long = 1,
@@ -38,7 +37,6 @@ class AudioTrackOrderTest {
 
     @Test
     fun descriptiveTrackIsNeverThePreferredOne() {
-        // "en" matches both the descriptive track and the en-US original; only the original counts.
         assertEquals(ORIGINAL, multiTrack.orderByAudioTrack("en").first().second)
     }
 
@@ -59,7 +57,6 @@ class AudioTrackOrderTest {
         val drc = url("acont%3Doriginal%3Adrc%3D1%3Alang%3Den-US")
         val streams = listOf(drc, ORIGINAL).map { 251 to it }
         assertEquals(ORIGINAL, streams.orderByAudioTrack(null).first().second)
-        // The language choice still comes first: a preferred-language DRC track beats another language.
         val vietnameseDrc = url("acont%3Ddubbed-auto%3Adrc%3D1%3Alang%3Dvi")
         assertEquals(vietnameseDrc, listOf(ORIGINAL, vietnameseDrc).map { 251 to it }.orderByAudioTrack("vi").first().second)
     }

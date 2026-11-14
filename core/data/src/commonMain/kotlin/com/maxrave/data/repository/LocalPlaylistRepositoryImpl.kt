@@ -117,9 +117,6 @@ internal class LocalPlaylistRepositoryImpl(
                 emit(emptyList())
                 return@flow
             }
-            // Two steps, the same shape LocalPlaylistPagingSource uses: the join narrows the rows,
-            // then the songs are fetched by id. Re-sorted by the pair order afterwards because the
-            // id lookup returns them in whatever order the database finds them.
             val byId = localDataSource.getSongByListVideoIdFull(pairs.map { it.songId }).associateBy { it.videoId }
             emit(pairs.mapNotNull { pair -> byId[pair.songId]?.let { it to pair } })
         }.flowOn(Dispatchers.IO)
@@ -309,11 +306,7 @@ internal class LocalPlaylistRepositoryImpl(
                             ?.musicPlaylistShelfRenderer
                             ?.contents
                     data?.let { listContent.addAll(it) }
-                    // Follow the track shelf's own continuation, as the playlist screen does. The
-                    // section list's token leads to a carousel of other playlists, not to the next
-                    // tracks, so every track past the first page (100) was left without a setVideoId.
                     var continueParam = res.getPlaylistContinuation()
-                    // A token seen twice would loop forever.
                     val seenContinuations = mutableSetOf<String>()
                     while (continueParam != null && seenContinuations.add(continueParam)) {
                         youTube
@@ -348,12 +341,6 @@ internal class LocalPlaylistRepositoryImpl(
             Dispatchers.IO,
         )
 
-    /**
-     * Sync local playlist to YouTube playlist
-     * return youtubePlaylistId
-     * @param playlistId
-     * @return Flow<LocalResource<String>>
-     */
     override fun syncLocalPlaylistToYouTubePlaylist(
         playlistId: Long,
         successMessage: String,
@@ -481,7 +468,6 @@ internal class LocalPlaylistRepositoryImpl(
             emit(false)
         }
 
-    // Update
     override fun addTrackToLocalPlaylist(
         id: Long,
         song: SongEntity,
@@ -511,10 +497,8 @@ internal class LocalPlaylistRepositoryImpl(
                     id,
                 )
             }
-            // Emit success message
             emit(LocalResource.Success(successMessage))
 
-            // Add to YouTube playlist
             val ytId = localPlaylist.youtubePlaylistId
             if (ytId != null) {
                 youTube
@@ -564,10 +548,6 @@ internal class LocalPlaylistRepositoryImpl(
                     youTube
                         .removeItemYouTubePlaylist(ytPlaylistId, song.videoId, setVideoId)
                         .onSuccess {
-                            // Nothing else ever deletes from set_video_id: a row left behind for an
-                            // entry YouTube no longer has would be sent again on the next lookup.
-                            // A legacy "" row is kept, since it may hold another playlist's entry
-                            // that the other playlist still falls back to.
                             if (entry.youtubePlaylistId.isNotEmpty()) {
                                 localDataSource.deleteSetVideoId(entry.videoId, entry.youtubePlaylistId)
                             }
@@ -581,14 +561,6 @@ internal class LocalPlaylistRepositoryImpl(
             }
         }.flowOn(Dispatchers.IO)
 
-    /**
-     * The stored entry of [videoId] in the YouTube playlist [youtubePlaylistId], matched with and
-     * without the "VL" browse prefix since both spellings are stored.
-     *
-     * Rows written before the playlist id was recorded carry "". Such a row is used only when no row
-     * names this playlist; it is the row every lookup returned first before, so old data with nothing
-     * better resolves exactly as it used to.
-     */
     private suspend fun findSetVideoId(
         videoId: String,
         youtubePlaylistId: String,
@@ -837,12 +809,6 @@ internal class LocalPlaylistRepositoryImpl(
             )
         }.flowOn(Dispatchers.IO)
 
-    /**
-     * Move a song within a synced playlist.
-     * 1. Resolve setVideoIds for the moved item and its new successor from the local DB
-     * 2. Call YouTube API (ACTION_MOVE_VIDEO_BEFORE) to reorder on YouTube
-     * 3. Update local DB positions (shift items between from/to, then place the moved item)
-     */
     override fun moveItemInSyncedPlaylist(
         playlistId: Long,
         fromIndex: Int,
@@ -864,7 +830,6 @@ internal class LocalPlaylistRepositoryImpl(
                 return@flow
             }
 
-            // Get all pairs ordered by position to resolve indexes
             val allPairs = localDataSource.getAllPlaylistPairSongByPosition(playlistId)
             if (fromIndex >= allPairs.size || toIndex >= allPairs.size) {
                 emit(LocalResource.Error("Index out of bounds"))
@@ -874,26 +839,17 @@ internal class LocalPlaylistRepositoryImpl(
             val movedPair = allPairs[fromIndex]
             val movedVideoId = movedPair.songId
 
-            // Resolve setVideoId of the moved item
             val movedSetVideoIdEntity = findSetVideoId(movedVideoId, ytPlaylistId)
             val movedSetVideoId = movedSetVideoIdEntity?.setVideoId ?: run {
                 emit(LocalResource.Error("SetVideoId not found for moved item: $movedVideoId"))
                 return@flow
             }
 
-            // Resolve the successor (the item that should come AFTER the moved item)
-            // If moving down (fromIndex < toIndex): successor is the item at toIndex + 1 (if exists)
-            // If moving up (fromIndex > toIndex): successor is the item at toIndex
             val successorVideoId: String? = if (fromIndex < toIndex) {
-                // Moving down: after removal, the successor is at toIndex + 1 in original list
-                allPairs.getOrNull(toIndex + 1)?.songId // null: move to end
+                allPairs.getOrNull(toIndex + 1)?.songId
             } else {
-                // Moving up: successor is the item currently at toIndex
                 allPairs[toIndex].songId
             }
-            // A successor that exists but has no setVideoId must not be sent as null: YouTube reads
-            // a missing successor as "move to the end", so the song would land at the end on YouTube
-            // while the app shows it where the user dropped it.
             val successorSetVideoId: String? =
                 successorVideoId?.let { videoId ->
                     findSetVideoId(videoId, ytPlaylistId)?.setVideoId ?: run {
@@ -902,7 +858,6 @@ internal class LocalPlaylistRepositoryImpl(
                     }
                 }
 
-            // Step 1: Call YouTube API
             youTube
                 .movePlaylistItem(
                     playlistId = ytPlaylistId,
@@ -916,8 +871,7 @@ internal class LocalPlaylistRepositoryImpl(
                     return@flow
                 }
 
-            // Step 2: Update local DB positions — read, shift and place as one transaction. The API
-            // call above stays outside it: a DB lock must never be held while waiting on the network.
+            // Never hold a DB lock while waiting on the network.
             if (!localDataSource.moveSongInPlaylist(playlistId, fromIndex, toIndex)) {
                 emit(LocalResource.Error("Index out of bounds"))
                 return@flow
@@ -926,11 +880,6 @@ internal class LocalPlaylistRepositoryImpl(
             emit(LocalResource.Success("Position updated"))
         }.flowOn(Dispatchers.IO)
 
-    /**
-     * Move a song within an unsynced local playlist.
-     * Same position bookkeeping as [moveItemInSyncedPlaylist], without the YouTube API call:
-     * shift the items between from/to by one, then place the moved item at the target position.
-     */
     override fun moveItemInLocalPlaylist(
         playlistId: Long,
         fromIndex: Int,

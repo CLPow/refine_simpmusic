@@ -279,8 +279,6 @@ internal class PlaylistRepositoryImpl(
                         var count = 0
                         Logger.d("getPlaylistData", "playlist data: ${listContent.size}")
                         Logger.d("getPlaylistData", "continueParam: $continueParam")
-//                        else {
-//                            var listTrack = playlistBrowse.tracks.toMutableList()
                         while (continueParam != null) {
                             youTube
                                 .customQuery(
@@ -743,8 +741,6 @@ internal class PlaylistRepositoryImpl(
                             result.getPlaylistContinuation()
                         Logger.d("Repository", "playlist data: ${listContent.size}")
                         Logger.d("Repository", "continueParam: $finalContinueParam")
-//                        else {
-//                            var listTrack = playlistBrowse.tracks.toMutableList()
                         Logger.d("Repository", "playlist final data: ${listContent.size}")
                         if (finalContinueParam != null) {
                             parsePlaylistData(header, listContent, radioId, viewString)?.let { playlist ->

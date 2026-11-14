@@ -24,18 +24,10 @@ import java.util.concurrent.CompletionStage
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-/**
- * Desktop sign-in the way ytmdesktop does it: Google's real sign-in page in a real, current
- * Chromium. Refine has no browser of its own, so it opens Microsoft Edge (on every Windows 11, kept
- * up to date by Windows) with a fresh, empty profile made only for this, in its own window. The
- * listener signs in there (passkeys and 2-step verification work as in any browser). Refine reads
- * that profile's youtube.com session over Chromium's DevTools protocol, closes the window and
- * deletes the profile. The listener's own Edge and Chrome profiles are never opened or read.
- */
+// The listener's own Edge and Chrome profiles are never opened or read.
 object EdgeSignIn {
     private const val TAG = "EdgeSignIn"
 
-    /** ytmdesktop's sign-in URL: Google's page, then YouTube's sign-in handler, then YouTube Music. */
     private const val SIGN_IN_URL =
         "https://accounts.google.com/ServiceLogin?ltmpl=music&service=youtube&continue=" +
             "https%3A%2F%2Fwww.youtube.com%2Fsignin%3Faction_handle_signin%3Dtrue%26app%3Ddesktop" +
@@ -44,14 +36,12 @@ object EdgeSignIn {
     private const val SIGN_IN_TIMEOUT_MS = 15 * 60 * 1000L
 
     sealed interface Result {
-        /** The Cookie header for music.youtube.com, as the Android sign-in hands it over. */
         data class SignedIn(
             val cookie: String,
         ) : Result
 
         data object NoBrowser : Result
 
-        /** The window was closed, or the time ran out, before the sign-in finished. */
         data object Cancelled : Result
 
         data class Failed(
@@ -59,7 +49,6 @@ object EdgeSignIn {
         ) : Result
     }
 
-    /** Edge first (always there on Windows 11), then Chrome. Null when neither is installed. */
     fun findBrowser(): File? {
         val roots =
             listOfNotNull(System.getenv("ProgramFiles(x86)"), System.getenv("ProgramFiles"), System.getenv("LOCALAPPDATA"))
@@ -81,7 +70,6 @@ object EdgeSignIn {
                     ProcessBuilder(
                         browser.path,
                         "--user-data-dir=${profile.path}",
-                        // Port 0: the browser picks a free port and writes it to DevToolsActivePort.
                         "--remote-debugging-port=0",
                         "--no-first-run",
                         "--no-default-browser-check",
@@ -112,7 +100,6 @@ object EdgeSignIn {
             }
         }
 
-    /** The Cookie header once the window is signed in; null if the listener closes the window first. */
     private suspend fun waitForSignIn(
         cdp: Cdp,
         process: Process,
@@ -120,7 +107,6 @@ object EdgeSignIn {
         while (process.isAlive) {
             val cookies = runCatching { youTubeCookies(cdp) }.getOrNull()
             if (cookies != null && cookies.isSignedIn()) {
-                // Let the last redirects finish writing their cookies.
                 delay(1_500)
                 return youTubeCookies(cdp).toHeader()
             }
@@ -146,7 +132,6 @@ object EdgeSignIn {
         val domain: String,
     )
 
-    /** Every cookie YouTube Music is sent: those of .youtube.com and music.youtube.com. */
     private suspend fun youTubeCookies(cdp: Cdp): List<BrowserCookie> {
         val result = cdp.send("Storage.getCookies")
         return result["cookies"]!!.jsonArray.map { it.jsonObject }.map {
@@ -158,14 +143,12 @@ object EdgeSignIn {
         }.filter { it.domain == ".youtube.com" || it.domain == "youtube.com" || it.domain.endsWith("music.youtube.com") }
     }
 
-    /** YouTube's own signed-in pair: the API key cookie and the session marker it sets after sign-in. */
     private fun List<BrowserCookie>.isSignedIn(): Boolean =
         any { it.name == "SAPISID" || it.name == "__Secure-3PAPISID" } && any { it.name == "LOGIN_INFO" }
 
     private fun List<BrowserCookie>.toHeader(): String = distinctBy { it.name }.joinToString("; ") { "${it.name}=${it.value}" }
 
     private suspend fun deleteProfile(profile: File) {
-        // The browser keeps files open for a moment after it exits.
         repeat(10) {
             if (!profile.exists() || profile.deleteRecursively()) return
             delay(500)
@@ -173,7 +156,6 @@ object EdgeSignIn {
         Logger.w(TAG, "Could not delete the sign-in profile at ${profile.path}; it is in the temp folder")
     }
 
-    /** The smallest DevTools protocol client: one WebSocket, requests matched to answers by id. */
     private class Cdp private constructor() : AutoCloseable {
         private val json = Json { ignoreUnknownKeys = true }
         private val nextId = AtomicInteger(1)

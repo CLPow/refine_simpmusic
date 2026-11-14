@@ -16,14 +16,6 @@ import com.maxrave.simpmusic.ui.component.ytm.Ytm
 import com.maxrave.simpmusic.viewModel.SongSelectionViewModel
 import org.koin.compose.viewmodel.koinViewModel
 
-/**
- * YouTube Music's multi-select for a song list: while [state] is active, the "N selected" bar over
- * the page (close, select all, actions), the actions sheet (play next, add to queue, save to a
- * playlist, download) and the playlist picker. Back leaves the selection before the page.
- *
- * [tracks] is the list as shown, in order: select-all takes it, and the actions use these tracks
- * directly, since songs from an album or playlist page are often not in the database yet.
- */
 @Composable
 fun SongSelectionOverlay(
     state: SongSelectionState,

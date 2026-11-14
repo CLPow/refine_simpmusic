@@ -22,12 +22,6 @@ import simpmusic.composeapp.generated.resources.exit_selection
 import simpmusic.composeapp.generated.resources.n_selected
 import simpmusic.composeapp.generated.resources.select_all
 
-/**
- * Replaces a screen's own top bar while [state] is active.
- *
- * [onSelectAll] hands over the ids the screen is currently showing, in display order —
- * [SongSelectionState.selectAll] keeps the first [MAX_SONG_SELECTION] of them.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SongSelectionTopAppBar(
@@ -37,9 +31,6 @@ fun SongSelectionTopAppBar(
     modifier: Modifier = Modifier,
     containerColor: Color = Color.Transparent,
     contentColor: Color = Color.White,
-    // Defaults to the status-bar inset, like any TopAppBar. Pass WindowInsets(0) when this bar is
-    // STACKED above something that already consumes that inset — a Material SearchBar does, and two
-    // of them in one Column reserve the status bar twice, which reads as a slab of dead padding.
     windowInsets: WindowInsets = TopAppBarDefaults.windowInsets,
 ) {
     TopAppBar(
@@ -74,8 +65,6 @@ fun SongSelectionTopAppBar(
                     contentDescription = stringResource(Res.string.select_all),
                 )
             }
-            // Select-all doubles as deselect-all, so the count can be 0 while still selecting.
-            // There is nothing to act on then, and an empty sheet is worse than no sheet.
             if (state.count > 0) {
                 IconButton(onClick = onOpenActions) {
                     Icon(

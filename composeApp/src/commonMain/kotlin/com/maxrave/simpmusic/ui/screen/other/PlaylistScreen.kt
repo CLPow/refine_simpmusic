@@ -76,11 +76,6 @@ import simpmusic.composeapp.generated.resources.ytm_save_to_library
 import simpmusic.composeapp.generated.resources.ytm_saved_to_library
 import com.maxrave.simpmusic.ui.component.YtmCollectionTopBar
 
-/**
- * YouTube Music's playlist page: the cover centred on a wash of its colour, title, owner,
- * "Playlist • year • N songs", the action row (download, save, the white play button, shuffle,
- * more), then the songs with covers, paging in as the list scrolls.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlaylistScreen(
@@ -90,7 +85,6 @@ fun PlaylistScreen(
     isYourYouTubePlaylist: Boolean,
     navController: NavController,
 ) {
-    // Shelves navigate with the browse id ("VL" + playlist id); everything below wants the bare id.
     val id = playlistId.removePrefix("VL")
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val continuation by viewModel.continuation.collectAsStateWithLifecycle()
@@ -108,7 +102,6 @@ fun PlaylistScreen(
 
     LaunchedEffect(id) { if (id != uiState.data?.id) viewModel.getData(id) }
 
-    // The page takes its colour from the cover.
     val paletteState = rememberPaletteState()
     var artwork by remember { mutableStateOf<ImageBitmap?>(null) }
     LaunchedEffect(artwork) { artwork?.let { paletteState.generate(it) } }
@@ -118,7 +111,6 @@ fun PlaylistScreen(
         }
     }
 
-    // Page in more songs as the end comes into view.
     val nearEnd by remember {
         derivedStateOf {
             val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: return@derivedStateOf false

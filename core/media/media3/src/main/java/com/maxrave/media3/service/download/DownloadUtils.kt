@@ -72,26 +72,11 @@ internal class DownloadUtils(
             val mediaId = dataSpec.key ?: error("No media id")
             Logger.w("Stream", mediaId)
             Logger.w("Stream", mediaId.startsWith(MERGING_DATA_TYPE.VIDEO).toString())
-            // Already downloaded in full: hand the DataSpec back untouched so the enclosing
-            // CacheDataSource reads straight off disk. Safe precisely because the whole track
-            // is there — it never needs the upstream, which is the only thing the bare media id
-            // in the URI cannot survive. Re-resolving here would re-fetch a track the user
-            // already has.
             if (downloadCache.isFullyCached(mediaId, dataSpec.position)) {
                 Logger.w("Stream", "Already downloaded $mediaId")
                 return@Factory dataSpec
             }
-            // Anything short of a full copy must resolve a real URL, and must never hand back
-            // the incoming DataSpec: its URI is the bare media id. Skipping the bytes already on
-            // disk is not this resolver's job — CacheWriter does that via cache.getCachedLength(),
-            // and the CacheDataSource wrapping this resolver still serves whatever playerCache
-            // holds.
-            //
-            // The upstream here is OkHttpDataSource (not DefaultDataSource, as on the playback
-            // side), so a scheme-less URI dies in HttpUrl.parse as
-            // HttpDataSourceException("Malformed URL", ERROR_CODE_FAILED_RUNTIME_CHECK) — a
-            // misleading error for what is really "we could not get a stream URL". Fail loudly
-            // instead, and let DownloadManager mark the download failed for the true reason.
+            // Anything short of a full copy must resolve a real URL, and must never hand back the incoming DataSpec: its URI is the bare media id.
             var dataSpecReturn: DataSpec = dataSpec
             var resolved = false
             runBlocking(Dispatchers.IO) {
@@ -126,11 +111,7 @@ internal class DownloadUtils(
                     val wantedItag = QUALITY.itagOf(dataStoreManager.downloadQuality.first())
                     val startOfTrack = dataSpec.position == 0L
                     val sameQuality = stored != null && streamRepository.deliversQuality(stored.itag, wantedItag)
-                    // A download that continues part-way stays in the format its first bytes are
-                    // in; only a download starting from zero may pick the download quality.
                     val keptItag = stored?.itag?.takeIf { !startOfTrack }
-                    // The stored URL is the STREAMING quality's. It was reused whatever the
-                    // download quality setting said, so the setting did nothing.
                     stored?.takeIf { sameQuality || keptItag != null }?.let {
                         val audioUrl = it.audioUrl
                         if (audioUrl != null && it.expiredTime > now()) {
@@ -144,9 +125,6 @@ internal class DownloadUtils(
                             }
                         }
                     }
-                    // This source reads through the player cache. Bytes cached there in the
-                    // streaming format would be stitched onto the rest in the download format,
-                    // and the file would not decode.
                     if (startOfTrack && !sameQuality) playerCache.removeResource(mediaId)
                     streamRepository
                         .getStream(
@@ -187,8 +165,6 @@ internal class DownloadUtils(
             dataSourceFactory,
             Executor(Runnable::run),
         ).apply {
-            // Each download makes a signed-in stream request; 20 at once drew a rate limit (429) that
-            // then blocked playback too.
             maxParallelDownloads = 3
             minRetryCount = 3
             addListener(
@@ -201,23 +177,17 @@ internal class DownloadUtils(
         }
     private var _downloads = MutableStateFlow<Map<String, Pair<DownloadHandler.Download?, DownloadHandler.Download?>>>(emptyMap())
 
-    // Audio / Video
     override val downloads: StateFlow<Map<String, Pair<DownloadHandler.Download?, DownloadHandler.Download?>>>
         get() = _downloads
     private val _downloadTask = MutableStateFlow<Map<String, Int>>(emptyMap())
     override val downloadTask: StateFlow<Map<String, Int>> get() = _downloadTask
     val downloadingVideoIds = MutableStateFlow<MutableSet<String>>(mutableSetOf())
 
-    /**
-     * Use thumbnail to check video or audio
-     */
     override suspend fun downloadTrack(
         videoId: String,
         title: String,
         thumbnail: String,
     ) {
-        // Songs only: the audio stream is the whole download. This used to fetch the artwork just
-        // to guess "video" from a non-square thumbnail and then queue the video stream as well.
         val downloadRequest =
             DownloadRequest
                 .Builder(videoId, videoId.toUri())
@@ -259,9 +229,6 @@ internal class DownloadUtils(
         coroutineScope.launch {
             var previousIds = emptySet<String>()
             downloads.collect { download ->
-                // A song that left the map was removed (onDownloadRemoved, removeAllDownloads).
-                // Written here rather than in the listener so it lands after any older snapshot
-                // that still listed the song as downloaded.
                 (previousIds - download.keys).forEach { videoId ->
                     _downloadTask.update { it + (videoId to DownloadState.STATE_NOT_DOWNLOADED) }
                     downloadingVideoIds.update {
@@ -278,9 +245,6 @@ internal class DownloadUtils(
                     val video = it.value.second?.state
                     val combineState =
                         if (audio == Download.STATE_REMOVING || video == Download.STATE_REMOVING) {
-                            // A removal reports REMOVING before the files go. The pairs below
-                            // would read it as downloading and write that over the
-                            // NOT_DOWNLOADED the caller has just set.
                             DownloadState.STATE_NOT_DOWNLOADED
                         } else {
                             when (audio to video) {
@@ -334,7 +298,6 @@ internal class DownloadUtils(
             }
         }
 
-        // Pair Audio and Video
         val result = mutableMapOf<String, Pair<DownloadHandler.Download?, DownloadHandler.Download?>>()
         val cursor = downloadManager.downloadIndex.getDownloads()
         while (cursor.moveToNext()) {
@@ -390,10 +353,6 @@ internal class DownloadUtils(
                                 }
                             }
                         }
-                        // The song's stored state is written by the collector alone. A write of
-                        // its own here, on a coroutine of its own, could land after a removal had
-                        // already reset the song, and nothing would correct it once the song left
-                        // the map.
                         when (download.state) {
                             Download.STATE_COMPLETED -> {
                                 playerCache.removeResource(id)
@@ -405,9 +364,6 @@ internal class DownloadUtils(
                     }
                 }
 
-                // Without this a removed track stayed in the map at REMOVING for good, and the
-                // collector above rewrote its song's row on every later emission. Once both
-                // tracks are gone the song leaves the map, which the collector reads as removed.
                 override fun onDownloadRemoved(
                     downloadManager: DownloadManager,
                     download: Download,

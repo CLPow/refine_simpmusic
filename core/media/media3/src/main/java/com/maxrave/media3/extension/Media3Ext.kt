@@ -49,7 +49,6 @@ fun MediaItem?.toSongEntity(): SongEntity? =
 @JvmName("MediaItemtoSongEntity")
 @UnstableApi
 fun SongEntity.toMediaItem(): MediaItem {
-    // Refine plays songs only: every item is the audio rendition, whatever its artwork shape.
     return MediaItem
         .Builder()
         .setMediaId(this.videoId)
@@ -110,8 +109,6 @@ fun GenericCommandButton.toCommandButton(context: Context): CommandButton =
                     } else {
                         CommandButton.ICON_HEART_UNFILLED
                     },
-                    // Resource fallback for hosts (e.g. AA templated surface) that
-                    // don't map the media3 icon constants
                 ).setCustomIconResId(
                     if (liked) {
                         R.drawable.baseline_favorite_24
@@ -175,10 +172,7 @@ fun GenericCommandButton.toCommandButton(context: Context): CommandButton =
                     } else {
                         CommandButton.ICON_SHUFFLE_OFF
                     },
-                    // Resource fallback for hosts that don't map the media3 icon
-                    // constants (AA templated surface renders a gear otherwise).
-                    // One drawable per state: media3's own shuffle_on/off are the same
-                    // glyph, so AA drew both states alike (port of maxrave-dev/core f1ff6577).
+                    // Resource fallback for hosts that don't map the media3 icon constants (AA templated surface renders a gear otherwise).
                 ).setCustomIconResId(
                     if (this.isShuffled) R.drawable.baseline_shuffle_on_24 else R.drawable.baseline_shuffle_24,
                 )
@@ -200,26 +194,6 @@ fun GenericCommandButton.toCommandButton(context: Context): CommandButton =
         }
     }
 
-/**
- * True only when every byte of [key] is on disk *at this moment* and [position] falls
- * inside the resource.
- *
- * KEY_CONTENT_LENGTH only says the resource length is known — CacheDataSource writes it
- * as soon as an unbounded request resolves a length, long before the download finishes.
- * The `isCached(0, total)` range check is what actually proves completeness, so both
- * halves are load-bearing; dropping either one lets a partial resource pass.
- *
- * [position] is checked because the recorded length can itself be short: an upstream that
- * closes its body early makes CacheDataSource store the truncated length as if it were the
- * whole resource. Serving that as a cache hit means the reader eventually asks for a
- * position past the end, where CacheDataSource computes a negative remainder and throws
- * ERROR_CODE_IO_READ_POSITION_OUT_OF_RANGE — another error Media3 refuses to retry.
- * Falling through to a real URL instead costs one wasted resolve at end of track.
- *
- * The answer is a snapshot, not a lease: nothing here locks the spans, and an evictor or
- * a "clear cache" tap can delete them straight afterwards. Callers must keep the window
- * they trust this for short.
- */
 @UnstableApi
 internal fun Cache.isFullyCached(
     key: String,

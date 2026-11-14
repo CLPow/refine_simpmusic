@@ -12,8 +12,6 @@ import org.koin.dsl.module
 
 val mediaHandlerModule =
     module {
-        // This device's own player. The playback service, the media session and anything else
-        // that must act here ask for it by name.
         single<MediaPlayerHandler>(named(Config.LOCAL_PLAYER), createdAtStart = true) {
             createMediaServiceHandler(
                 dataStoreManager = get(),
@@ -30,7 +28,6 @@ val mediaHandlerModule =
                 coroutineScope = get<CoroutineScope>(named(Config.SERVICE_SCOPE)),
             )
         }
-        // What the screens get: the local player, or the device Refine Control is controlling.
         single<MediaPlayerHandler>(createdAtStart = true) {
             RoutingMediaPlayerHandler(
                 local = get(named(Config.LOCAL_PLAYER)),

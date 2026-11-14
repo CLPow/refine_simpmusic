@@ -49,11 +49,9 @@ import simpmusic.composeapp.generated.resources.ytm_update_retry
 import simpmusic.composeapp.generated.resources.ytm_update_up_to_date
 import simpmusic.composeapp.generated.resources.ytm_update_update
 
-/** The updater of this platform, or null where there is none (desktop). */
 @Composable
 fun rememberAppUpdater(): AppUpdater? = remember { createAppUpdater() }
 
-/** Put once at the root of the app: the start-up check and the update dialogs. */
 @Composable
 fun AppUpdateHost(onToast: (String) -> Unit) {
     val updater = rememberAppUpdater() ?: return
@@ -165,7 +163,6 @@ private fun UpdateDialog(
     )
 }
 
-/** Title and summary for Settings › About › Check for updates. */
 @Composable
 fun checkForUpdatesText(updater: AppUpdater): Pair<String, String> {
     val state by updater.state.collectAsStateWithLifecycle()

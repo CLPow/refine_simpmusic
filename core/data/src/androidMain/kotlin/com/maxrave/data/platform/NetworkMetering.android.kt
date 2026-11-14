@@ -11,8 +11,7 @@ actual fun isNetworkMetered(): Boolean =
         (context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager).isActiveNetworkMetered
     }.getOrDefault(false)
 
-// Unknown counts as online: the caller pauses when offline, and a failed check must not turn
-// every error into a pause.
+// Unknown counts as online: the caller pauses when offline, and a failed check must not turn every error into a pause.
 actual fun hasValidatedInternet(): Boolean =
     runCatching {
         val manager = getKoin().get<Context>().getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager

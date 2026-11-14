@@ -47,14 +47,11 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.appcompat)
 
-    // Compose — kept in API parity with :cast's CastIconButton signature
     val composeBom = platform(libs.compose.bom)
     implementation(composeBom)
     implementation(libs.compose.material3.lib)
     implementation(libs.compose.ui)
 
-    // Player type only — media3-common is androidx-only, no Google Play services
-    // / Cast dependency, so it stays safe for the FOSS build.
     implementation(libs.media3.common)
 
     testImplementation(libs.junit)

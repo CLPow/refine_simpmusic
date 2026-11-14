@@ -10,10 +10,8 @@ interface AccountRepository {
 
     fun getYouTubeCookie(): String?
 
-    /** True while a cookie is saved but YouTube no longer treats it as signed in. */
     val signInExpired: StateFlow<Boolean>
 
-    /** Checks the saved sign-in with YouTube; null when it could not be checked (offline). */
     suspend fun verifySignIn(): Boolean?
 
     fun insertGoogleAccount(googleAccountEntity: GoogleAccountEntity): Flow<Long>

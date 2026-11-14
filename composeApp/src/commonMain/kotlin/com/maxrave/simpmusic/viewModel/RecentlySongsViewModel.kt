@@ -17,10 +17,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.lastOrNull
 import kotlinx.coroutines.launch
 
-/**
- * History, as YouTube Music shows it: the account's YouTube history when signed in (grouped Today,
- * Yesterday, This week…), and the songs played on this device when signed out.
- */
 class RecentlySongsViewModel(
     private val songRepository: SongRepository,
     private val dataStoreManager: DataStoreManager,
@@ -36,7 +32,6 @@ class RecentlySongsViewModel(
             RecentPagingSource(songRepository)
         }.flow.cachedIn(viewModelScope)
 
-    /** Null while loading or signed out; the groups once YouTube answers. */
     private val _youTubeHistory = MutableStateFlow<List<Pair<String, List<Track>>>?>(null)
     val youTubeHistory: StateFlow<List<Pair<String, List<Track>>>?> = _youTubeHistory.asStateFlow()
 

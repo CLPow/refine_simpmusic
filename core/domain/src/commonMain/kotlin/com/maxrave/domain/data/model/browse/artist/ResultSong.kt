@@ -13,6 +13,5 @@ data class ResultSong(
     val thumbnails: List<Thumbnail>,
     val isAvailable: Boolean,
     val isExplicit: Boolean,
-    /** YouTube's `MUSIC_VIDEO_TYPE_*`, or null when the response carried none — as on [ResultVideo]. */
     val videoType: String?,
 )

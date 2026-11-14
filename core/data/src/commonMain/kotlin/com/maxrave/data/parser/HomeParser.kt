@@ -101,64 +101,6 @@ internal fun parseMixedContent(
                     for (result1 in contentList) {
                         val musicTwoRowItemRenderer = result1.musicTwoRowItemRenderer
                         if (musicTwoRowItemRenderer != null) {
-                            //                        if (pageType == null) {
-//                            if (result1.musicTwoRowItemRenderer!!.navigationEndpoint.watchEndpoint?.playlistId != null && result1.musicTwoRowItemRenderer!!.navigationEndpoint.watchEndpoint?.videoId == null){
-//                                val content = parseWatchPlaylist(result1.musicTwoRowItemRenderer!!)
-//                                listContent.add(content)
-//                            }
-//                            else if (result1.musicTwoRowItemRenderer!!.navigationEndpoint.watchEndpoint?.playlistId == null && result1.musicTwoRowItemRenderer!!.navigationEndpoint.watchEndpoint?.videoId != null){
-//                                val content = parseSong(result1.musicTwoRowItemRenderer!!)
-//                                listContent.add(content)
-//                            }
-//                        }
-//                        else if (pageType == "MUSIC_PAGE_TYPE_ALBUM"){
-//                            val content = parseAlbum(result1.musicTwoRowItemRenderer!!)
-//                            listContent.add(content)
-//                        }
-//                        else if (pageType == "MUSIC_PAGE_TYPE_ARTIST"){
-//                            val content = parseRelatedArtists(result1.musicTwoRowItemRenderer!!)
-//                            listContent.add(content)
-//                        }
-//                        else if (pageType == "MUSIC_PAGE_TYPE_PLAYLIST") {
-//                            if (result1.musicTwoRowItemRenderer!!.navigationEndpoint.browseEndpoint?.browseId?.startsWith("MPRE") == true) {
-//                                val content = parseAlbum(result1.musicTwoRowItemRenderer!!)
-//                                listContent.add(content)
-//                            }
-//                            else {
-//                                val content = parsePlaylist(result1.musicTwoRowItemRenderer!!)
-//                                listContent.add(content)
-//                            }
-//                        }
-//                        when (result1.musicTwoRowItemRenderer!!.title.runs?.get(0)?.navigationEndpoint?.browseEndpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType) {
-//                            "MUSIC_PAGE_TYPE_ALBUM" -> {
-//                                val content = parseAlbum(result1.musicTwoRowItemRenderer!!)
-//                                listContent.add(content)
-//                            }
-//                            "MUSIC_PAGE_TYPE_ARTIST" -> {
-//                                val content = parseRelatedArtists(result1.musicTwoRowItemRenderer!!)
-//                                listContent.add(content)
-//                            }
-//                            "MUSIC_PAGE_TYPE_PLAYLIST" -> {
-//                                if (result1.musicTwoRowItemRenderer!!.navigationEndpoint.browseEndpoint?.browseId?.startsWith("MPRE") == true) {
-//                                    val content = parseAlbum(result1.musicTwoRowItemRenderer!!)
-//                                    listContent.add(content)
-//                                }
-//                                else {
-//                                    val content = parsePlaylist(result1.musicTwoRowItemRenderer!!)
-//                                    listContent.add(content)
-//                                }
-//                            }
-//                            null -> {
-//                                if (result1.musicTwoRowItemRenderer!!.navigationEndpoint.watchEndpoint?.playlistId != null && result1.musicTwoRowItemRenderer!!.navigationEndpoint.watchEndpoint?.videoId == null){
-//                                    val content = parseWatchPlaylist(result1.musicTwoRowItemRenderer!!)
-//                                    listContent.add(content)
-//                                }
-//                                else if (result1.musicTwoRowItemRenderer!!.navigationEndpoint.watchEndpoint?.playlistId == null && result1.musicTwoRowItemRenderer!!.navigationEndpoint.watchEndpoint?.videoId != null){
-//                                    val content = parseSong(result1.musicTwoRowItemRenderer!!, context)
-//                                    listContent.add(content)
-//                                }
-//                            }
-//                        }
                             if (musicTwoRowItemRenderer.isSong) {
                                 val ytItem =
                                     RelatedPage.fromMusicTwoRowItemRenderer(musicTwoRowItemRenderer, songString) as SongItem?
@@ -307,14 +249,6 @@ internal fun parseMixedContent(
                                                         ?: "",
                                                 name = title,
                                             ),
-                                        // An album card's subtitle is "Album • Charli xcx": a type
-                                        // specifier, a separator, then the artists. Keeping only the
-                                        // runs that actually link somewhere drops the specifier
-                                        // without having to recognise the word — which matters
-                                        // because that word is localised, and "Single"/"EP" appear
-                                        // there too. Leaving this list empty (as it was) made the UI
-                                        // fall back to printing the literal string "Album" where the
-                                        // artist should be.
                                         artists =
                                             musicTwoRowItemRenderer.subtitle
                                                 ?.runs
@@ -368,12 +302,6 @@ internal fun parseMixedContent(
                                                             ?: "",
                                                     name = title,
                                                 ),
-                                            // The album's own artists, taken from the linked runs
-                                            // of its subtitle ("Album • David Choi"). Left empty
-                                            // before, which left consumers with only `album.name`
-                                            // to fall back on — and that is set to the shelf's
-                                            // title here, so every album in a shelf described
-                                            // itself as "Albums for you".
                                             artists =
                                                 musicTwoRowItemRenderer.subtitle
                                                     ?.runs
@@ -549,8 +477,6 @@ internal fun parseMixedContent(
                             subtitle = subtitle,
                             thumbnail = thumbnail,
                             channelId = if (artistChannelId?.contains("UC") == true) artistChannelId else null,
-                            // Shelves of list rows ("Quick picks") are drawn as a grid of song rows
-                            // in YouTube Music, not as cards.
                             isListShelf = contentList?.any { it.musicResponsiveListItemRenderer != null } == true,
                         ),
                     )
@@ -558,9 +484,6 @@ internal fun parseMixedContent(
             }
         }
     }
-    // Every shelf YouTube sent, in its order, videos included: YouTube Music's Home has "Music
-    // videos for you" and "Listen together" with "Don't play music videos" on, and plays their
-    // audio. Dropping video rows here used to remove those shelves outright.
     return list.filter { it.contents.isNotEmpty() }
 }
 
@@ -627,20 +550,8 @@ internal fun parsePlaylist(
     )
 }
 
-/**
- * Picks the artists out of a run list, skipping the " • " separators at odd positions.
- *
- * Runs that are really a duration, a release year or a view count are dropped by
- * [classifySongRun], which decides from structure and shape rather than by matching a localised
- * word. The previous approach compared each run against the caller's localised "views" string with
- * its first five characters chopped off — that mismatched on any locale it was not written for and
- * let "1.2M plays" through as an artist name, and it threw outright when the string was shorter
- * than five characters.
- */
 internal fun parseSongArtistsRuns(runs: List<Run>): List<Artist> {
     val artists = mutableListOf<Artist>()
-    // Step over separators. `indices step 2` also fixes an out-of-bounds read the old
-    // `0..(runs.size / 2)` bound produced whenever the list had an even number of runs.
     for (i in runs.indices step 2) {
         val run = runs[i]
         if (classifySongRun(run) != SongRunType.ARTIST) continue

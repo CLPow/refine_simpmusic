@@ -5,20 +5,10 @@ import com.maxrave.kotlinytmusicscraper.models.Thumbnails
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
-/**
- * What `next` answers to a comments token (the Comments tab of the watch page, the next page, a
- * thread's replies), and what `comment/create_comment*` answers with.
- *
- * A thread carries only keys. The comment itself (text, author, counts) and its toolbar (like
- * state; the like, dislike and reply commands) arrive as [frameworkUpdates] mutations under those
- * keys. Commands are kept as raw JSON: YouTube wraps them differently over time, and only one
- * string inside each is needed.
- */
 @Serializable
 data class CommentsResponse(
     val onResponseReceivedEndpoints: List<ResponseEndpoint>? = null,
     val frameworkUpdates: FrameworkUpdates? = null,
-    /** Only on `comment/create_comment*`: where the new comment's keys are. */
     val actions: List<JsonElement>? = null,
 ) {
     @Serializable
@@ -36,7 +26,6 @@ data class CommentsResponse(
     data class Item(
         val commentsHeaderRenderer: HeaderRenderer? = null,
         val commentThreadRenderer: ThreadRenderer? = null,
-        /** A reply: replies pages list the comments themselves, not threads. */
         val commentViewModel: CommentViewModel? = null,
         val continuationItemRenderer: ContinuationItemRenderer? = null,
     )
@@ -53,7 +42,6 @@ data class CommentsResponse(
         val commentSimpleboxRenderer: SimpleboxRenderer? = null,
     )
 
-    /** The comment box. Signed out (or without a channel) it has no submit button, only [prepareAccountEndpoint]. */
     @Serializable
     data class SimpleboxRenderer(
         val submitButton: JsonElement? = null,
@@ -89,14 +77,11 @@ data class CommentsResponse(
 
     @Serializable
     data class RepliesRenderer(
-        /** "41 replies", already in the request's language. */
         val viewReplies: JsonElement? = null,
-        // YouTube Music hands the first replies token under subThreads; the WEB client under contents.
         val subThreads: List<Item>? = null,
         val contents: List<Item>? = null,
     )
 
-    /** The next page (a top-level item), or "Show more replies" (a button) on a replies page. */
     @Serializable
     data class ContinuationItemRenderer(
         val continuationEndpoint: JsonElement? = null,
@@ -123,7 +108,6 @@ data class CommentsResponse(
     data class Payload(
         val commentEntityPayload: CommentEntity? = null,
         val engagementToolbarStateEntityPayload: ToolbarState? = null,
-        /** The like/dislike/reply commands. Signed out they are empty and a prepareAccountCommand stands in. */
         val engagementToolbarSurfaceEntityPayload: JsonElement? = null,
     )
 

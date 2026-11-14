@@ -11,14 +11,6 @@ import kotlin.math.ln
 import kotlin.math.max
 import kotlin.math.sin
 
-/**
- * Shazam-compatible audio fingerprint, ported from Metrolist (GPL-3.0), whose pure-Kotlin version
- * ports the vibra algorithm of SongRec (https://github.com/marin-m/SongRec). Metrolist's song
- * recognition is based on Aleksey Saenko's MusicRecognizer
- * (https://github.com/aleksey-saenko/MusicRecognizer).
- *
- * The numbers below are the algorithm's own, not tuning: change one and Shazam stops matching.
- */
 internal object ShazamSignature {
     const val SAMPLE_RATE = 16_000
 
@@ -28,19 +20,16 @@ internal object ShazamSignature {
     private const val MAX_TIME_SECONDS = 12.0
     private const val RING_BUF_SIZE = 256
 
-    // Bands 250-520, 520-1450, 1450-3500 and 3500-5500 Hz, in the order the signature lists them.
     private const val BAND_250_520 = 0
     private const val BAND_520_1450 = 1
     private const val BAND_1450_3500 = 2
     private const val BAND_3500_5500 = 3
 
-    // vibra's precomputed Hanning window: 0.5 * (1 - cos(2π(i+1)/2049)).
     private val HANNING =
         DoubleArray(FFT_SIZE) { i ->
             0.5 * (1.0 - cos(2.0 * PI * (i + 1).toDouble() / 2049.0))
         }
 
-    /** [pcm] is mono 16-bit audio at [sampleRate]; returns the `data:audio/vnd.shazam.sig` URI. */
     fun fromPcm(
         pcm: ShortArray,
         sampleRate: Int,
@@ -50,7 +39,6 @@ internal object ShazamSignature {
         return SignatureGeneratorState().process(samples)
     }
 
-    // Linear interpolation, as Metrolist does: the fingerprint only looks at 250-5500 Hz.
     private fun resample(
         input: ShortArray,
         fromRate: Int,
@@ -88,7 +76,6 @@ internal object ShazamSignature {
         fun process(pcm: ShortArray): String {
             var offset = 0
             while (offset + 128 <= pcm.size) {
-                // vibra stops only once BOTH the time and the peak budget are spent.
                 val elapsedSec = numSamples.toDouble() / SAMPLE_RATE
                 if (elapsedSec >= MAX_TIME_SECONDS && totalPeaks >= MAX_PEAKS) break
 
@@ -106,7 +93,6 @@ internal object ShazamSignature {
         }
 
         private fun doFFT() {
-            // Oldest sample first.
             val windowed =
                 DoubleArray(FFT_SIZE) { i ->
                     samplesRing[(samplesPos + i) % FFT_SIZE].toDouble() * HANNING[i]
@@ -119,13 +105,10 @@ internal object ShazamSignature {
             val lastFftIdx = (fftPos - 1 + RING_BUF_SIZE) % RING_BUF_SIZE
             val spread = fftOutputs[lastFftIdx].copyOf()
 
-            // Frequency spreading: 3-point running max, forward pass.
             for (pos in 0 until FFT_OUTPUT_SIZE - 2) {
                 spread[pos] = maxOf(spread[pos], spread[pos + 1], spread[pos + 2])
             }
 
-            // Time spreading reaches only the older entries at -1, -3 and -6; the new entry keeps
-            // frequency spreading alone, as in vibra.
             for (pos in 0 until FFT_OUTPUT_SIZE) {
                 var maxVal = spread[pos]
                 for (offset in intArrayOf(-1, -3, -6)) {
@@ -211,7 +194,6 @@ internal object ShazamSignature {
 
                 for (peak in peaks) {
                     if (peak.fftPassNumber - prevFftPassNumber >= 255) {
-                        // A jump too long for one byte is written as 0xFF plus the absolute position.
                         peakBuf.write(0xFF)
                         writeLittleEndian32(peakBuf, peak.fftPassNumber)
                         prevFftPassNumber = peak.fftPassNumber
@@ -235,18 +217,18 @@ internal object ShazamSignature {
                     .allocate(48)
                     .order(ByteOrder.LITTLE_ENDIAN)
                     .apply {
-                        putInt(0xcafe2580.toInt()) // magic1
-                        putInt(0) // crc32, filled in below
-                        putInt(contents.size + 8) // size_minus_header
-                        putInt(0x94119c00.toInt()) // magic2
+                        putInt(0xcafe2580.toInt())
+                        putInt(0)
+                        putInt(contents.size + 8)
+                        putInt(0x94119c00.toInt())
                         putInt(0)
                         putInt(0)
                         putInt(0)
-                        putInt(3 shl 27) // shifted_sample_rate_id: 16 kHz
+                        putInt(3 shl 27)
                         putInt(0)
                         putInt(0)
                         putInt((numSamples + SAMPLE_RATE * 0.24).toInt())
-                        putInt((15 shl 19) + 0x40000) // fixed_value
+                        putInt((15 shl 19) + 0x40000)
                     }.array()
 
             val full = ByteArrayOutputStream(56 + contents.size)
@@ -256,7 +238,6 @@ internal object ShazamSignature {
             full.write(contents)
             val fullBytes = full.toByteArray()
 
-            // CRC32 over everything after magic1 and the CRC field itself.
             val crc = CRC32()
             crc.update(fullBytes, 8, fullBytes.size - 8)
             val crc32Value = crc.value.toInt()
@@ -293,10 +274,6 @@ internal object ShazamSignature {
         out.write((value ushr 8) and 0xFF)
     }
 
-    /**
-     * Real-input FFT of the 2048 windowed samples, iterative radix-2 Cooley-Tukey. Returns the 1025
-     * magnitudes (re² + im²) / 2^17, floored at 1e-10, matching FFTW's r2c output in vibra.
-     */
     private fun computeRfft(windowed: DoubleArray): DoubleArray {
         val n = windowed.size
         val re = windowed.copyOf()

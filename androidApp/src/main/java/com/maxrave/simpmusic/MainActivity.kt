@@ -58,7 +58,6 @@ class MainActivity : AppCompatActivity() {
                 name: ComponentName?,
                 service: IBinder?,
             ) {
-//                mediaPlayerHandler.setActivitySession(this@MainActivity, MainActivity::class.java, service)
                 setServiceActivitySession(this@MainActivity, MainActivity::class.java, service)
                 Logger.w("MainActivity", "onServiceConnected: ")
                 mBound = true
@@ -102,7 +101,6 @@ class MainActivity : AppCompatActivity() {
                 single<AppCompatActivity> { this@MainActivity }
             },
         )
-        // Recreate view model to fix the issue of view model not getting data from the service
         unloadKoinModules(viewModelModule)
         loadKoinModules(viewModelModule)
         VersionManager.initialize()
@@ -122,18 +120,15 @@ class MainActivity : AppCompatActivity() {
                 ),
             )
         }
-        // First launch: take the region from the device. The app itself is English-only.
         if (getString(FIRST_TIME_MIGRATION) != STATUS_DONE) {
             if (SUPPORTED_LOCATION.items.contains(Locale.getDefault().country)) {
                 putString("location", Locale.getDefault().country)
             } else {
-                // Never default to IN: this fork opts out of India-region recommendations.
+                // Never default to the IN region.
                 putString("location", "US")
             }
             putString(FIRST_TIME_MIGRATION, STATUS_DONE)
         }
-        // Before 2.3.10 the app could be switched to another language; drop a per-app language
-        // left from then so dates and numbers follow the device again.
         if (!AppCompatDelegate.getApplicationLocales().isEmpty) {
             AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
         }
@@ -149,26 +144,17 @@ class MainActivity : AppCompatActivity() {
                 ),
         )
         viewModel.checkIsRestoring()
-        // New-release notifications are gone (2.3.7, the user's request: they announced old
-        // releases as new). WorkManager keeps periodic work across updates, so cancel the job an
-        // earlier install scheduled.
         WorkManager.getInstance(this).cancelUniqueWork("Artist Worker")
-        // The blog RSS notifier is gone. WorkManager persists periodic work across app updates,
-        // so an install that scheduled it before this build would keep waking every 24h for a feed
-        // that no longer has a worker class to run. Cancel it once instead of orphaning the job.
         WorkManager.getInstance(this).cancelUniqueWork("Blog RSS Worker")
-        // Auto backup is gone too (2.3.10); it had no switch left, so only older installs scheduled it.
         WorkManager.getInstance(this).cancelUniqueWork("AutoBackupWorker")
 
         if (!EasyPermissions.hasPermissions(this, Manifest.permission.POST_NOTIFICATIONS)) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                // Read off the main thread: DataStore reads wait for pending writes.
                 lifecycleScope.launch {
                     val doNotAsk = viewModel.readString("notification_permission_do_not_ask")
                     if (doNotAsk != "true") {
                         val wasAsked = viewModel.readString("notification_permission_asked")
                         if (wasAsked != "true") {
-                            // First time: request system permission
                             EasyPermissions.requestPermissions(
                                 this@MainActivity,
                                 ComposeResUtils.getResString(ComposeResUtils.StringType.NOTIFICATION_REQUEST),
@@ -195,7 +181,6 @@ class MainActivity : AppCompatActivity() {
         val shouldStopMusicService = viewModel.shouldStopMusicService()
         Logger.w("MainActivity", "onDestroy: Should stop service $shouldStopMusicService")
 
-        // Always unbind service if it was bound to prevent MusicBinder leak
         if (shouldStopMusicService && shouldUnbind && isFinishing) {
             viewModel.isServiceRunning = false
         }
@@ -210,13 +195,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startMusicService() {
-//        mediaPlayerHandler.startMediaService(this, serviceConnection)
         com.maxrave.media3.di
             .startService(this@MainActivity, serviceConnection)
         mediaPlayerHandler.pushPlayerError = { it ->
             pushPlayerError(it)
         }
-        // Called from the player's threads; the text is looked up without blocking them.
         mediaPlayerHandler.showToast = { type ->
             lifecycleScope.launch {
                 viewModel.makeToast(
@@ -245,10 +228,6 @@ class MainActivity : AppCompatActivity() {
         viewModel.putString(key, value)
     }
 
-    /**
-     * Blocking on purpose, and only for the start-up locale check in onCreate: the language has to
-     * be settled before the first frame, or the app draws once in the wrong one and recreates.
-     */
     private fun getString(key: String): String? = runBlocking { viewModel.readString(key) }
 
     override fun onConfigurationChanged(newConfig: Configuration) {

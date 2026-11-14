@@ -59,34 +59,22 @@ internal class ArtistRepositoryImpl(
         localDataSource.updateArtistNameLogo(channelId, nameLogoUrl, nameLogoColor)
     }
 
-    /**
-     * Unfollowing also drops what only existed to serve the follow.
-     *
-     * Flipping the flag was all this ever did, so an artist's notifications and their new-releases
-     * tracking row survived every unfollow — and once the unfollowed `artist` row is itself swept by
-     * `SongRepository.clearHistoryAndOrphanedSongs`, they have nothing left to point back at.
-     */
     override suspend fun updateFollowedStatus(
         channelId: String,
         followedStatus: Int,
     ): Boolean? =
         withContext(Dispatchers.Main) {
             localDataSource.updateFollowed(followedStatus, channelId)
-            // The local flag is already written above and stays written: Follow must not depend
-            // on the network. Mirroring is opt-in, and its outcome is handed back rather than
-            // swallowed so the caller can say something when the account could not be reached.
+            // Follow must not depend on the network.
             if (dataStoreManager.syncFollowToYouTube.first() != DataStoreManager.TRUE) {
                 return@withContext null
             }
-            // Signed out there is no account to mirror to. The call was made anyway, failed, and
-            // every follow showed "Couldn't update your YouTube subscription".
             if (dataStoreManager.cookie.first().isEmpty()) return@withContext null
             withContext(Dispatchers.IO) {
                 setSubscription(channelId, followedStatus == 1)
             }
         }
 
-    /** One subscribe/unsubscribe call, logged on failure. Returns whether the account was updated. */
     private suspend fun setSubscription(
         channelId: String,
         subscribe: Boolean,
@@ -137,13 +125,8 @@ internal class ArtistRepositoryImpl(
         }.flowOn(Dispatchers.IO)
 
     private companion object {
-        /**
-         * The subscriptions page. `FEmusic_library_corpus_track_artists` is the neighbouring
-         * browse id for artists you merely have songs from — not the same list.
-         */
         const val LIBRARY_SUBSCRIPTIONS_BROWSE_ID = "FEmusic_library_corpus_artists"
 
-        /** ~25 rows a page, so this covers a few thousand subscriptions. */
         const val MAX_SUBSCRIPTION_PAGES = 40
     }
 }

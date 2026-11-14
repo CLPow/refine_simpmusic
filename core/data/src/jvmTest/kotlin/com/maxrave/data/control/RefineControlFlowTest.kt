@@ -42,7 +42,6 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.TimeSource
 
-/** Anything the test does not expect to be called fails loudly. */
 private inline fun <reified T : Any> unimplemented(): T =
     Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, _ ->
         error("${T::class.simpleName}.${method.name} is not part of this test")
@@ -61,7 +60,6 @@ private class MemoryDataStore(
     }
 }
 
-/** A player that keeps a queue and a clock, and nothing else. */
 private class FakePlayer : MediaPlayerHandler by unimplemented() {
     private val control = MutableStateFlow(ControlState(false, false, RepeatState.None, false, false, false, 1f))
     private val queue = MutableStateFlow<QueueData?>(QueueData())
@@ -207,7 +205,6 @@ class RefineControlFlowTest {
         val player = FakePlayer()
         val control = RefineControlRepositoryImpl(MemoryDataStore(), player, scope, type, name, discoveryPort = port)
 
-        /** What the app's screens talk to. */
         val screens = RoutingMediaPlayerHandler(player, control, scope)
     }
 
@@ -236,7 +233,6 @@ class RefineControlFlowTest {
                 phone.control.enabled.first { it }
                 desk.control.enabled.first { it }
 
-                // ---- find, pair
                 withTimeout(20_000) { while (!phone.control.connectByAddress("127.0.0.1:$portDesk")) delay(200) }
                 val deskId = phone.control.devices.first { it.isNotEmpty() }.single().id
                 phone.control.startPairing(deskId)
@@ -248,7 +244,6 @@ class RefineControlFlowTest {
                 until("desktop sees the phone connected") { desk.control.devices.value.any { it.connected } }
                 val phoneId = desk.control.devices.value.single().id
 
-                // ---- the desktop plays; the phone is its remote
                 val album = listOf(track("a"), track("b"), track("c"))
                 desk.player.start(album, at = 0, positionMs = 30_000, play = true, data = QueueData.Data(playlistId = "PL1", playlistType = PlaylistType.ALBUM))
                 until("the devices list shows what the desktop plays") { phone.control.devices.value.single().playingTitle == "Song a" }
@@ -261,7 +256,6 @@ class RefineControlFlowTest {
                 }
                 assertEquals(3, phone.screens.queueData.value?.data?.listTracks?.size)
                 assertEquals("PL1", phone.screens.queueData.value?.data?.playlistId)
-                // The position is counted on the phone from what the desktop last said.
                 assertTrue(abs(phone.screens.getProgress() - desk.player.getProgress()) < 1_500, "position is mirrored")
                 assertEquals(desk.player.duration, phone.screens.getPlayerDuration())
 
@@ -279,11 +273,9 @@ class RefineControlFlowTest {
                 until("volume") { abs(desk.player.controlState.value.volume - 0.4f) < 0.01f }
                 phone.screens.removeMediaItem(0)
                 until("removing from the queue") { desk.player.tracks.map { it.videoId } == listOf("b", "c") }
-                // Nothing of this touched the phone's own player.
                 assertFalse(phone.player.isPlaying)
                 assertTrue(phone.player.tracks.isEmpty())
 
-                // ---- picking something new on the phone starts it on the desktop
                 val picked = listOf(track("x"), track("y"))
                 phone.screens.reset()
                 phone.screens.setQueueData(QueueData.Data(listTracks = picked, firstPlayedTrack = picked[1], playlistId = "PL2"))
@@ -293,7 +285,6 @@ class RefineControlFlowTest {
                 assertEquals(listOf("x", "y"), desk.player.tracks.map { it.videoId })
                 assertTrue(phone.player.tracks.isEmpty())
 
-                // ---- "Play on this device": the desktop hands over, then stops
                 desk.player.onPlayerEvent(PlayerEvent.UpdateProgress(25f))
                 assertTrue(phone.control.transferHere(deskId))
                 assertEquals(ControlTarget.ThisDevice, phone.control.target.value)
@@ -303,11 +294,9 @@ class RefineControlFlowTest {
                 assertEquals("PL2", phone.player.queueData.value?.data?.playlistId)
                 assertTrue(phone.player.getProgress() in 50_000L..60_000L, "continues where the desktop was: ${phone.player.getProgress()}")
                 until("the desktop stopped") { !desk.player.isPlaying }
-                // The screens are the phone's own player again.
                 assertEquals("y", phone.screens.nowPlayingState.value.track?.videoId)
                 assertTrue(phone.screens.controlState.value.isPlaying)
 
-                // ---- "Play on Desk": back again, paused stays paused
                 phone.player.onPlayerEvent(PlayerEvent.PlayPause)
                 val pausedAt = phone.player.getProgress()
                 assertTrue(phone.control.transferTo(deskId))
@@ -316,8 +305,6 @@ class RefineControlFlowTest {
                 assertEquals(pausedAt, desk.player.getProgress())
                 assertFalse(phone.player.isPlaying)
 
-                // ---- the desktop goes away
-                // The button acts on what the desktop last reported, so wait for its report.
                 until("the phone shows the desktop paused") { phone.control.remote.value?.let { !it.isPlaying && it.track?.videoId == "y" } == true }
                 phone.screens.onPlayerEvent(PlayerEvent.PlayPause)
                 until("playing on the desktop") { desk.player.isPlaying && phone.screens.controlState.value.isPlaying }
@@ -325,12 +312,10 @@ class RefineControlFlowTest {
                 until("the phone shows it paused and unreachable") {
                     phone.control.remote.value?.connected == false && !phone.screens.controlState.value.isPlaying
                 }
-                // Play then carries on here from what the desktop last reported.
                 phone.screens.onPlayerEvent(PlayerEvent.PlayPause)
                 until("the phone plays it itself") { phone.player.isPlaying && phone.control.target.value == ControlTarget.ThisDevice }
                 assertEquals("y", phone.player.nowPlayingState.value.track?.videoId)
 
-                // ---- forget
                 desk.control.setEnabled(true)
                 until("connected again") { phone.control.devices.value.any { it.connected } }
                 desk.control.forget(phoneId)
@@ -345,7 +330,6 @@ class RefineControlFlowTest {
             }
         }
 
-    /** Finds and pairs [phone] with [desk]; returns (desk's id on the phone, phone's id on the desk). */
     private suspend fun pair(
         phone: Device,
         desk: Device,
@@ -376,17 +360,14 @@ class RefineControlFlowTest {
             try {
                 val (deskId, _) = pair(phone, desk, portDesk)
 
-                // ---- the desktop plays; the idle phone follows it by itself
                 val album = listOf(track("a"), track("b"))
                 desk.player.start(album, at = 0, positionMs = 10_000, play = true)
                 until("the phone follows the desktop") {
                     (phone.control.target.value as? ControlTarget.Remote)?.deviceId == deskId && phone.control.autoAttached
                 }
                 until("the phone's screens show the desktop's song") { phone.screens.nowPlayingState.value.track?.videoId == "a" }
-                // The desktop is not following the phone: the phone plays nothing.
                 assertEquals(ControlTarget.ThisDevice, desk.control.target.value)
 
-                // ---- starting a song on the phone plays it on the phone, not on the desktop
                 val picked = listOf(track("x"))
                 phone.screens.setQueueData(QueueData.Data(listTracks = picked, firstPlayedTrack = picked[0]))
                 phone.screens.loadMediaItem(picked[0], PLAYLIST_CLICK, 0)
@@ -395,25 +376,21 @@ class RefineControlFlowTest {
                 assertEquals("x", phone.player.nowPlayingState.value.track?.videoId)
                 assertEquals("a", desk.player.nowPlayingState.value.track?.videoId)
                 assertTrue(desk.player.isPlaying)
-                // ...and it does not jump back to following the desktop.
                 delay(1_500)
                 assertEquals(ControlTarget.ThisDevice, phone.control.target.value)
 
-                // ---- one tap on the desktop: what the phone plays moves there
                 assertTrue(phone.control.listenOn(deskId))
                 until("the desktop plays the phone's song") { desk.player.nowPlayingState.value.track?.videoId == "x" && desk.player.isPlaying }
                 assertFalse(phone.player.isPlaying)
                 assertEquals(deskId, (phone.control.target.value as ControlTarget.Remote).deviceId)
                 assertFalse(phone.control.autoAttached)
 
-                // ---- one tap on this device: it comes back
                 assertTrue(phone.control.listenOn(null))
                 assertEquals(ControlTarget.ThisDevice, phone.control.target.value)
                 assertTrue(phone.player.isPlaying)
                 assertEquals("x", phone.player.nowPlayingState.value.track?.videoId)
                 until("the desktop stopped") { !desk.player.isPlaying }
 
-                // ---- a tap on a device that already plays, while this one is idle, only takes control
                 phone.player.onPlayerEvent(PlayerEvent.PlayPause)
                 until("the phone paused") { !phone.player.isPlaying }
                 desk.player.start(album, at = 1, positionMs = 0, play = true)

@@ -72,29 +72,18 @@ private const val SECRET_PURPOSE = "refine_control"
 private const val ON = "TRUE"
 private const val OFF = "FALSE"
 
-/** A position this far from where it should be by now means a seek happened: tell the peers. */
 private const val SEEK_DRIFT_MS = 1_500L
 
-/** While playing, the position is sent again this often even when nothing else changed. */
 private const val POSITION_REFRESH_MS = 5_000L
 
-/** How long a device that takes playback over may need until audio really plays. */
 private const val TAKEOVER_TIMEOUT_MS = 20_000L
 
-/** The media volume of the device itself, where the app has no volume of its own (Android). */
 internal interface SystemVolume {
     fun get(): Float
 
     fun set(volume: Float)
 }
 
-/**
- * Refine Control on this device: publishes what the local player does, runs the commands other
- * devices send, mirrors the device being controlled, and moves playback between devices.
- *
- * Everything that touches [local] runs on [scope], the player's own scope (the main thread on
- * Android, the player thread on desktop).
- */
 internal class RefineControlRepositoryImpl(
     private val dataStore: DataStoreManager,
     private val local: MediaPlayerHandler,
@@ -102,9 +91,7 @@ internal class RefineControlRepositoryImpl(
     private val deviceType: String,
     private val defaultDeviceName: String,
     private val systemVolume: SystemVolume? = null,
-    /** Called while the devices list is on screen (Android: allow broadcast reception). */
     private val onScanning: (Boolean) -> Unit = {},
-    // A second copy on one machine (for testing) needs another port.
     private val discoveryPort: Int = System.getProperty("refine.control.port")?.toIntOrNull() ?: DEFAULT_DISCOVERY_PORT,
 ) : RefineControlRepository,
     LocalPlayerPort,
@@ -147,26 +134,19 @@ internal class RefineControlRepositoryImpl(
     @Volatile
     private var peers: List<PairedPeer> = emptyList()
 
-    // Starting and stopping the engine happen off the player's thread, in the order asked for.
     private val lifecycle = Mutex()
     private val publishNow = Channel<Unit>(Channel.CONFLATED)
     private var publishJob: Job? = null
     private var queueRev = 0L
     private var publishedQueue: QueueData.Data? = null
 
-    // Decoding is repeated on every state message otherwise; one entry each is enough.
     private var decodedQueue: Pair<QueueState, QueueData.Data>? = null
     private var decodedTrack: Pair<String, Track>? = null
     private var encodedTrack: Pair<Track, String>? = null
 
-    /** The device [target] was set to automatically; null when the user picked it. */
     @Volatile
     private var autoDeviceId: String? = null
 
-    /**
-     * Devices the user stopped following while they played. Not followed again automatically
-     * until they stop playing (then the next time they play is a new session).
-     */
     private val declined = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     override val autoAttached: Boolean
@@ -192,9 +172,7 @@ internal class RefineControlRepositoryImpl(
             engine = created
             launch { combine(created.devices, created.players) { devices, players -> devices to players }.collect { (d, p) -> onPeers(d, p) } }
             launch { watchPairing(created) }
-            // On by default since 2.4.1: only a stored Off keeps it off. Pairing still guards it.
             if (dataStore.getString(KEY_ENABLED).first() != OFF) switchOn()
-            // Something started playing here while following another device on our own: play here.
             launch {
                 local.controlState.map { it.isPlaying }.distinctUntilChanged().collect { playing ->
                     if (playing && autoAttached) controlThisDevice()
@@ -202,8 +180,6 @@ internal class RefineControlRepositoryImpl(
             }
         }
     }
-
-    // ------------------------------------------------------------------ settings
 
     override fun setEnabled(enabled: Boolean) {
         scope.launch {
@@ -229,7 +205,6 @@ internal class RefineControlRepositoryImpl(
         _target.value = ControlTarget.ThisDevice
         _remote.value = null
         onScanning(false)
-        // Closing the connections says goodbye on them: network work, so not on the player's thread.
         val running = engine ?: return
         scope.launch(Dispatchers.IO) { lifecycle.withLock { running.stop() } }
     }
@@ -247,8 +222,6 @@ internal class RefineControlRepositoryImpl(
         if (scanning) engine?.announceNow()
     }
 
-    // ------------------------------------------------------------------ paired devices (PairStore)
-
     private suspend fun loadPeers(): List<PairedPeer> =
         runCatching {
             val stored = dataStore.getString(KEY_PEERS).first().orEmpty()
@@ -260,15 +233,10 @@ internal class RefineControlRepositoryImpl(
     override fun save(peers: List<PairedPeer>) {
         this.peers = peers
         scope.launch(Dispatchers.IO) {
-            // The pairing keys let a device control this one; they are stored the way the
-            // account cookie is. When the platform cannot protect them they are not written, and
-            // the pairing lasts until the app is closed.
             val encoded = if (peers.isEmpty()) "" else SecretCodec.encode(json.encodeToString(peerListSerializer, peers), SECRET_PURPOSE)
             if (peers.isEmpty() || encoded.isNotEmpty()) dataStore.putString(KEY_PEERS, encoded)
         }
     }
-
-    // ------------------------------------------------------------------ pairing
 
     override fun startPairing(deviceId: String) {
         engine?.startPairing(deviceId)
@@ -301,8 +269,6 @@ internal class RefineControlRepositoryImpl(
 
     override suspend fun connectByAddress(address: String): Boolean = engine?.connectByAddress(address) ?: false
 
-    // ------------------------------------------------------------------ the other devices
-
     private fun onPeers(
         peerDevices: List<com.maxrave.refinecontrol.PeerDevice>,
         players: Map<String, RemotePlayer>,
@@ -324,14 +290,12 @@ internal class RefineControlRepositoryImpl(
         val current = _target.value as? ControlTarget.Remote ?: return maybeAutoAttach()
         val device = peerDevices.firstOrNull { it.id == current.deviceId }
         if (autoAttached && device?.connected != true) {
-            // Followed on our own, so let go quietly: this device simply shows its own player again.
             autoDeviceId = null
             _target.value = ControlTarget.ThisDevice
             _remote.value = null
             return
         }
         if (device == null || !device.paired) {
-            // Forgotten (here or on the other device): nothing left to control.
             controlThisDevice()
             return
         }
@@ -363,7 +327,6 @@ internal class RefineControlRepositoryImpl(
             positionMs = state.positionMs,
             positionAt = TimeSource.Monotonic.markNow() - (System.nanoTime() - player.receivedAtNanos).nanoseconds,
             durationMs = state.durationMs,
-            // A device that cannot be reached is shown paused: nobody knows what it does now.
             isPlaying = state.isPlaying && connected,
             loading = state.loading && connected,
             shuffle = state.shuffle,
@@ -406,11 +369,6 @@ internal class RefineControlRepositoryImpl(
         return json.encodeToString(Track.serializer(), track).also { encodedTrack = track to it }
     }
 
-    /**
-     * A queue as another device can use it. A local playlist's id and paging position point into
-     * this device's own database; sent as they are, the other device would page a playlist of its
-     * own that happens to have the same number. They are left out, so it plays the tracks sent.
-     */
     private fun QueueData.Data.toQueueState(rev: Long): QueueState {
         val local = playlistId?.startsWith(LOCAL_PLAYLIST_ID) == true || playlistType == PlaylistType.LOCAL_PLAYLIST
         return QueueState(
@@ -423,8 +381,6 @@ internal class RefineControlRepositoryImpl(
             autoplayStartIndex = autoplayStartIndex,
         )
     }
-
-    // ------------------------------------------------------------------ publishing this device
 
     private suspend fun publishLoop(engine: ControlEngine): Unit =
         coroutineScope {
@@ -441,7 +397,6 @@ internal class RefineControlRepositoryImpl(
         var lastAt = TimeSource.Monotonic.markNow()
         while (true) {
             withTimeoutOrNull(1_000L) { publishNow.receive() }
-            // Several changes arrive together (a new track changes four flows): one message.
             delay(60)
             publishNow.tryReceive()
             val queue = local.queueData.value?.data ?: QueueData.Data()
@@ -498,8 +453,6 @@ internal class RefineControlRepositoryImpl(
             prevAvailable = control.isPreviousAvailable,
         )
     }
-
-    // ------------------------------------------------------------------ commands from other devices
 
     override suspend fun onCommand(
         from: DeviceInfo,
@@ -597,8 +550,6 @@ internal class RefineControlRepositoryImpl(
             null
         }
 
-    // ------------------------------------------------------------------ moving playback
-
     override suspend fun onTransfer(
         from: DeviceInfo,
         player: PlayerState,
@@ -610,7 +561,6 @@ internal class RefineControlRepositoryImpl(
             takeOver(decodeQueue(queue), player.index, player.positionMs, player.repeat, play)
         }
 
-    /** Loads [queue] into this device's player and, when [play], waits until audio really plays. */
     private suspend fun takeOver(
         queue: QueueData.Data,
         index: Int,
@@ -627,12 +577,9 @@ internal class RefineControlRepositoryImpl(
                 2 -> RepeatState.All
                 else -> RepeatState.None
             }
-        // The player only knows "next repeat mode": step until it is the one wanted.
         repeat(3) { if (local.controlState.value.repeatState != wantedRepeat) local.onPlayerEvent(PlayerEvent.Repeat) }
         publishNow.trySend(Unit)
         if (play) {
-            // The device that hands over keeps playing until this returns, so it must not return
-            // before there is sound here: the position has to have moved on.
             val playing =
                 withTimeoutOrNull(TAKEOVER_TIMEOUT_MS) {
                     while (!(local.controlState.value.isPlaying && local.getProgress() >= positionMs + 250L)) delay(100)
@@ -665,11 +612,8 @@ internal class RefineControlRepositoryImpl(
                 _notices.tryEmit(ControlNotice.TransferFailed(name))
                 return@withContext false
             }
-            // The other device plays now (it answered only once it did): stop here.
             if (local.controlState.value.isPlaying) local.onPlayerEvent(PlayerEvent.PlayPause)
             controlRemote(deviceId)
-            // Its own report follows in a moment; until then show what it was just handed, not
-            // what it reported before the transfer (a Play/Pause tap acts on what is shown).
             _remote.update {
                 it?.copy(isPlaying = state.isPlaying, positionMs = state.positionMs, positionAt = TimeSource.Monotonic.markNow(), index = state.index)
             }
@@ -683,7 +627,6 @@ internal class RefineControlRepositoryImpl(
             val device = _devices.value.firstOrNull { it.id == deviceId }
             val name = device?.name ?: deviceId
             if (device?.connected != true) {
-                // The device is gone; what it last said it played can still be carried on here.
                 val last = engine.players.value[deviceId]
                 val queue = last?.queue?.let { decodeQueue(it) }
                 if (last != null && queue != null && takeOver(queue, last.state.index, last.state.positionMs, last.state.repeat, play = true) == null) {
@@ -699,8 +642,6 @@ internal class RefineControlRepositoryImpl(
             }
             error == null
         }
-
-    // ------------------------------------------------------------------ controlling another device
 
     override fun controlRemote(deviceId: String) {
         autoDeviceId = null
@@ -744,10 +685,6 @@ internal class RefineControlRepositoryImpl(
         _remote.value = null
     }
 
-    /**
-     * Opening Refine while another paired device plays shows that device's music with working
-     * controls (as Spotify does), as long as nothing plays here and the user has not just left it.
-     */
     private fun maybeAutoAttach() {
         if (!_enabled.value || _target.value !is ControlTarget.ThisDevice) return
         if (local.controlState.value.isPlaying) return
@@ -761,7 +698,6 @@ internal class RefineControlRepositoryImpl(
         val current = _target.value as? ControlTarget.Remote
         if (deviceId == null) {
             current ?: return true
-            // Bring the music here; with nothing playing over there, just stop following it.
             if (_remote.value?.track == null) {
                 controlThisDevice()
                 return true
@@ -769,14 +705,11 @@ internal class RefineControlRepositoryImpl(
             return transferHere(current.deviceId)
         }
         if (current?.deviceId == deviceId) {
-            // Already following it; tapping it again makes the choice the user's own.
             autoDeviceId = null
             return true
         }
         val device = _devices.value.firstOrNull { it.id == deviceId && it.paired } ?: return false
         if (current != null) {
-            // Following another device: take control of the chosen one when it already plays,
-            // otherwise move the music over here and on to it.
             if (device.isPlaying || _remote.value?.track == null) {
                 controlRemote(deviceId)
                 return true
@@ -791,7 +724,6 @@ internal class RefineControlRepositoryImpl(
                 true
             }
             here.trackId != null -> transferTo(deviceId)
-            // Nothing anywhere: whatever is started next plays there.
             else -> {
                 controlRemote(deviceId)
                 true
@@ -804,11 +736,9 @@ internal class RefineControlRepositoryImpl(
         val engine = engine ?: return
         val mirrored = _remote.value
         if (mirrored != null && !mirrored.connected) {
-            // Play on a device that is gone carries on here, from what it last reported.
             if (command is RemoteCommand.Play) scope.launch { transferHere(target.deviceId) } else _notices.tryEmit(ControlNotice.Unreachable(target.deviceName))
             return
         }
-        // Shown at once; the device's own next state confirms or corrects it.
         if (mirrored != null) {
             val now = TimeSource.Monotonic.markNow()
             when (command) {

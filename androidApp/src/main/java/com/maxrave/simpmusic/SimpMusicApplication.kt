@@ -41,7 +41,6 @@ class SimpMusicApplication :
     Application(),
     KoinComponent,
     SingletonImageLoader.Factory {
-
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
@@ -50,53 +49,42 @@ class SimpMusicApplication :
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         configCrashlytics(this, BuildKonfig.sentryDsn)
         startKoin {
-            // DEBUG logged every injection on the main thread, release builds included.
             androidLogger(level = Level.ERROR)
             androidContext(this@SimpMusicApplication)
             loadAllModules()
             loadKoinModules(viewModelModule)
         }
-        // provide custom configuration
         val workConfig =
             Configuration
                 .Builder()
                 .setMinimumLoggingLevel(Log.INFO)
                 .build()
 
-        // initialize WorkManager
         WorkManager.initialize(this, workConfig)
 
-        // Redraw the Now Playing widgets already on the home screen once per process start, so an
-        // app update shows the new widget layout straight away instead of after the next track.
         applicationScope.launch {
             runCatching { TurntableWidget().updateAll(this@SimpMusicApplication) }
         }
 
-        // Lyrics romanization was removed in 2.3.10; free the ~13 MB Japanese dictionary an older
-        // install may have downloaded for it.
         applicationScope.launch {
             runCatching { java.io.File(filesDir, "kuromoji-ipadic").deleteRecursively() }
         }
 
         CaocConfig.Builder
             .create()
-            .backgroundMode(CaocConfig.BACKGROUND_MODE_SILENT) // default: CaocConfig.BACKGROUND_MODE_SHOW_CUSTOM
-            .enabled(true) // default: true
-            .showErrorDetails(true) // default: true
-            .showRestartButton(true) // default: true
+            .backgroundMode(CaocConfig.BACKGROUND_MODE_SILENT)
+            .enabled(true)
+            .showErrorDetails(true)
+            .showRestartButton(true)
             .errorDrawable(R.mipmap.ic_launcher_round)
-            .logErrorOnRestart(false) // default: true
-            .trackActivities(true) // default: false
-            .minTimeBetweenCrashesMs(2000) // default: 3000 //default: bug image
-            .restartActivity(MainActivity::class.java) // default: null (your app's launch activity)
+            .logErrorOnRestart(false)
+            .trackActivities(true)
+            .minTimeBetweenCrashesMs(2000)
+            .restartActivity(MainActivity::class.java)
             .apply()
 
-        // Wraps the crash handler already installed: the crash is written to a file the user can
-        // export from Settings › About (the FOSS build has no Sentry), then handled as before.
         CrashLog.install(this)
 
-        // A hidden-API tweak (bigger CursorWindow for large queue rows). Newer Android versions
-        // may refuse the reflection; that must cost the tweak, not the app start.
         try {
             @SuppressLint("DiscouragedPrivateApi")
             val field: Field = CursorWindow::class.java.getDeclaredField("sCursorWindowSize")

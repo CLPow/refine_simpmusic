@@ -11,11 +11,6 @@ data class QueueEntity(
     @PrimaryKey(autoGenerate = false)
     val queueId: Long = 0,
     val listTrack: List<Track>,
-    /**
-     * Persisted [PlaylistType] name so album crossfade exclusions survive a restart.
-     * Null means "unknown / pre-migration" and restores as [PlaylistType.PLAYLIST],
-     * matching the previous hard-coded restore.
-     */
     @ColumnInfo(defaultValue = "NULL")
     val playlistType: String? = null,
 )

@@ -45,25 +45,12 @@ import java.util.concurrent.ConcurrentHashMap
 
 private const val TAG = "ExoPlayerAdapter"
 
-/** A precached player older than this may hold an expired stream URL (they last about six hours). */
 private const val PRECACHE_MAX_AGE_MS = 3 * 60 * 60 * 1000L
 
-/** Audio buffered before playback resumes after a stall. */
 private const val REBUFFER_RESUME_MS = 2_000
 
-/** Error recoveries (reload on a fresh URL) allowed for one track before the error is reported. */
 private const val MAX_RECOVERIES_PER_TRACK = 4
 
-/**
- * ExoPlayer implementation of [MediaPlayerInterface].
- *
- * - Internal playlist management (not ExoPlayer's playlist)
- * - Multi-player instance model: each track gets its own ExoPlayer
- * - Precaching system for smooth transitions
- * - [DelegatingForwardingPlayer] for MediaSession integration
- * - [MergingMediaSourceFactory] + ResolvingDataSource for URL resolution: each ExoPlayer gets a
- *   single [MediaItem] and auto-resolves the stream URL
- */
 @SuppressLint("UnsafeOptInUsageError")
 @OptIn(UnstableApi::class)
 internal class ExoPlayerAdapter(
@@ -74,21 +61,17 @@ internal class ExoPlayerAdapter(
     private val audioAttributes: AudioAttributes,
     private val streamRepository: StreamRepository,
 ) : MediaPlayerInterface {
-    // ========== Internal State Enum (same as GstreamerPlayerAdapter) ==========
-
     private enum class InternalState {
-        IDLE, // No media loaded
-        PREPARING, // Loading media
-        READY, // Ready to play/paused
-        PLAYING, // Currently playing
+        IDLE,
+        PREPARING,
+        READY,
+        PLAYING,
         PAUSED,
-        ENDED, // Playback ended
-        ERROR, // Error state
+        ENDED,
+        ERROR,
     }
 
     private fun InternalState.isInReadyState(): Boolean = this == InternalState.READY || this == InternalState.PLAYING || this == InternalState.PAUSED
-
-    // ========== State Management ==========
 
     private val listeners = mutableListOf<MediaPlayerListener>()
 
@@ -104,11 +87,6 @@ internal class ExoPlayerAdapter(
     @Volatile
     private var internalVolume = 1.0f
 
-    /**
-     * Sleep-timer fade attenuation. Applied on a separate volume line — every player's
-     * [SleepFadeAudioProcessor] reads this value straight out of here, so writing it once covers
-     * every player and nothing on the `volume` line has to be touched.
-     */
     @Volatile
     private var internalSleepFadeFactor = 1.0f
 
@@ -127,7 +105,6 @@ internal class ExoPlayerAdapter(
     @Volatile
     private var internalSkipSilence = false
 
-    // Position tracking - updated periodically, not on every query
     @Volatile
     private var cachedPosition = 0L
 
@@ -142,16 +119,7 @@ internal class ExoPlayerAdapter(
 
     private var positionUpdateJob: Job? = null
 
-    // Active Player.Listener (equivalent to BusListeners in GstreamerPlayerAdapter)
-    // Only ONE listener instance, attached to ONE ExoPlayer at a time.
     private var activePlayerListener: Player.Listener? = null
-
-    // ========== Audio Focus (manual, session-scoped) — #2155 ==========
-    // The multi-player swap model means audio focus must NOT be tied to any single
-    // ExoPlayer: releasing the outgoing player would abandon focus, and the incoming
-    // player (built with handleAudioFocus=false) never re-requests it — the root cause
-    // of "music stops between tracks" (see androidx/media#2100). Instead we hold one
-    // app-level AudioFocusRequest at the adapter level so focus survives every swap.
 
     private val duckVolumeFactor = 0.2f
 
@@ -162,7 +130,6 @@ internal class ExoPlayerAdapter(
     @Volatile
     private var hasAudioFocus = false
 
-    /** True when focus was lost transiently so playback should auto-resume on regain. */
     @Volatile
     private var resumeOnFocusGain = false
 
@@ -178,20 +145,17 @@ internal class ExoPlayerAdapter(
                 }
 
                 AudioManager.AUDIOFOCUS_LOSS -> {
-                    // Permanent loss (another app took over): pause and stop tracking focus.
                     resumeOnFocusGain = false
                     hasAudioFocus = false
                     pause()
                 }
 
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                    // Temporary loss (e.g. an incoming call): pause and remember to resume.
                     resumeOnFocusGain = internalState == InternalState.PLAYING
                     pause()
                 }
 
                 AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                    // Lower the volume instead of pausing (e.g. a navigation prompt).
                     currentPlayer?.volume = internalVolume * duckVolumeFactor
                 }
             }
@@ -211,7 +175,6 @@ internal class ExoPlayerAdapter(
             .build()
     }
 
-    /** Request app-level audio focus once; idempotent while focus is held. */
     private fun requestAudioFocusInternal(): Boolean {
         val am = audioManager ?: return true
         if (hasAudioFocus) return true
@@ -230,81 +193,50 @@ internal class ExoPlayerAdapter(
         Logger.d(TAG, "abandonAudioFocus")
     }
 
-    // ========== Precaching System ==========
-
     private data class PrecachedPlayer(
         val player: ExoPlayer,
         val mediaItem: GenericMediaItem,
-        /** `elapsedRealtime` when it was prepared: its stream URL expires, so an old one is not reused. */
         val createdAtMs: Long = android.os.SystemClock.elapsedRealtime(),
     ) {
-        /**
-         * Nothing listens to a precached player, so one whose load failed (a dead spot, a Wi-Fi-only
-         * refusal, an extraction error) sits in STATE_IDLE with an error nobody saw. Playing it
-         * showed the track at 0:00 forever, with no error and no skip.
-         */
         fun isUsable(): Boolean =
             player.playerError == null &&
                 player.playbackState != Player.STATE_IDLE &&
                 android.os.SystemClock.elapsedRealtime() - createdAtMs < PRECACHE_MAX_AGE_MS
     }
 
-    // VideoId -> PrecachedPlayer
     private val precachedPlayers = ConcurrentHashMap<String, PrecachedPlayer>()
     private var precacheEnabled = true
     private val maxPrecacheCount = 2
     private var precacheJob: Job? = null
 
-    // ========== Retry on Source Error ==========
-    // Track retry attempts per media item to avoid infinite retry loops
     private var retryCount = 0
     private var retryVideoId: String? = null
     private val maxRetryCount = 2
 
-    // retryCount starts again each time the track plays, so a URL that keeps failing after its
-    // first bytes recovered without end. This one only starts again on another track.
     private var recoveryCount = 0
     private var recoveryVideoId: String? = null
-
-    // ========== Playlist Management ==========
 
     private val playlist = mutableListOf<GenericMediaItem>()
     private var localCurrentMediaItemIndex = -1
 
-    // Shuffle management
     private var shuffleIndices = mutableListOf<Int>()
     private var shuffleOrder = mutableListOf<Int>()
 
-    // Loading management
     private var currentLoadJob: Job? = null
 
-    // ========== ForwardingPlayer for MediaSession ==========
-
-    // Create an initial idle ExoPlayer for MediaSession to hold
     private val initialPlayer = createExoPlayerInstance()
 
-    /**
-     * Stable [Player] reference for MediaSession.
-     * Delegates all calls to the currently active [ExoPlayer] instance.
-     * Updated via [DelegatingForwardingPlayer.swapDelegate] when the active player changes.
-     */
     val forwardingPlayer: DelegatingForwardingPlayer = DelegatingForwardingPlayer(initialPlayer)
 
     init {
         currentPlayer = initialPlayer
 
-        // Wire up playlist navigation so ForwardingPlayer (and thus MediaSession)
-        // can see the full playlist state instead of the single-item ExoPlayer state.
-        // Only navigation commands are overridden — NOT getMediaItemCount/getCurrentMediaItemIndex
-        // which must stay consistent with ExoPlayer's internal Timeline to avoid crashes.
         forwardingPlayer.playlistNavigationProvider =
             object : DelegatingForwardingPlayer.PlaylistNavigationProvider {
                 override fun hasNextMediaItem(): Boolean = this@ExoPlayerAdapter.hasNextMediaItem()
 
                 override fun hasPreviousMediaItem(): Boolean = this@ExoPlayerAdapter.hasPreviousMediaItem()
 
-                // Every call here comes from a controller (notification, headset, Android Auto),
-                // i.e. the listener pressed a button: a skip lands on the track playing.
                 override fun seekToNext(): Unit = this@ExoPlayerAdapter.skipToNext()
 
                 override fun seekToPrevious(): Unit = this@ExoPlayerAdapter.skipToPrevious()
@@ -321,22 +253,12 @@ internal class ExoPlayerAdapter(
             }
     }
 
-    // ========== Cast Remote Routing ==========
-
-    /**
-     * While a Cast session is active this holds the session-level [Player] (the unified
-     * CastPlayer wrapping [forwardingPlayer]): transport calls and position/state getters
-     * are routed to it, and playback-start requests are handed to [castPlaybackRouter]
-     * instead of the local ExoPlayer machinery. The playlist itself stays local — the
-     * receiver only ever sees a small resolved-URL window of it.
-     */
     @Volatile
     private var castRemotePlayer: Player? = null
 
     internal val isCastActive: Boolean
         get() = castRemotePlayer != null
 
-    /** Set by CastHandoffManager: (playlistIndex, startPositionMs, playWhenReady) -> load on receiver. */
     internal var castPlaybackRouter: ((Int, Long, Boolean) -> Unit)? = null
 
     internal fun setCastActive(
@@ -348,7 +270,6 @@ internal class ExoPlayerAdapter(
             castRemotePlayer = remotePlayer
             Logger.w(TAG, "Cast session active on ${deviceName ?: "unknown device"} — local playback suspended")
             coroutineScope.launch {
-                // Kill anything that makes local noise or wastes battery while remote.
                 cancelPrecaching()
                 clearAllPrecacheInternal()
                 currentPlayer?.pause()
@@ -364,7 +285,6 @@ internal class ExoPlayerAdapter(
         }
     }
 
-    /** Remote queue advanced — keep the local playlist pointer and UI in sync. */
     internal fun notifyRemoteTransition(playlistIndex: Int) {
         if (!isCastActive || playlistIndex !in playlist.indices) return
         if (playlistIndex == localCurrentMediaItemIndex) return
@@ -386,14 +306,6 @@ internal class ExoPlayerAdapter(
         listeners.forEach { it.onPlaybackStateChanged(playbackState) }
     }
 
-    // ========== ExoPlayer Instance Factory ==========
-
-    /**
-     * Create a new ExoPlayer instance with its own sleep-fade processor.
-     *
-     * Audio focus is NOT handled per-player: it is managed once at the adapter level
-     * (see the Audio Focus section) so it survives every player swap (#2155).
-     */
     private fun createExoPlayerInstance(): ExoPlayer {
         val sleepFade = SleepFadeAudioProcessor { internalSleepFadeFactor }
 
@@ -413,9 +325,6 @@ internal class ExoPlayerAdapter(
                                 arrayOf(sleepFade),
                                 SilenceSkippingAudioProcessor(
                                     2_000_000,
-                                    // Retain 1 % of each silence (20 ms of a 2 s gap). This was
-                                    // written `(20_000 / 2_000_000).toFloat()`, integer division
-                                    // that always passed 0.
                                     0.01f,
                                     2_000_000,
                                     0,
@@ -436,10 +345,7 @@ internal class ExoPlayerAdapter(
                         .setBufferDurationsMs(
                             DefaultLoadControl.DEFAULT_MIN_BUFFER_MS * 4,
                             DefaultLoadControl.DEFAULT_MAX_BUFFER_MS * 4,
-                            // A track starts on its first bytes...
                             0,
-                            // ...but after a stall it waits for two seconds of audio: resuming on
-                            // the first bytes stuttered in and out on a weak connection.
                             REBUFFER_RESUME_MS,
                         ).build(),
                 ).setWakeMode(C.WAKE_MODE_NETWORK)
@@ -453,8 +359,6 @@ internal class ExoPlayerAdapter(
         return player
     }
 
-    // ========== Playback Control ==========
-
     override fun play() {
         Logger.d(TAG, "play() called (state: $internalState, playWhenReady: $internalPlayWhenReady)")
         castRemotePlayer?.let { remote ->
@@ -467,9 +371,6 @@ internal class ExoPlayerAdapter(
                 InternalState.READY, InternalState.ENDED, InternalState.PAUSED -> {
                     currentPlayer?.let { player ->
                         requestAudioFocusInternal()
-                        // At the end of the queue `play()` only sets playWhenReady, which does
-                        // nothing while the player sits in STATE_ENDED — the press would look
-                        // ignored. Rewind first so the last track replays.
                         if (internalState == InternalState.ENDED) {
                             Logger.d(TAG, "Play: replaying from the start after end of queue")
                             player.seekTo(0L)
@@ -491,8 +392,6 @@ internal class ExoPlayerAdapter(
                 }
 
                 InternalState.ERROR -> {
-                    // After a failed track the player holds nothing playable, so Play used to do
-                    // nothing at all. Load the track again where it stopped, on a fresh URL.
                     val index = localCurrentMediaItemIndex
                     val videoId = playlist.getOrNull(index)?.mediaId
                     if (videoId != null) {
@@ -515,10 +414,7 @@ internal class ExoPlayerAdapter(
         castRemotePlayer?.let { remote ->
             internalPlayWhenReady = false
             remote.pause()
-            // The coroutine below never runs on this path, so the sleep attenuation has to be
-            // cleared here too. Left set, it would outlive the cast session: the processor stays in
-            // the local chain and would keep multiplying every sample by ~0, leaving the app silent
-            // with a full volume slider until the process restarts.
+            // The coroutine below never runs on this path, so the sleep attenuation has to be cleared here too.
             internalSleepFadeFactor = 1f
             return
         }
@@ -543,13 +439,6 @@ internal class ExoPlayerAdapter(
                     }
                 }
             } finally {
-                // Playback has stopped, so a sleep-timer attenuation has served its purpose.
-                // Cleared here rather than by the caller, which cannot tell when this actually
-                // happened — pause() only queues this coroutine.
-                //
-                // In `finally` because the block above can throw or be cancelled. Anything that skips this leaves the
-                // factor near zero, and since the processor multiplies every sample by it, that is
-                // permanent silence with a full volume slider — no code path recovers from it.
                 internalSleepFadeFactor = 1f
             }
         }
@@ -578,7 +467,6 @@ internal class ExoPlayerAdapter(
             cachedPosition = positionMs
             return
         }
-        // Reflected immediately so the progress bar does not snap back while the seek is queued.
         cachedPosition = positionMs
         coroutineScope.launch {
             currentPlayer?.let { player ->
@@ -600,10 +488,8 @@ internal class ExoPlayerAdapter(
         coroutineScope.launch {
             val shouldPlay = internalPlayWhenReady
 
-            // Cancel any ongoing load
             currentLoadJob?.cancel()
 
-            // Load the new track
             localCurrentMediaItemIndex = mediaItemIndex
             loadAndPlayTrackInternal(mediaItemIndex, positionMs, shouldPlay)
         }
@@ -632,15 +518,11 @@ internal class ExoPlayerAdapter(
 
     private fun previous(andPlay: Boolean) {
         coroutineScope.launch {
-            // Standard music player behavior:
-            // - Position > 3s  → seek to start of current track
-            // - Position <= 3s → go to previous track
             val positionThresholdMs = 3000L
             val position = currentPosition
             if (position > positionThresholdMs || !hasPreviousMediaItem()) {
                 Logger.d(TAG, "seekToPrevious: pos=${position}ms — seeking to start")
                 seekTo(0)
-                // Same track, so nothing reloads: a paused player has to be told to play.
                 if (andPlay) play()
             } else {
                 Logger.d(TAG, "seekToPrevious: pos=${position}ms <= ${positionThresholdMs}ms — going to previous track")
@@ -649,9 +531,6 @@ internal class ExoPlayerAdapter(
         }
     }
 
-    // A listener's skip plays the track it lands on. Setting the intent (without calling play())
-    // is enough for a track change: seekTo(index) loads with shouldPlay = internalPlayWhenReady.
-    // Calling play() instead would resume the old track for a moment before the new one loads.
     override fun skipToNext() {
         internalPlayWhenReady = true
         seekToNext()
@@ -669,8 +548,6 @@ internal class ExoPlayerAdapter(
 
     override fun seekToPreviousMediaItem() {
         coroutineScope.launch {
-            // Always advance to the previous track regardless of `cachedPosition` —
-            // skips the 3-second "seek to start" rule used by seekToPrevious().
             if (hasPreviousMediaItem()) {
                 val prevIndex = getPreviousMediaItemIndex()
                 Logger.d(TAG, "seekToPreviousMediaItem: jumping to previous index=$prevIndex")
@@ -681,12 +558,6 @@ internal class ExoPlayerAdapter(
         }
     }
 
-    /**
-     * An empty playlist that gains an item points at it, as ExoPlayer's own does. clearMediaItems()
-     * leaves the index at -1 and nothing else moves it, so prepare() loaded nothing and Add to queue
-     * with nothing loaded (fresh start, or after closing the mini player) never played.
-     * Port of maxrave-dev/core 9a788aca.
-     */
     private fun pointAtFirstItemIfUnset() {
         if (localCurrentMediaItemIndex < 0 && playlist.isNotEmpty()) localCurrentMediaItemIndex = 0
     }
@@ -699,11 +570,8 @@ internal class ExoPlayerAdapter(
         }
     }
 
-    // ========== Media Item Management ==========
-
     override fun setMediaItem(mediaItem: GenericMediaItem) {
         coroutineScope.launch {
-            // Cancel ongoing operations
             currentLoadJob?.cancel()
             cancelPrecaching()
 
@@ -748,13 +616,11 @@ internal class ExoPlayerAdapter(
 
             playlist.add(index, mediaItem)
 
-            // Adjust current index if needed
             if (index <= localCurrentMediaItemIndex) {
                 localCurrentMediaItemIndex++
             }
             pointAtFirstItemIfUnset()
 
-            // Update shuffle order if enabled
             if (internalShuffleModeEnabled) {
                 if (currentIndexBeforeInsert >= 0 && index == currentIndexBeforeInsert + 1) {
                     val currentShufflePos = shuffleIndices.getOrNull(currentIndexBeforeInsert) ?: 0
@@ -781,7 +647,6 @@ internal class ExoPlayerAdapter(
         coroutineScope.launch {
             val track = playlist.removeAt(index)
 
-            // Remove from precache
             precachedPlayers.remove(track.mediaId)?.let { cached ->
                 cleanupPlayerInternal(cached.player)
             }
@@ -828,7 +693,6 @@ internal class ExoPlayerAdapter(
             val item = playlist.removeAt(fromIndex)
             playlist.add(toIndex, item)
 
-            // Update current index
             localCurrentMediaItemIndex =
                 when {
                     localCurrentMediaItemIndex == fromIndex -> {
@@ -902,7 +766,6 @@ internal class ExoPlayerAdapter(
             val replaced = playlist[index]
             playlist[index] = mediaItem
 
-            // The player prepared for the item that was here, not for the one replacing it.
             precachedPlayers.remove(replaced.mediaId)?.let { cached ->
                 cleanupPlayerInternal(cached.player)
             }
@@ -937,17 +800,12 @@ internal class ExoPlayerAdapter(
             shuffledIndex
         }
 
-    // ========== Playback State Properties ==========
-
     override val isPlaying: Boolean
         get() = castRemotePlayer?.isPlaying ?: (internalState == InternalState.PLAYING)
 
     override val currentPosition: Long
         get() {
             castRemotePlayer?.let { return it.currentPosition }
-            // Prefer the live ExoPlayer clock. cachedPosition is only refreshed by the 200 ms
-            // poll and is wrong whenever that job is idle (pause, buffer, just after seek) —
-            // which made Android Auto lyrics lag a second or more behind the music.
             val live = currentPlayer?.currentPosition
             return if (live != null && live >= 0) live else cachedPosition
         }
@@ -984,7 +842,6 @@ internal class ExoPlayerAdapter(
 
     override val playbackState: Int
         get() {
-            // Media3 Player.STATE_* values match PlayerConstants 1:1.
             castRemotePlayer?.let { return it.playbackState }
             return when (internalState) {
                 InternalState.IDLE -> PlayerConstants.STATE_IDLE
@@ -997,13 +854,6 @@ internal class ExoPlayerAdapter(
             }
         }
 
-    // ========== Navigation ==========
-
-    /**
-     * Repeat-one loops a song that ends by itself; it does not trap Next and Previous on it.
-     * Navigation treats it as repeat off, as Media3's own players do. It used to make Next, a
-     * thumbs-down and the explicit-content skip replay the same song.
-     */
     private val navigationRepeatMode: Int
         get() = if (internalRepeatMode == PlayerConstants.REPEAT_MODE_ONE) PlayerConstants.REPEAT_MODE_OFF else internalRepeatMode
 
@@ -1098,8 +948,6 @@ internal class ExoPlayerAdapter(
             }
         }
 
-    // ========== Playback Modes ==========
-
     override var shuffleModeEnabled: Boolean
         get() = internalShuffleModeEnabled
         set(value) {
@@ -1142,13 +990,10 @@ internal class ExoPlayerAdapter(
             internalPlaybackPitch = value.pitch
             val params = PlaybackParameters(value.speed, value.pitch)
             currentPlayer?.playbackParameters = params
-            // Receiver support varies (speed only, no pitch) — best-effort while casting.
             castRemotePlayer?.let { remote ->
                 runCatching { remote.playbackParameters = params }
             }
         }
-
-    // ========== Audio Settings ==========
 
     override var volume: Float
         get() = internalVolume
@@ -1163,13 +1008,6 @@ internal class ExoPlayerAdapter(
     override var sleepFadeFactor: Float
         get() = internalSleepFadeFactor
         set(value) {
-            // Nothing to push: each player's SleepFadeAudioProcessor samples this on every buffer,
-            // so the user's own level on the `volume` line is never touched.
-            //
-            // Deliberately not forwarded to castRemotePlayer, unlike `volume` above. While casting
-            // the local pipeline produces no audio, so the processor never sees data and the fade
-            // would have to be rebuilt as a volume ramp on the receiver. Decided against: the sleep
-            // timer simply stops the cast device without fading.
             internalSleepFadeFactor = value.coerceIn(0f, 1f)
         }
 
@@ -1180,8 +1018,6 @@ internal class ExoPlayerAdapter(
             currentPlayer?.skipSilenceEnabled = value
         }
 
-    // ========== Listener Management ==========
-
     override fun addListener(listener: MediaPlayerListener) {
         listeners.add(listener)
     }
@@ -1190,10 +1026,7 @@ internal class ExoPlayerAdapter(
         listeners.remove(listener)
     }
 
-    // ========== Release Resources ==========
-
     override fun release() {
-        // Cancel all ongoing jobs
         currentLoadJob?.cancel()
         precacheJob?.cancel()
         positionUpdateJob?.cancel()
@@ -1205,11 +1038,6 @@ internal class ExoPlayerAdapter(
         listeners.clear()
     }
 
-    // ========== Internal: State Transition ==========
-
-    /**
-     * State transition helper - mirrors GstreamerPlayerAdapter.transitionToState()
-     */
     private fun propagatePlayerError(error: PlaybackException) {
         val genericError =
             PlayerError(
@@ -1218,8 +1046,6 @@ internal class ExoPlayerAdapter(
                         PlaybackException.ERROR_CODE_TIMEOUT -> PlayerConstants.ERROR_CODE_TIMEOUT
                         else -> error.errorCode
                     },
-                // The cause is lost on the way to the handler (the message is only "Source error"),
-                // so a stream refused under "Stream via Wi-Fi only" is named here.
                 errorCodeName = if (error.isWifiOnlyRefusal()) WIFI_ONLY_ERROR_CODE_NAME else error.errorCodeName,
                 message = error.message,
             )
@@ -1244,7 +1070,6 @@ internal class ExoPlayerAdapter(
 
         Logger.d(TAG, "State: $oldState -> $newState (playWhenReady=$internalPlayWhenReady)")
 
-        // Update cached duration from player
         currentPlayer?.let {
             val dur = it.duration
             if (dur > 0L) {
@@ -1252,7 +1077,6 @@ internal class ExoPlayerAdapter(
             }
         }
 
-        // Notify listeners
         when (newState) {
             InternalState.PAUSED -> {
                 listeners.forEach { it.onPlaybackStateChanged(PlayerConstants.STATE_READY) }
@@ -1291,9 +1115,6 @@ internal class ExoPlayerAdapter(
             InternalState.ERROR -> {
                 listeners.forEach { it.onPlaybackStateChanged(PlayerConstants.STATE_IDLE) }
                 listeners.forEach { it.onIsPlayingChanged(false) }
-                // A generic report for the load failures that have no error of their own. A caller
-                // that already reported the real error passes false: a second report counted as a
-                // second failure, and skipped a good track.
                 if (emitError) {
                     listeners.forEach {
                         it.onPlayerError(
@@ -1309,20 +1130,10 @@ internal class ExoPlayerAdapter(
         }
     }
 
-    // ========== Internal: Load and Play Track ==========
-
-    /**
-     * Load and play track - mirrors GstreamerPlayerAdapter.loadAndPlayTrackInternal()
-     *
-     * Key difference: instead of extracting URL + creating PlayBin,
-     * we create an ExoPlayer, set a MediaItem, and let MediaSourceFactory resolve the URL.
-     */
     private fun loadAndPlayTrackInternal(
         index: Int,
         startPositionMs: Long,
         shouldPlay: Boolean,
-        // False when the same track is loaded again to recover from an error: announcing it as a
-        // new item counted every recovery as another listen.
         announce: Boolean = true,
     ) {
         if (index !in playlist.indices) return
@@ -1344,7 +1155,6 @@ internal class ExoPlayerAdapter(
             return
         }
 
-        // Cancel previous load
         currentLoadJob?.cancel()
 
         currentLoadJob =
@@ -1352,7 +1162,6 @@ internal class ExoPlayerAdapter(
                 try {
                     transitionToState(InternalState.PREPARING)
 
-                    // Notify media item transition
                     if (announce) {
                         listeners.forEach {
                             it.onMediaItemTransition(
@@ -1362,7 +1171,6 @@ internal class ExoPlayerAdapter(
                         }
                     }
 
-                    // Use the precached player if it is still good
                     val cachedPlayerEntry = precachedPlayers.remove(videoId)
                     val player: ExoPlayer
                     if (cachedPlayerEntry != null && cachedPlayerEntry.isUsable()) {
@@ -1379,33 +1187,19 @@ internal class ExoPlayerAdapter(
                         player.prepare()
                     }
 
-                    // === CAREFUL ORDER for ForwardingPlayer integration ===
-
-                    // 1. Remove our active listener from old player
                     cleanupPlayerListenerInternal()
                     stopPositionUpdates()
 
-                    // 2. Save old player reference
                     val oldPlayer = currentPlayer
 
-                    // 3. Set new player as current
                     currentPlayer = player
 
-                    // 4. Setup our listener on new player
                     setupPlayerListenerInternal(player)
 
-                    // 5. Swap ForwardingPlayer delegate (moves MediaSession's listeners from old to new)
                     forwardingPlayer.swapDelegate(player)
 
-                    // 5b. Notify MediaSession about the new media item
-                    // The MediaItem was set before the swap (either during precache or above),
-                    // so MediaSession's listener missed the onMediaItemTransition event.
-                    // play() below will trigger onIsPlayingChanged which causes MediaSession
-                    // to re-query metadata, but this explicit notify is safer and ensures
-                    // the notification updates immediately even if play() is delayed.
                     forwardingPlayer.notifyMediaItemChanged()
 
-                    // 6. NOW release old player (it has no listeners anymore)
                     if (oldPlayer != null && oldPlayer !== player) {
                         try {
                             oldPlayer.stop()
@@ -1415,21 +1209,15 @@ internal class ExoPlayerAdapter(
                         }
                     }
 
-                    // Audio focus is held at the adapter level (see Audio Focus section),
-                    // not per-player, so it survives this swap (#2155).
-
-                    // Apply settings
                     player.volume = internalVolume
                     player.playbackParameters = PlaybackParameters(internalPlaybackSpeed, internalPlaybackPitch)
                     player.skipSilenceEnabled = internalSkipSilence
 
-                    // Seek if needed
                     if (startPositionMs > 0) {
                         player.seekTo(startPositionMs)
                         cachedPosition = startPositionMs
                     }
 
-                    // Auto-play if requested
                     if (shouldPlay) {
                         requestAudioFocusInternal()
                         player.play()
@@ -1441,10 +1229,8 @@ internal class ExoPlayerAdapter(
 
                     forwardingPlayer.suppressPlaybackEnded = false
 
-                    // Start position updates
                     startPositionUpdates()
 
-                    // Trigger precaching
                     triggerPrecachingInternal()
                 } catch (e: Exception) {
                     if (e is CancellationException) throw e
@@ -1455,17 +1241,7 @@ internal class ExoPlayerAdapter(
             }
     }
 
-    // ========== Internal: Player Listener Management ==========
-    // Equivalent to setupPlayerListenersInternal / cleanupBusListenersInternal
-
-    /**
-     * Setup Player.Listener on the given player.
-     * First removes any existing listener from the old player (like cleanupBusListenersInternal),
-     * then creates and attaches a new listener to the given player, so only the active player's
-     * events (STATE_ENDED in particular) are ever handled.
-     */
     private fun setupPlayerListenerInternal(player: ExoPlayer) {
-        // Clean up old listener first
         cleanupPlayerListenerInternal()
 
         val listener =
@@ -1484,23 +1260,18 @@ internal class ExoPlayerAdapter(
                         }
 
                         Player.STATE_READY -> {
-                            // Always clear loading state when ExoPlayer is ready
-                            // (handles both initial load AND mid-playback rebuffer)
                             if (cachedIsLoading && player == currentPlayer) {
                                 cachedIsLoading = false
                                 listeners.forEach { it.onIsLoadingChanged(false) }
                             }
-                            // Duration should be available now
                             val dur = player.duration
                             if (dur > 0) cachedDuration = dur
-                            // Reset retry counter on successful playback
                             retryCount = 0
                             retryVideoId = null
                             if (player == currentPlayer) listeners.forEach { it.onPlaybackConfirmed() }
                         }
 
                         Player.STATE_BUFFERING -> {
-                            // Playback is stalled waiting for data — report buffering
                         }
                     }
                 }
@@ -1529,23 +1300,11 @@ internal class ExoPlayerAdapter(
                         return
                     }
 
-                    // A stream refused under "Stream via Wi-Fi only" is final: retrying would
-                    // invalidate the stored format and reload into the same refusal.
                     if (error.isWifiOnlyRefusal()) {
                         propagatePlayerError(error)
                         return
                     }
 
-                    // Retry for source errors (expired/invalid stream URL)
-                    // ERROR_CODE_PARSING_CONTAINER_MALFORMED (3001) = server returned non-media response (e.g. HTML error page)
-                    // ERROR_CODE_IO_BAD_HTTP_STATUS (2004) = HTTP 403/410 from expired URL
-                    // ERROR_CODE_IO_NETWORK_CONNECTION_FAILED (2001) = connection refused
-                    // ERROR_CODE_IO_FILE_NOT_FOUND (2005) = the resolver served a cache hit as a bare
-                    //   media id and the cached spans were evicted (or cleared) mid-read, so
-                    //   DefaultDataSource fell through to FileDataSource on a scheme-less URI. Media3
-                    //   lists FileNotFoundException as non-retriable, so this layer is the only chance
-                    //   to recover; reloading re-runs the resolver, which now sees an incomplete cache
-                    //   and resolves a real URL.
                     val isRetryableSourceError =
                         error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
                             error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
@@ -1553,8 +1312,6 @@ internal class ExoPlayerAdapter(
 
                     val currentVideoId = playlist.getOrNull(localCurrentMediaItemIndex)?.mediaId
                     if (error.errorCode == PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND) {
-                        // Without this the crash report is a bare FileDataSourceException with
-                        // nothing tying it back to a cache decision made three layers up.
                         Logger.w(
                             TAG,
                             "Cache disappeared mid-read for $currentVideoId — the resolver had served it " +
@@ -1562,7 +1319,6 @@ internal class ExoPlayerAdapter(
                         )
                     }
                     if (isRetryableSourceError && currentVideoId != null) {
-                        // Reset retry count if this is a different track
                         if (retryVideoId != currentVideoId) {
                             retryVideoId = currentVideoId
                             retryCount = 0
@@ -1571,17 +1327,12 @@ internal class ExoPlayerAdapter(
                             retryCount++
                             recoveryCount++
                             Logger.w(TAG, "Retryable source error (attempt $retryCount/$maxRetryCount) for $currentVideoId: ${error.errorCodeName}")
-                            // Snapshot the current position so the retry resumes where playback
-                            // failed instead of restarting the track from the beginning.
                             val resumePositionMs = cachedPosition.coerceAtLeast(0L)
                             coroutineScope.launch {
                                 try {
-                                    // Invalidate cached format so ResolvingDataSource fetches a fresh URL
                                     streamRepository.invalidateFormat(currentVideoId)
                                     streamRepository.invalidateFormat("${com.maxrave.common.MERGING_DATA_TYPE.VIDEO}$currentVideoId")
-                                    // Evict from precache (it may hold a stale player)
                                     precachedPlayers.remove(currentVideoId)?.player?.release()
-                                    // Reload the track at the saved position
                                     loadAndPlayTrackInternal(localCurrentMediaItemIndex, resumePositionMs, shouldPlay = true, announce = false)
                                 } catch (e: Exception) {
                                     if (e is CancellationException) throw e
@@ -1598,11 +1349,6 @@ internal class ExoPlayerAdapter(
                 }
 
                 override fun onIsLoadingChanged(isLoading: Boolean) {
-                    // ExoPlayer reports isLoading=true during normal background buffer refill,
-                    // not just when playback is stalled. Only propagate loading=true when
-                    // playback is actually stalled (STATE_BUFFERING) AND the player intends
-                    // to play. Ignore buffering events while paused to avoid showing
-                    // a loading spinner when the user has explicitly paused.
                     val isPlaybackStalled = isLoading && player.playbackState == Player.STATE_BUFFERING && player.playWhenReady
                     val isCurrentPlayer = player == currentPlayer
                     Logger.d(TAG, "onIsLoadingChanged: isLoading=$isLoading, isPlaybackStalled=$isPlaybackStalled, isCurrentPlayer=$isCurrentPlayer")
@@ -1627,8 +1373,6 @@ internal class ExoPlayerAdapter(
                     reason: Int,
                 ) {
                     if (player != currentPlayer) return
-                    // Fires for both in-app seeks and MediaSession/notification seeks — both land on the
-                    // raw ExoPlayer. seekTo() does no manual notification, so this is the single source.
                     if (reason == Player.DISCONTINUITY_REASON_SEEK || reason == Player.DISCONTINUITY_REASON_SEEK_ADJUSTMENT) {
                         listeners.forEach { it.onSeeked(newPosition.positionMs) }
                     }
@@ -1639,15 +1383,12 @@ internal class ExoPlayerAdapter(
         activePlayerListener = listener
     }
 
-    /** Remove the active player listener from the current player. */
     private fun cleanupPlayerListenerInternal() {
         activePlayerListener?.let { listener ->
             currentPlayer?.removeListener(listener)
         }
         activePlayerListener = null
     }
-
-    // ========== Internal: Player Cleanup ==========
 
     private fun cleanupPlayerInternal(player: ExoPlayer) {
         try {
@@ -1666,13 +1407,7 @@ internal class ExoPlayerAdapter(
         currentPlayer = null
     }
 
-    // ========== Internal: Track End ==========
-
-    /**
-     * Handle track end - mirrors GstreamerPlayerAdapter.handleTrackEndInternal()
-     */
     private fun handleTrackEndInternal() {
-        // While casting, track transitions are driven by the receiver queue.
         if (isCastActive) return
         when (internalRepeatMode) {
             PlayerConstants.REPEAT_MODE_ONE -> {
@@ -1687,9 +1422,6 @@ internal class ExoPlayerAdapter(
         }
     }
 
-    // ========== Internal: Position Updates ==========
-
-    /** Start position updates (periodic background task). */
     private fun startPositionUpdates() {
         stopPositionUpdates()
 
@@ -1715,7 +1447,7 @@ internal class ExoPlayerAdapter(
                         // Ignore query errors - don't log to avoid spam
                     }
 
-                    delay(200) // Update every 200ms
+                    delay(200)
                 }
             }
     }
@@ -1725,14 +1457,6 @@ internal class ExoPlayerAdapter(
         positionUpdateJob = null
     }
 
-    // ========== Internal: Precaching ==========
-
-    /**
-     * Trigger precaching - mirrors GstreamerPlayerAdapter.triggerPrecachingInternal()
-     *
-     * Creates ExoPlayer instances for upcoming tracks. Each player gets a MediaItem
-     * and calls prepare(), which triggers URL resolution and buffering via MediaSourceFactory.
-     */
     private fun triggerPrecachingInternal() {
         if (!precacheEnabled || playlist.isEmpty() || isCastActive) return
 
@@ -1741,14 +1465,9 @@ internal class ExoPlayerAdapter(
         precacheJob =
             coroutineScope.launch {
                 try {
-                    // What plays next, in the order it will play: with shuffle on, index + 1 is
-                    // almost never the next track, so those players were built and thrown away.
                     val upcoming = upcomingIndices(maxPrecacheCount)
                     val indicesToPrecache = upcoming.filter { !precachedPlayers.containsKey(playlist.getOrNull(it)?.mediaId) }
 
-                    // Players precached for tracks that are no longer next (a skip, a queue edit,
-                    // shuffle), that failed, or whose URL has aged out are released here. Each holds
-                    // a decoder and buffers; left alone they piled up for the whole session.
                     val wanted = upcoming.mapNotNull { playlist.getOrNull(it)?.mediaId }.toSet()
                     precachedPlayers.entries.removeIf { (videoId, cached) ->
                         val stale = (videoId !in wanted && videoId != currentMediaItem?.mediaId) || !cached.isUsable()
@@ -1783,7 +1502,6 @@ internal class ExoPlayerAdapter(
             }
     }
 
-    /** The next [count] playlist indices in play order (shuffle and repeat-all included). */
     private fun upcomingIndices(count: Int): List<Int> {
         val current = localCurrentMediaItemIndex
         val shuffled = internalShuffleModeEnabled && shuffleOrder.isNotEmpty()
@@ -1825,9 +1543,6 @@ internal class ExoPlayerAdapter(
         precachedPlayers.values.forEach { cleanupPlayerInternal(it.player) }
         precachedPlayers.clear()
     }
-
-    // ========== Internal: Shuffle Management ==========
-    // Mirrors GstreamerPlayerAdapter shuffle management exactly
 
     private fun createShuffleOrder() {
         if (playlist.isEmpty()) {

@@ -15,7 +15,6 @@ actual fun SystemBarAppearanceEffect(isDark: Boolean) {
         SideEffect {
             val window = context.getActivityOrNull()?.window ?: return@SideEffect
             val controller = WindowCompat.getInsetsController(window, view)
-            // Light theme → dark icons; dark theme → light icons.
             controller.isAppearanceLightStatusBars = !isDark
             controller.isAppearanceLightNavigationBars = !isDark
         }

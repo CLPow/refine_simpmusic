@@ -8,11 +8,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
-/**
- * Scrapes the short-lived web-player bearer token (JWT) from the public web bundle — no login
- * required. The token is cached until a caller reports it expired via [clearToken]. The
- * [HttpClient] is passed in per call so this reuses the same client as the rest of the service.
- */
 internal class AMTokenManager {
     private var cachedToken: String? = null
     private val mutex = Mutex()
@@ -34,9 +29,6 @@ internal class AMTokenManager {
                 ?: error("AM: web bundle URL not found")
         val bundle = client.get(HOME_URL + bundlePath).bodyAsText()
 
-        // Match the full 3-segment JWT; the header field order rotates between rotations so a
-        // prefix match (e.g. "eyJh") would break. The bundle embeds several JWTs, so prefer the
-        // web-play issuer over a blind first match.
         val candidates = JWT_REGEX.findAll(bundle).map { it.value }.toList()
         return candidates.firstOrNull { it.isWebPlayToken() }
             ?: candidates.firstOrNull()
@@ -53,7 +45,6 @@ internal class AMTokenManager {
                 .contains("\"iss\":\"AMPWebPlay\"")
         }.getOrDefault(false)
 
-    // The base64url payload of a JWT is unpadded; the decoder needs the '=' padding restored.
     private fun String.restorePadding(): String {
         val remainder = length % 4
         return if (remainder == 0) this else this + "=".repeat(4 - remainder)

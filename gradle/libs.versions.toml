@@ -1,10 +1,4 @@
 [versions]
-# App version
-#
-# Fork versioning: take upstream's version and add one to the last component for every release
-# made here. Upstream 2.0.0 -> 2.0.1 for the first fork release, 2.0.2 for the next, and so on.
-# When upstream moves (say to 2.1.0) the count restarts against the new base: 2.1.1, 2.1.2, ...
-# version-code must also rise on every release or Android refuses the install as a downgrade.
 version-name = "2.4.2"
 version-code = "141"
 
@@ -41,9 +35,6 @@ aboutlibraries = "15.0.2" # BUG Can not upgrade version
 ktor = "3.5.2"
 brotli = "0.1.2"
 ksoup = "0.6.0"
-# Lyrics romanization. Both are plain Java, so one dependency covers Android AND the JVM desktop
-# build; iOS gets a no-op actual instead. Versions match what Metrolist ships, which is the
-# reference implementation for this feature.
 desugaring = "2.1.5"
 koin-bom = "4.2.2"
 haze = "1.7.2"
@@ -52,10 +43,8 @@ sentry-android = "8.53.0"
 sentry-gradle-android = "6.19.0"
 sentry-jvm = "8.53.0"
 brave-newpipe = "991b158fee"
-# org.json ships with the Android SDK but is absent on JVM desktop; PipePipeExtractor references it.
 org-json = "20231013" # pin version
 pipepipe = "bba8d84453"
-# QuickJS binding for KMP — runs YouTube's player JS to solve sig/n challenges locally.
 quickjs = "1.0.14"
 webkit = "1.17.0"
 kermit = "2.1.0"
@@ -162,21 +151,17 @@ brave-extractor = { module = "com.github.maxrave-dev:BravePipeExtractor", versio
 org-json = { module = "org.json:json", version.ref = "org-json" }
 pipepipe-extractor = { module = "com.github.maxrave-dev:PipePipeExtractor", version.ref = "pipepipe" }
 quickjs = { module = "io.github.dokar3:quickjs-kt", version.ref = "quickjs" }
-#leak-canary = { module = "com.squareup.leakcanary:leakcanary-android", version.ref = "leakcanary" }
 kermit-logging = { module = "co.touchlab:kermit", version.ref = "kermit" }
 glance = { group = "androidx.glance", name = "glance", version.ref = "glance" }
 glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
 glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
 
-
 ffmpeg-kit-audio = { module = "io.github.maxrave-dev:ffmpeg-kit-audio", version.ref = "ffmpeg-kit-audio" }
 
-# KMP
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
 okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
 uri = { module = "com.eygraber:uri-kmp", version.ref = "uri" }
 
-#CMP
 androidx-lifecycle-viewmodelCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle" }
 androidx-lifecycle-runtimeCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "lifecycle" }
 kotlinx-coroutinesSwing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines-android" }
@@ -188,12 +173,10 @@ cmptoast = { module = "network.chaintech:cmptoast", version.ref = "cmptoast" }
 native-tray = { module = "io.github.kdroidfilter:composenativetray", version.ref = "tray" }
 nucleus-notification = { module = "dev.nucleusframework:nucleus.notification-common", version.ref = "nucleus-notification" }
 
-#JVM
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 jna-platform = { module = "net.java.dev.jna:jna-platform", version.ref = "jnaPlatform" }
 nowplaying = { module = "org.simpmusic:nowplayingcenter", version = "0.0.3" }
 
-#Koin
 koin-bom = { module = "io.insert-koin:koin-bom", version.ref = "koin-bom" }
 koin-core = { module = "io.insert-koin:koin-core" }
 koin-jvm = { module = "io.insert-koin:koin-core-jvm" }
@@ -202,7 +185,6 @@ koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel" }
 koin-androidx-compose = { module = "io.insert-koin:koin-androidx-compose" }
 koin-android = { module = "io.insert-koin:koin-android"}
 
-#Sentry
 sentry-android = { module = "io.sentry:sentry-android", version.ref = "sentry-android"}
 sentry-jvm = { module = "io.sentry:sentry", version.ref = "sentry-jvm"}
 
@@ -211,7 +193,6 @@ androidx-webkit = { group = "androidx.webkit", name = "webkit", version.ref = "w
 androidx-paging-common = { group = "androidx.paging", name = "paging-common", version.ref = "paging-common" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 
-#Google Cast
 play-services-cast-framework = { group = "com.google.android.gms", name = "play-services-cast-framework", version.ref = "play-services-cast-framework" }
 androidx-mediarouter = { group = "androidx.mediarouter", name = "mediarouter", version.ref = "mediarouter" }
 
@@ -227,7 +208,6 @@ aboutlibraries-multiplatform = { id = "com.mikepenz.aboutlibraries.plugin", vers
 room = { id = "androidx.room", version.ref = "room" }
 sentry-gradle = { id = "io.sentry.android.gradle", version.ref = "sentry-gradle-android" }
 
-# KMP
 android-lint = { id = "com.android.lint", version.ref = "android" }
 compose-hotReload = { id = "org.jetbrains.compose.hot-reload", version.ref = "composeHotReload" }
 compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
@@ -237,21 +217,6 @@ jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin"
 build-config = { id = "com.codingfeline.buildkonfig", version.ref = "buildkonfig" }
 packagedeps = { id = "io.github.kdroidfilter.compose.linux.packagedeps", version.ref = "packagedeps"}
 
-# JVM
 osdetector = { id = "com.google.osdetector", version.ref = "osdetector" }
 conveyor = { id = "dev.hydraulic.conveyor", version.ref = "conveyor" }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

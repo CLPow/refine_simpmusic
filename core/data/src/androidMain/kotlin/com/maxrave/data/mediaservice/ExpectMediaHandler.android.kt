@@ -1,6 +1,5 @@
 package com.maxrave.data.mediaservice
 
-
 actual fun createMediaServiceHandler(
     dataStoreManager: com.maxrave.domain.manager.DataStoreManager,
     songRepository: com.maxrave.domain.repository.SongRepository,
