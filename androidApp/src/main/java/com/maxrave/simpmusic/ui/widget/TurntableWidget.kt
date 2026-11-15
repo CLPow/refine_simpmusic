@@ -45,6 +45,7 @@ import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
 import com.maxrave.common.Config
 import com.maxrave.domain.data.entities.SongEntity
+import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.repository.SongRepository
 import com.maxrave.domain.utils.toTrack
 import com.maxrave.simpmusic.MainActivity
@@ -53,6 +54,11 @@ import com.maxrave.simpmusic.viewModel.SharedViewModel
 import com.maxrave.simpmusic.viewModel.UIEvent
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import org.koin.core.qualifier.named
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import androidx.glance.LocalContext
 
 class TurntableWidget :
@@ -62,6 +68,7 @@ class TurntableWidget :
 
     private val sharedViewModel by inject<SharedViewModel>()
     private val songRepository by inject<SongRepository>()
+    private val localPlayer by inject<MediaPlayerHandler>(named(Config.LOCAL_PLAYER))
 
     @SuppressLint("RestrictedApi")
     override suspend fun provideGlance(
@@ -82,9 +89,17 @@ class TurntableWidget :
                         else -> Layout.Full
                     }
 
+                val idle = screenData.nowPlayingTitle.isBlank()
+                var lastPlayed by remember { mutableStateOf<SongEntity?>(null) }
+                LaunchedEffect(idle) {
+                    lastPlayed = if (idle) runCatching { songRepository.getRecentSong(1, 0).firstOrNull() }.getOrNull() else null
+                }
+                val fallback = lastPlayed?.takeIf { idle }
+                val thumbnail = if (idle) fallback?.thumbnails else screenData.thumbnailURL
+
                 var artwork by remember { mutableStateOf<Bitmap?>(null) }
-                LaunchedEffect(screenData.thumbnailURL, layout) {
-                    val art = context.loadWidgetArtwork(screenData.thumbnailURL)
+                LaunchedEffect(thumbnail, layout) {
+                    val art = context.loadWidgetArtwork(thumbnail)
                     artwork = if (layout == Layout.Square) art?.let { runCatching { it.toCircle() }.getOrNull() } else art
                 }
 
@@ -101,15 +116,21 @@ class TurntableWidget :
 
                 val state =
                     NowPlayingWidgetState(
-                        title = screenData.nowPlayingTitle,
-                        artist = screenData.artistName,
+                        title = if (idle) fallback?.title.orEmpty() else screenData.nowPlayingTitle,
+                        artist = if (idle) fallback?.artistName?.joinToString(", ").orEmpty() else screenData.artistName,
                         artwork = artwork,
                         isPlaying = controllerState.isPlaying,
                         isLiked = controllerState.isLiked,
                     )
                 val actions =
                     NowPlayingWidgetActions(
-                        onPlayPause = { sharedViewModel.onUIEvent(UIEvent.PlayPause) },
+                        onPlayPause = {
+                            if (localPlayer.nowPlayingState.value.isNotEmpty()) {
+                                sharedViewModel.onUIEvent(UIEvent.PlayPause)
+                            } else {
+                                restoreScope.launch { localPlayer.restoreQueueAndPlay() }
+                            }
+                        },
                         onLike = { sharedViewModel.onUIEvent(UIEvent.ToggleLike) },
                         onPlaySong = { song -> sharedViewModel.loadMediaItemFromTrack(song.toTrack(), Config.SONG_CLICK) },
                     )
@@ -124,6 +145,8 @@ class TurntableWidget :
     }
 
     private enum class Layout { Square, Row, Header, Full }
+
+    private val restoreScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private companion object {
         val SQUARE = DpSize(110.dp, 110.dp)

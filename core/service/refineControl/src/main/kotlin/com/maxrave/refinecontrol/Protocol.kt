@@ -54,6 +54,7 @@ data class PlayerState(
     val volume: Float = 1f,
     val nextAvailable: Boolean = false,
     val prevAvailable: Boolean = false,
+    val playEpoch: Long = 0,
 )
 
 @Serializable
@@ -92,6 +93,12 @@ sealed class Command {
     @Serializable
     @SerialName("seek")
     data class SeekTo(
+        val positionMs: Long,
+    ) : Command()
+
+    @Serializable
+    @SerialName("resume")
+    data class Resume(
         val positionMs: Long,
     ) : Command()
 

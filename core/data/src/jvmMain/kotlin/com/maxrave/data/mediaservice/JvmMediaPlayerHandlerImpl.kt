@@ -948,22 +948,22 @@ class JvmMediaPlayerHandlerImpl(
                         _sleepTimerState.update {
                             it.copy(isDone = false, timeRemaining = minutes)
                         }
-                        var count = minutes
-                        while (count > 0) {
-                            val isFinalMinute = count == 1
-                            delay(
-                                if (isFinalMinute) 60 * 1000L - sleepFadeDurationMs - sleepFadeTailMs else 60 * 1000L,
-                            )
-                            if (isFinalMinute) {
-                                fadeOutForSleep(sleepFadeDurationMs)
-                                delay(sleepFadeTailMs)
-                            }
-                            count--
-                            Logger.i(TAG, "Sleep timer: $count of $minutes minutes remaining")
-                            _sleepTimerState.update {
-                                it.copy(isDone = false, timeRemaining = count)
+                        // Measured against a clock that keeps running while the CPU sleeps, so the timer never drifts.
+                        val deadline = System.currentTimeMillis() + minutes * 60_000L
+                        val fadeAt = deadline - sleepFadeDurationMs - sleepFadeTailMs
+                        var shown = minutes
+                        while (true) {
+                            val left = fadeAt - System.currentTimeMillis()
+                            if (left <= 0L) break
+                            delay(left.coerceAtMost(1_000L))
+                            val minutesLeft = ((deadline - System.currentTimeMillis() + 59_999L) / 60_000L).toInt().coerceAtLeast(1)
+                            if (minutesLeft != shown) {
+                                shown = minutesLeft
+                                _sleepTimerState.update { it.copy(isDone = false, timeRemaining = minutesLeft) }
                             }
                         }
+                        fadeOutForSleep(sleepFadeDurationMs)
+                        delay(sleepFadeTailMs)
                         Logger.i(TAG, "Sleep timer elapsed after $minutes minutes; pausing")
                         player.pause()
                         stoppedPlayback = true

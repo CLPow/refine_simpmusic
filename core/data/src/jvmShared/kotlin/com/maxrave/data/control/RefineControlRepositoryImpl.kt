@@ -78,6 +78,8 @@ private const val POSITION_REFRESH_MS = 5_000L
 
 private const val TAKEOVER_TIMEOUT_MS = 20_000L
 
+private const val PREPARE_TIMEOUT_MS = 12_000L
+
 internal interface SystemVolume {
     fun get(): Float
 
@@ -148,6 +150,33 @@ internal class RefineControlRepositoryImpl(
     private var autoDeviceId: String? = null
 
     private val declined = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    private val clockLock = Any()
+    private var clock = 0L
+    private var playEpoch = 0L
+    private var wasPlaying = false
+
+    @Volatile
+    private var yieldedTo: Pair<String, Long>? = null
+
+    // A hybrid logical clock: whichever device started playing last has the larger epoch on every device.
+    private fun epochFor(isPlaying: Boolean): Long =
+        synchronized(clockLock) {
+            if (isPlaying && !wasPlaying) {
+                clock = maxOf(clock + 1, System.currentTimeMillis())
+                playEpoch = clock
+            }
+            wasPlaying = isPlaying
+            playEpoch
+        }
+
+    private fun observeEpoch(epoch: Long) {
+        synchronized(clockLock) { if (epoch > clock) clock = epoch }
+    }
+
+    internal fun wake() {
+        if (_enabled.value) engine?.checkConnections()
+    }
 
     override val autoAttached: Boolean
         get() = autoDeviceId != null && (_target.value as? ControlTarget.Remote)?.deviceId == autoDeviceId
@@ -287,6 +316,7 @@ internal class RefineControlRepositoryImpl(
                 )
             }
         _devices.value.forEach { if (!it.isPlaying || !it.connected) declined.remove(it.id) }
+        yieldIfAnotherDevicePlays(peerDevices, players)
         val current = _target.value as? ControlTarget.Remote ?: return maybeAutoAttach()
         val device = peerDevices.firstOrNull { it.id == current.deviceId }
         if (autoAttached && device?.connected != true) {
@@ -304,6 +334,30 @@ internal class RefineControlRepositoryImpl(
         val mirrored = players[device.id]?.let { toPlayback(device.id, device.name, device.connected, it) }
         if (mirrored != null) _remote.value = mirrored else _remote.update { it?.copy(connected = device.connected, deviceName = device.name) }
         if (wasConnected == true && !device.connected) _notices.tryEmit(ControlNotice.Disconnected(device.name))
+    }
+
+    private fun yieldIfAnotherDevicePlays(
+        peerDevices: List<com.maxrave.refinecontrol.PeerDevice>,
+        players: Map<String, RemotePlayer>,
+    ) {
+        val selfId = engine?.self?.id ?: return
+        val live = peerDevices.filter { it.connected && it.paired }.mapNotNull { d -> players[d.id]?.state?.let { d to it } }
+        live.forEach { (_, state) -> observeEpoch(state.playEpoch) }
+        if (!local.controlState.value.isPlaying) return
+        val mine = epochFor(true)
+        val winner =
+            live
+                .filter { (_, s) -> s.isPlaying && !s.loading && s.trackId != null && s.playEpoch > 0L }
+                .filter { (d, s) -> s.playEpoch > mine || (s.playEpoch == mine && d.id > selfId) }
+                .maxByOrNull { it.second.playEpoch } ?: return
+        val key = winner.first.id to winner.second.playEpoch
+        if (yieldedTo == key) return
+        yieldedTo = key
+        Logger.i(TAG, "${winner.first.name} started playing later, pausing here")
+        scope.launch(playerContext) {
+            if (local.controlState.value.isPlaying) local.onPlayerEvent(PlayerEvent.PlayPause)
+        }
+        _notices.tryEmit(ControlNotice.NowPlayingOn(winner.first.name))
     }
 
     private fun toPlayback(
@@ -451,6 +505,7 @@ internal class RefineControlRepositoryImpl(
             volume = systemVolume?.get() ?: control.volume,
             nextAvailable = control.isNextAvailable,
             prevAvailable = control.isPreviousAvailable,
+            playEpoch = epochFor(control.isPlaying),
         )
     }
 
@@ -472,6 +527,15 @@ internal class RefineControlRepositoryImpl(
 
                 Command.Pause -> {
                     if (control.isPlaying) local.onPlayerEvent(PlayerEvent.PlayPause)
+                }
+
+                is Command.Resume -> {
+                    if (!local.nowPlayingState.value.isNotEmpty()) return@withContext "nothing_to_play"
+                    val duration = local.getPlayerDuration()
+                    if (duration > 0L) {
+                        local.onPlayerEvent(PlayerEvent.UpdateProgress(command.positionMs.coerceIn(0L, duration) * 100f / duration))
+                    }
+                    if (!local.controlState.value.isPlaying) local.onPlayerEvent(PlayerEvent.PlayPause)
                 }
 
                 Command.Next -> {
@@ -579,6 +643,11 @@ internal class RefineControlRepositoryImpl(
             }
         repeat(3) { if (local.controlState.value.repeatState != wantedRepeat) local.onPlayerEvent(PlayerEvent.Repeat) }
         publishNow.trySend(Unit)
+        if (!play) {
+            withTimeoutOrNull(PREPARE_TIMEOUT_MS) {
+                while (local.getPlayerDuration() <= 0L || local.simpleMediaState.value is SimpleMediaState.Buffering) delay(100)
+            }
+        }
         if (play) {
             val playing =
                 withTimeoutOrNull(TAKEOVER_TIMEOUT_MS) {
@@ -606,16 +675,34 @@ internal class RefineControlRepositoryImpl(
                 _notices.tryEmit(ControlNotice.TransferFailed(name))
                 return@withContext false
             }
-            val error = engine.transfer(deviceId, state, queue.toQueueState(queueRev), play = state.isPlaying)
+            val wasPlaying = state.isPlaying
+            val error = engine.transfer(deviceId, state, queue.toQueueState(queueRev), play = false)
             if (error != null) {
                 Logger.w(TAG, "Transfer to $name failed: $error")
                 _notices.tryEmit(ControlNotice.TransferFailed(name))
                 return@withContext false
             }
-            if (local.controlState.value.isPlaying) local.onPlayerEvent(PlayerEvent.PlayPause)
+            var index = state.index
+            var resumeAt = state.positionMs
+            if (wasPlaying) {
+                val nowIndex = local.currentOrderIndex()
+                resumeAt = local.getProgress().coerceAtLeast(0L)
+                if (local.controlState.value.isPlaying) local.onPlayerEvent(PlayerEvent.PlayPause)
+                val moved = nowIndex != index && nowIndex in queue.listTracks.indices
+                val resumeError =
+                    (if (moved) engine.send(deviceId, Command.PlayIndex(nowIndex)) else null)
+                        ?: engine.send(deviceId, Command.Resume(resumeAt))
+                if (resumeError != null) {
+                    Logger.w(TAG, "Resume on $name failed: $resumeError")
+                    if (!local.controlState.value.isPlaying) local.onPlayerEvent(PlayerEvent.PlayPause)
+                    _notices.tryEmit(ControlNotice.TransferFailed(name))
+                    return@withContext false
+                }
+                if (moved) index = nowIndex
+            }
             controlRemote(deviceId)
             _remote.update {
-                it?.copy(isPlaying = state.isPlaying, positionMs = state.positionMs, positionAt = TimeSource.Monotonic.markNow(), index = state.index)
+                it?.copy(isPlaying = wasPlaying, positionMs = resumeAt, positionAt = TimeSource.Monotonic.markNow(), index = index)
             }
             _notices.tryEmit(ControlNotice.NowPlayingOn(name))
             true

@@ -95,10 +95,13 @@ private const val REPLY_GAP_NANOS = 1_500_000_000L
 private const val CONNECT_TIMEOUT_MS = 4_000
 private const val HANDSHAKE_TIMEOUT_MS = 10_000
 private const val PAIRING_TIMEOUT_MS = 120_000
-private const val IDLE_TIMEOUT_MS = 30_000
-private const val PING_INTERVAL_MS = 10_000L
+private const val IDLE_TIMEOUT_MS = 15_000
+private const val PING_INTERVAL_MS = 5_000L
+private const val PROBE_TIMEOUT_MS = 3_000L
 
 private const val DIAL_YIELD_MS = 2_500L
+
+private const val DUPLICATE_WINDOW_NANOS = 10_000_000_000L
 
 private const val MAX_UNPROVEN_CONNECTIONS = 16
 
@@ -390,6 +393,7 @@ class ControlEngine(
 
     private inner class Conn(
         val socket: Socket,
+        val outgoing: Boolean,
     ) {
         private val input: InputStream = BufferedInputStream(socket.getInputStream(), 16 * 1024)
         private val output = socket.getOutputStream()
@@ -400,6 +404,12 @@ class ControlEngine(
 
         @Volatile
         var peer: DeviceInfo? = null
+
+        @Volatile
+        var registeredAtNanos = 0L
+
+        @Volatile
+        var lastHeardNanos = System.nanoTime()
 
         var onProven: () -> Unit = {}
 
@@ -449,7 +459,7 @@ class ControlEngine(
                 launch {
                     var counted = true
                     val conn =
-                        runCatching { Conn(socket) }.getOrNull() ?: run {
+                        runCatching { Conn(socket, outgoing = false) }.getOrNull() ?: run {
                             unproven.decrementAndGet()
                             return@launch
                         }
@@ -512,7 +522,7 @@ class ControlEngine(
             socket.tcpNoDelay = true
             socket.connect(InetSocketAddress(target.host, target.tcpPort), CONNECT_TIMEOUT_MS)
             socket.soTimeout = HANDSHAKE_TIMEOUT_MS
-            conn = Conn(socket)
+            conn = Conn(socket, outgoing = true)
             handshake(conn)
         } finally {
             socket.closeQuietly()
@@ -573,7 +583,7 @@ class ControlEngine(
         }
         val peer = conn.peer ?: return
         conn.onProven()
-        register(conn, peer)
+        if (!register(conn, peer)) return
         conn.socket.soTimeout = IDLE_TIMEOUT_MS
         coroutineScope {
             val writer =
@@ -595,7 +605,9 @@ class ControlEngine(
             val worker = launch { for (request in requests) answerRequest(conn, peer, request) }
             try {
                 while (true) {
-                    when (val message = conn.readNow(LINE_MAX)) {
+                    val message = conn.readNow(LINE_MAX)
+                    conn.lastHeardNanos = System.nanoTime()
+                    when (message) {
                         is Wire.State -> {
                             _players.update {
                                 it + (peer.id to RemotePlayer(message.player, it[peer.id]?.queue, System.nanoTime()))
@@ -636,6 +648,8 @@ class ControlEngine(
                     }
                 }
             } finally {
+                // A write blocked on a dead peer only returns once the socket is closed.
+                conn.close()
                 writer.cancel()
                 pinger.cancel()
                 worker.cancel()
@@ -686,10 +700,18 @@ class ControlEngine(
     private fun register(
         conn: Conn,
         peer: DeviceInfo,
-    ) {
+    ): Boolean {
         val replaced =
             synchronized(lock) {
-                val old = connections.put(peer.id, conn)
+                val old = connections[peer.id]
+                val now = System.nanoTime()
+                // Both sides keep the same one of two simultaneous connections: the one the lower id dialed.
+                if (old != null && old !== conn && now - old.registeredAtNanos < DUPLICATE_WINDOW_NANOS) {
+                    val dialer = if (conn.outgoing) self.id else peer.id
+                    if (dialer != minOf(self.id, peer.id)) return false
+                }
+                conn.registeredAtNanos = now
+                connections[peer.id] = conn
                 paired[peer.id]?.let { known ->
                     val updated = known.copy(name = peer.name, type = peer.type, lastHost = conn.host ?: known.lastHost)
                     if (updated != known) {
@@ -704,6 +726,23 @@ class ControlEngine(
         localQueue?.let { conn.send(Wire.Queue(it)) }
         localState?.let { conn.send(Wire.State(it)) }
         refreshDevices()
+        return true
+    }
+
+    fun checkConnections() {
+        val running = synchronized(lock) { engineScope } ?: return
+        val open = synchronized(lock) { connections.values.toList() }
+        wake.trySend(Unit)
+        if (open.isEmpty()) return
+        val sentAt = System.nanoTime()
+        open.forEach { it.send(Wire.Ping) }
+        running.launch {
+            delay(PROBE_TIMEOUT_MS)
+            open.filter { it.lastHeardNanos < sentAt }.forEach { silent ->
+                log("No answer from ${silent.peer?.name}, reconnecting")
+                silent.close()
+            }
+        }
     }
 
     private fun closed(conn: Conn) {
