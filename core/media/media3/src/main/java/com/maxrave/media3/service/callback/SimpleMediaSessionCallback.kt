@@ -176,7 +176,7 @@ internal class SimpleMediaSessionCallback(
     ): ListenableFuture<SessionResult> {
         when (customCommand.customAction) {
             MEDIA_CUSTOM_COMMAND.LIKE -> {
-                toggleLike()
+                (session.player as? com.maxrave.media3.service.RemoteSessionPlayer)?.toggleLike() ?: toggleLike()
             }
 
             MEDIA_CUSTOM_COMMAND.REPEAT -> {
@@ -190,10 +190,14 @@ internal class SimpleMediaSessionCallback(
             }
 
             MEDIA_CUSTOM_COMMAND.RADIO -> {
-                toggleRadio()
+                if (session.player !is com.maxrave.media3.service.RemoteSessionPlayer) toggleRadio()
             }
 
             MEDIA_CUSTOM_COMMAND.SHUFFLE -> {
+                (session.player as? com.maxrave.media3.service.RemoteSessionPlayer)?.let {
+                    it.toggleShuffle()
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
                 scope.launch {
                     mediaPlayerHandler.onPlayerEvent(PlayerEvent.Shuffle)
                 }

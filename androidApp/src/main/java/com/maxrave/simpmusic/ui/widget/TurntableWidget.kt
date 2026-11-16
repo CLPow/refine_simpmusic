@@ -69,6 +69,7 @@ class TurntableWidget :
     private val sharedViewModel by inject<SharedViewModel>()
     private val songRepository by inject<SongRepository>()
     private val localPlayer by inject<MediaPlayerHandler>(named(Config.LOCAL_PLAYER))
+    private val player by inject<MediaPlayerHandler>()
 
     @SuppressLint("RestrictedApi")
     override suspend fun provideGlance(
@@ -125,7 +126,7 @@ class TurntableWidget :
                 val actions =
                     NowPlayingWidgetActions(
                         onPlayPause = {
-                            if (localPlayer.nowPlayingState.value.isNotEmpty()) {
+                            if (player.nowPlayingState.value.isNotEmpty()) {
                                 sharedViewModel.onUIEvent(UIEvent.PlayPause)
                             } else {
                                 restoreScope.launch { localPlayer.restoreQueueAndPlay() }

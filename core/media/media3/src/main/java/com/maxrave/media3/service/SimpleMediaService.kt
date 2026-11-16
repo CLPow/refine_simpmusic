@@ -17,6 +17,9 @@ import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.ListenableFuture
 import com.maxrave.common.MEDIA_NOTIFICATION
+import com.maxrave.domain.data.player.GenericCommandButton
+import com.maxrave.domain.repository.ControlTarget
+import com.maxrave.domain.repository.RefineControlRepository
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.logger.Logger
 import com.maxrave.media3.R
@@ -26,6 +29,11 @@ import com.maxrave.media3.utils.sizeLimitedForSession
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import org.koin.core.qualifier.named
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import kotlin.system.exitProcess
 
 @UnstableApi
@@ -40,6 +48,12 @@ internal class SimpleMediaService :
     private val simpleMediaSessionCallback: MediaLibrarySession.Callback by inject<MediaLibrarySession.Callback>()
 
     private val simpleMediaServiceHandler: MediaPlayerHandler by inject<MediaPlayerHandler>(org.koin.core.qualifier.named(com.maxrave.common.Config.LOCAL_PLAYER))
+
+    private val refineControl: RefineControlRepository by inject<RefineControlRepository>()
+    private val serviceScope: CoroutineScope by inject<CoroutineScope>(named(com.maxrave.common.Config.SERVICE_SCOPE))
+    private var remotePlayer: RemoteSessionPlayer? = null
+    private var routeJob: Job? = null
+    private var localButtons: List<GenericCommandButton> = emptyList()
 
     private val binder = MusicBinder()
 
@@ -95,11 +109,10 @@ internal class SimpleMediaService :
         }
 
         simpleMediaServiceHandler.onUpdateNotification = { list ->
-            val commandButtonList = list.map { it.toCommandButton(this) }
-            mediaSession?.setMediaButtonPreferences(
-                commandButtonList,
-            )
+            localButtons = list
+            if (mediaSession?.player !is RemoteSessionPlayer) setButtons(list)
         }
+        routeSessionToControlledDevice()
 
         val sessionToken = SessionToken(this, ComponentName(this, SimpleMediaService::class.java))
         selfControllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
@@ -116,10 +129,55 @@ internal class SimpleMediaService :
         return super.onStartCommand(intent, flags, startId)
     }
 
+    private fun setButtons(list: List<GenericCommandButton>) {
+        mediaSession?.setMediaButtonPreferences(list.map { it.toCommandButton(this) })
+    }
+
+    private fun routeSessionToControlledDevice() {
+        if (!refineControl.isSupported) return
+        val remote = RemoteSessionPlayer(refineControl, serviceScope).also { remotePlayer = it }
+        routeJob =
+            serviceScope.launch {
+                combine(refineControl.target, refineControl.remote) { target, playback ->
+                    if (target is ControlTarget.Remote && playback != null && playback.connected && playback.track != null) {
+                        Triple(playback.liked, playback.shuffle, playback.repeat)
+                    } else {
+                        null
+                    }
+                }.distinctUntilChanged().collect { buttons ->
+                    val session = mediaSession ?: return@collect
+                    if (buttons == null) {
+                        if (session.player !== player) {
+                            Logger.w("Service", "Media session back on this device")
+                            session.player = player
+                            setButtons(localButtons)
+                        }
+                        return@collect
+                    }
+                    if (session.player !== remote) {
+                        Logger.w("Service", "Media session follows the controlled device")
+                        session.player = remote
+                    }
+                    setButtons(
+                        listOf(
+                            GenericCommandButton.Like(buttons.first),
+                            GenericCommandButton.Shuffle(isShuffled = buttons.second),
+                            GenericCommandButton.Repeat(repeatState = buttons.third),
+                        ),
+                    )
+                }
+            }
+    }
+
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = mediaSession
 
     @UnstableApi
     private fun releaseServiceResources() {
+        routeJob?.cancel()
+        routeJob = null
+        mediaSession?.let { if (it.player !== player) it.player = player }
+        remotePlayer?.release()
+        remotePlayer = null
         selfControllerFuture?.let { MediaController.releaseFuture(it) }
         selfControllerFuture = null
         mediaSession?.release()
