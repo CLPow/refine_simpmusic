@@ -32,7 +32,6 @@ internal const val UPDATER_PREFS = "app_updater"
 private const val PREFS = UPDATER_PREFS
 private const val KEY_LAST_CHECK = "last_check"
 internal const val KEY_NOTIFIED_VERSION = "notified_version"
-private const val START_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000L
 
 internal fun fetchLatestAndroidRelease(): AppRelease? {
     val connection = (URL(RELEASES_LATEST_URL).openConnection() as HttpURLConnection)
@@ -64,16 +63,19 @@ private class AndroidAppUpdater(
     override val state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     override val lastCheckMillis: StateFlow<Long?> =
         MutableStateFlow(prefs.getLong(KEY_LAST_CHECK, 0L).takeIf { it > 0 })
+    override val latestVersion = MutableStateFlow<String?>(null)
 
     private val updatesDir get() = File(context.cacheDir, "updates")
 
     private fun apkFile(release: AppRelease) = File(updatesDir, "RefineMusic-${release.version}.apk")
 
     override fun checkOnStart() {
+        if (state.value !is UpdateState.Idle) return
         val last = prefs.getLong(KEY_LAST_CHECK, 0L)
-        val notified = prefs.getString(KEY_NOTIFIED_VERSION, null)
-        val pending = notified != null && UpdateVersion.isNewer(notified, VersionManager.getVersionName())
-        if (!pending && System.currentTimeMillis() - last < START_CHECK_INTERVAL_MS) return
+        if (System.currentTimeMillis() - last < OPEN_CHECK_THROTTLE_MS && latestVersion.value != null) {
+            latestVersion.value?.let { if (UpdateVersion.isNewer(it, VersionManager.getVersionName())) check(manual = false) }
+            return
+        }
         check(manual = false)
     }
 
@@ -95,6 +97,7 @@ private class AndroidAppUpdater(
                 val now = System.currentTimeMillis()
                 prefs.edit().putLong(KEY_LAST_CHECK, now).apply()
                 (lastCheckMillis as MutableStateFlow).value = now
+                latestVersion.value = release?.version ?: VersionManager.getVersionName()
                 val installed = VersionManager.getVersionName()
                 state.value =
                     when {

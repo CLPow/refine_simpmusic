@@ -5,6 +5,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
+const val OPEN_CHECK_THROTTLE_MS = 60_000L
+
 const val RELEASES_LATEST_URL = "https://api.github.com/repos/CLPow/refine_simpmusic/releases/latest"
 
 data class AppRelease(
@@ -46,6 +48,8 @@ interface AppUpdater {
     val state: StateFlow<UpdateState>
 
     val lastCheckMillis: StateFlow<Long?>
+
+    val latestVersion: StateFlow<String?>
 
     fun checkOnStart()
 

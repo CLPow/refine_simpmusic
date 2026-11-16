@@ -17,7 +17,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.maxrave.simpmusic.update.UpdateVersion
+import com.maxrave.simpmusic.utils.VersionManager
+import simpmusic.composeapp.generated.resources.ytm_update_available_summary
+import simpmusic.composeapp.generated.resources.ytm_update_latest_summary
 import com.maxrave.simpmusic.ui.component.ytm.Ytm
 import com.maxrave.simpmusic.ui.theme.YtmRed
 import com.maxrave.simpmusic.ui.theme.typo
@@ -55,7 +61,7 @@ fun rememberAppUpdater(): AppUpdater? = remember { createAppUpdater() }
 @Composable
 fun AppUpdateHost(onToast: (String) -> Unit) {
     val updater = rememberAppUpdater() ?: return
-    LaunchedEffect(updater) { updater.checkOnStart() }
+    LifecycleEventEffect(Lifecycle.Event.ON_START) { updater.checkOnStart() }
     val state by updater.state.collectAsStateWithLifecycle()
 
     LaunchedEffect(state) {
@@ -167,10 +173,11 @@ private fun UpdateDialog(
 fun checkForUpdatesText(updater: AppUpdater): Pair<String, String> {
     val state by updater.state.collectAsStateWithLifecycle()
     val last by updater.lastCheckMillis.collectAsStateWithLifecycle()
-    val summary =
+    val latest by updater.latestVersion.collectAsStateWithLifecycle()
+    val available = latest?.takeIf { UpdateVersion.isNewer(it, VersionManager.getVersionName()) }
+    val checked =
         when {
-            state == UpdateState.Checking -> stringResource(Res.string.ytm_update_checking)
-            last == null -> stringResource(Res.string.ytm_update_never_checked)
+            last == null -> null
             else -> {
                 val minutes = ((System.currentTimeMillis() - last!!) / 60_000).coerceAtLeast(0)
                 when {
@@ -179,6 +186,13 @@ fun checkForUpdatesText(updater: AppUpdater): Pair<String, String> {
                     else -> stringResource(Res.string.ytm_update_checked_days, (minutes / (24 * 60)).toInt())
                 }
             }
+        }
+    val summary =
+        when {
+            state == UpdateState.Checking -> stringResource(Res.string.ytm_update_checking)
+            available != null -> stringResource(Res.string.ytm_update_available_summary, available)
+            latest != null && checked != null -> stringResource(Res.string.ytm_update_latest_summary, checked)
+            else -> checked ?: stringResource(Res.string.ytm_update_never_checked)
         }
     return stringResource(Res.string.ytm_update_check) to summary
 }

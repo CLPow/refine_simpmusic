@@ -1,5 +1,6 @@
 package com.maxrave.simpmusic.update
 
+import com.maxrave.domain.data.player.AppOnScreen
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.utils.VersionManager
@@ -14,6 +15,8 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koin.mp.KoinPlatform.getKoin
@@ -26,7 +29,6 @@ import kotlin.system.exitProcess
 private const val TAG = "DesktopUpdater"
 private const val KEY_LAST_CHECK = "last_check"
 private const val KEY_NOTIFIED_VERSION = "notified_version"
-private const val CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000L
 private const val EXE_NAME = "RefineMusic.exe"
 
 object DesktopUpdateNotice {
@@ -61,26 +63,32 @@ private class DesktopAppUpdater(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val prefs = Preferences.userRoot().node("refine_music/updater")
     private var job: Job? = null
-    private var periodic: Job? = null
+    private var watchScreen: Job? = null
 
     override val state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     override val lastCheckMillis: StateFlow<Long?> =
         MutableStateFlow(prefs.getLong(KEY_LAST_CHECK, 0L).takeIf { it > 0 })
+    override val latestVersion = MutableStateFlow<String?>(null)
 
     private val updatesDir get() = File(System.getProperty("java.io.tmpdir"), "RefineMusicUpdate")
 
     override fun checkOnStart() {
-        if (periodic == null) {
-            periodic =
+        if (watchScreen == null) {
+            watchScreen =
                 scope.launch {
-                    while (true) {
-                        delay(CHECK_INTERVAL_MS)
-                        check(manual = false)
-                    }
+                    AppOnScreen.onScreen.drop(1).filter { it }.collect { checkOnOpen() }
                 }
         }
+        checkOnOpen()
+    }
+
+    private fun checkOnOpen() {
+        if (state.value !is UpdateState.Idle) return
         val last = prefs.getLong(KEY_LAST_CHECK, 0L)
-        if (System.currentTimeMillis() - last < CHECK_INTERVAL_MS) return
+        if (System.currentTimeMillis() - last < OPEN_CHECK_THROTTLE_MS && latestVersion.value != null) {
+            latestVersion.value?.let { if (UpdateVersion.isNewer(it, VersionManager.getVersionName())) check(manual = false) }
+            return
+        }
         check(manual = false)
     }
 
@@ -104,6 +112,7 @@ private class DesktopAppUpdater(
                 val now = System.currentTimeMillis()
                 prefs.putLong(KEY_LAST_CHECK, now)
                 (lastCheckMillis as MutableStateFlow).value = now
+                latestVersion.value = release?.version ?: VersionManager.getVersionName()
                 val newer = release != null && UpdateVersion.isNewer(release.version, VersionManager.getVersionName())
                 state.value =
                     when {
