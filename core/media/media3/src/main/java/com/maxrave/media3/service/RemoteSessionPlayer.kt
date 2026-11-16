@@ -2,6 +2,7 @@ package com.maxrave.media3.service
 
 import android.os.Looper
 import androidx.media3.common.C
+import androidx.media3.common.DeviceInfo
 import androidx.media3.common.Player
 import androidx.media3.common.SimpleBasePlayer
 import androidx.media3.common.util.UnstableApi
@@ -21,6 +22,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 private const val CONFIRM_TIMEOUT_MS = 4_000L
+
+private const val VOLUME_STEPS = 20
 
 private val REPEAT_CYCLE = listOf(RepeatState.None, RepeatState.All, RepeatState.One)
 
@@ -62,6 +65,8 @@ internal class RemoteSessionPlayer(
             .setPlayWhenReady(remote.isPlaying, PLAY_WHEN_READY_CHANGE_REASON_REMOTE)
             .setPlaybackState(if (remote.loading) STATE_BUFFERING else STATE_READY)
             .setIsLoading(remote.loading)
+            .setDeviceInfo(REMOTE_DEVICE)
+            .setDeviceVolume(stepsOf(remote.volume))
             .setShuffleModeEnabled(remote.shuffle)
             .setRepeatMode(
                 when (remote.repeat) {
@@ -120,6 +125,23 @@ internal class RemoteSessionPlayer(
         return if (steps == 0) Futures.immediateVoidFuture() else confirmed { it.repeat == wanted }
     }
 
+    override fun handleSetDeviceVolume(
+        deviceVolume: Int,
+        flags: @C.VolumeFlags Int,
+    ): ListenableFuture<*> = setRemoteVolume(deviceVolume)
+
+    override fun handleIncreaseDeviceVolume(flags: @C.VolumeFlags Int): ListenableFuture<*> = setRemoteVolume(deviceVolume + 1)
+
+    override fun handleDecreaseDeviceVolume(flags: @C.VolumeFlags Int): ListenableFuture<*> = setRemoteVolume(deviceVolume - 1)
+
+    private fun setRemoteVolume(steps: Int): ListenableFuture<*> {
+        val wanted = steps.coerceIn(0, VOLUME_STEPS)
+        control.send(RemoteCommand.SetVolume(wanted / VOLUME_STEPS.toFloat()))
+        return confirmed { stepsOf(it.volume) == wanted }
+    }
+
+    private fun stepsOf(volume: Float): Int = Math.round(volume.coerceIn(0f, 1f) * VOLUME_STEPS)
+
     override fun handleStop(): ListenableFuture<*> {
         control.send(RemoteCommand.Pause)
         return confirmed { !it.isPlaying }
@@ -146,6 +168,13 @@ internal class RemoteSessionPlayer(
     private companion object {
         const val PLAY_WHEN_READY_CHANGE_REASON_REMOTE = Player.PLAY_WHEN_READY_CHANGE_REASON_REMOTE
 
+        val REMOTE_DEVICE: DeviceInfo =
+            DeviceInfo
+                .Builder(DeviceInfo.PLAYBACK_TYPE_REMOTE)
+                .setMinVolume(0)
+                .setMaxVolume(VOLUME_STEPS)
+                .build()
+
         val COMMANDS: Player.Commands =
             Player.Commands
                 .Builder()
@@ -166,6 +195,9 @@ internal class RemoteSessionPlayer(
                     COMMAND_GET_CURRENT_MEDIA_ITEM,
                     COMMAND_GET_TIMELINE,
                     COMMAND_GET_METADATA,
+                    COMMAND_GET_DEVICE_VOLUME,
+                    COMMAND_SET_DEVICE_VOLUME_WITH_FLAGS,
+                    COMMAND_ADJUST_DEVICE_VOLUME_WITH_FLAGS,
                 ).build()
     }
 }
