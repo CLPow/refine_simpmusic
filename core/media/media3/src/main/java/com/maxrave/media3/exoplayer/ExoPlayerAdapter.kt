@@ -206,7 +206,7 @@ internal class ExoPlayerAdapter(
 
     private val precachedPlayers = ConcurrentHashMap<String, PrecachedPlayer>()
     private var precacheEnabled = true
-    private val maxPrecacheCount = 2
+    private val maxPrecacheCount = 1
     private var precacheJob: Job? = null
 
     private var retryCount = 0

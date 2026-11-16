@@ -158,6 +158,7 @@ import simpmusic.composeapp.generated.resources.ytm_start_minimized_summary
 import simpmusic.composeapp.generated.resources.ytm_start_on_boot
 import simpmusic.composeapp.generated.resources.ytm_start_on_boot_summary
 import simpmusic.composeapp.generated.resources.ytm_using_space
+import simpmusic.composeapp.generated.resources.ytm_using_space_of
 import kotlin.time.Clock
 
 enum class SettingsCategory(
@@ -372,7 +373,15 @@ fun SettingScreen(
                     SettingRow(title = stringResource(Res.string.ytm_clear_downloads), summary = stringResource(Res.string.ytm_clear_downloads_summary)) {
                         confirm = ConfirmDialog(clearDownloadsConfirm, clearDownloadsConfirmBody) { viewModel.clearDownloadedCache() }
                     }
-                    SettingRow(title = stringResource(Res.string.ytm_cache), summary = stringResource(Res.string.ytm_using_space, formatBytes(cacheSize)))
+                    SettingRow(
+                        title = stringResource(Res.string.ytm_cache),
+                        summary =
+                            if (getPlatform() == Platform.Android) {
+                                stringResource(Res.string.ytm_using_space_of, formatBytes(cacheSize), formatBytes(SONG_CACHE_BUDGET_BYTES))
+                            } else {
+                                stringResource(Res.string.ytm_using_space, formatBytes(cacheSize))
+                            },
+                    )
                     SettingRow(title = stringResource(Res.string.ytm_clear_cache), summary = stringResource(Res.string.ytm_clear_cache_summary)) {
                         confirm =
                             ConfirmDialog(clearCacheConfirm, clearCacheConfirmBody) {
@@ -622,6 +631,8 @@ private fun SwitchRow(
         )
     }
 }
+
+private const val SONG_CACHE_BUDGET_BYTES = 1024L * 1024 * 1024
 
 private fun formatBytes(bytes: Long?): String {
     val b = bytes ?: return "…"

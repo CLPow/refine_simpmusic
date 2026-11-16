@@ -35,7 +35,8 @@ import androidx.media3.extractor.mp4.FragmentedMp4Extractor
 import androidx.media3.extractor.mp4.Mp4Extractor
 import androidx.media3.extractor.text.DefaultSubtitleParserFactory
 import androidx.media3.session.MediaLibraryService.MediaLibrarySession
-import com.maxrave.common.Config.CANVAS_CACHE
+import com.maxrave.media3.cache.DEFAULT_SONG_CACHE_BYTES
+import com.maxrave.media3.cache.SongCacheEvictor
 import com.maxrave.common.Config.DOWNLOAD_CACHE
 import com.maxrave.common.Config.MAIN_PLAYER
 import com.maxrave.common.Config.PLAYER_CACHE
@@ -99,25 +100,17 @@ private val mediaServiceModule =
             provideDatabaseProvider(androidContext())
         }
         single<SimpleCache>(qualifier = named(PLAYER_CACHE), createdAtStart = true) {
-            provideSimpleCache(
-                context = androidContext(),
-                cacheName = "exoplayer",
-                cacheSize = runBlocking { get<DataStoreManager>().maxSongCacheSize.first() },
-                databaseProvider = get<DatabaseProvider>(),
+            val configuredMb = runBlocking { get<DataStoreManager>().maxSongCacheSize.first() }
+            SimpleCache(
+                androidContext().filesDir.resolve("exoplayer"),
+                SongCacheEvictor(if (configuredMb > 0) configuredMb * 1024L * 1024L else DEFAULT_SONG_CACHE_BYTES),
+                get<DatabaseProvider>(),
             )
         }
         single<SimpleCache>(qualifier = named(DOWNLOAD_CACHE), createdAtStart = true) {
             provideSimpleCache(
                 context = androidContext(),
                 cacheName = "download",
-                cacheSize = -1,
-                databaseProvider = get<DatabaseProvider>(),
-            )
-        }
-        single<SimpleCache>(qualifier = named(CANVAS_CACHE), createdAtStart = true) {
-            provideSimpleCache(
-                context = androidContext(),
-                cacheName = "spotifyCanvas",
                 cacheSize = -1,
                 databaseProvider = get<DatabaseProvider>(),
             )
@@ -200,7 +193,6 @@ private val mediaServiceModule =
             CacheRepositoryImpl(
                 playerCache = get(named(PLAYER_CACHE)),
                 downloadCache = get(named(DOWNLOAD_CACHE)),
-                canvasCache = get(named(CANVAS_CACHE)),
             )
         }
     }

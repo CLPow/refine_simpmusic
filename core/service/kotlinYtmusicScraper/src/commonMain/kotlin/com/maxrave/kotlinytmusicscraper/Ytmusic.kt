@@ -28,6 +28,8 @@ import com.maxrave.kotlinytmusicscraper.utils.parseCookieString
 import com.maxrave.kotlinytmusicscraper.utils.sha1
 import com.maxrave.ktorext.encoding.brotli
 import com.maxrave.ktorext.getEngine
+import com.maxrave.ktorext.resetApiConnections
+import com.maxrave.ktorext.tuneApiConnections
 import com.maxrave.logger.Logger
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.ProxyConfig
@@ -107,6 +109,8 @@ class Ytmusic {
 
     val accountGuard = AccountGuard()
 
+    fun resetConnections() = resetApiConnections()
+
     var cookiePath: Path? = null
 
     var locale =
@@ -172,10 +176,9 @@ class Ytmusic {
                 deflate(0.8F)
             }
 
-            if (proxy != null) {
-                engine {
-                    proxy = this@Ytmusic.proxy
-                }
+            engine {
+                tuneApiConnections()
+                if (this@Ytmusic.proxy != null) proxy = this@Ytmusic.proxy
             }
 
             defaultRequest {

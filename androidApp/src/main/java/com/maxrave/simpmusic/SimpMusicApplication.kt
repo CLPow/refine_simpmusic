@@ -3,6 +3,10 @@ package com.maxrave.simpmusic
 import android.annotation.SuppressLint
 import android.app.Application
 import android.database.CursorWindow
+import android.net.ConnectivityManager
+import android.net.Network
+import com.maxrave.domain.repository.AccountRepository
+import org.koin.core.component.get
 import android.util.Log
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.work.Configuration
@@ -68,6 +72,18 @@ class SimpMusicApplication :
 
         applicationScope.launch {
             runCatching { java.io.File(filesDir, "kuromoji-ipadic").deleteRecursively() }
+            runCatching { java.io.File(filesDir, "spotifyCanvas").deleteRecursively() }
+        }
+
+        runCatching {
+            val accounts = get<AccountRepository>()
+            (getSystemService(CONNECTIVITY_SERVICE) as? ConnectivityManager)?.registerDefaultNetworkCallback(
+                object : ConnectivityManager.NetworkCallback() {
+                    override fun onAvailable(network: Network) = accounts.resetConnections()
+
+                    override fun onLost(network: Network) = accounts.resetConnections()
+                },
+            )
         }
 
         CaocConfig.Builder
@@ -125,7 +141,7 @@ class SimpMusicApplication :
                     DiskCache
                         .Builder()
                         .directory(FileSystem.SYSTEM_TEMPORARY_DIRECTORY / "image_cache")
-                        .maxSizeBytes(512L * 1024 * 1024)
+                        .maxSizeBytes(250L * 1024 * 1024)
                         .build(),
                 ).crossfade(true)
                 .build()

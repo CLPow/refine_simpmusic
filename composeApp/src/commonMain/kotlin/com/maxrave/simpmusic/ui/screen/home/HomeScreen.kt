@@ -135,7 +135,7 @@ fun HomeScreen(
 
     LifecycleStartEffect(Unit) {
         viewModel.refreshIfStale()
-        onStopOrDispose { }
+        onStopOrDispose { viewModel.onAppBackgrounded() }
     }
     LaunchedEffect(loading) { if (!loading) refreshing = false }
 
@@ -300,7 +300,7 @@ fun HomeScreen(
                                     }
                                     YtmOutlinedPill(stringResource(Res.string.retry)) { viewModel.getHomeItemList(params) }
                                 }
-                            } else if (failed && !loading) {
+                            } else if (failed) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                                     Text(
                                         stringResource(Res.string.ytm_home_failed),

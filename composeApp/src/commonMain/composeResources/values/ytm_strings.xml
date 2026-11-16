@@ -47,6 +47,7 @@
     <string name="ytm_autoplay_summary">Add similar content for endless listening</string>
     <string name="ytm_download_audio_quality">Download audio quality</string>
     <string name="ytm_using_space">Using %1$s</string>
+    <string name="ytm_using_space_of">Using %1$s of %2$s</string>
     <string name="ytm_clear_downloads">Clear downloads</string>
     <string name="ytm_clear_downloads_summary">Remove every downloaded song from this device</string>
     <string name="ytm_clear_downloads_confirm">Clear downloads?</string>

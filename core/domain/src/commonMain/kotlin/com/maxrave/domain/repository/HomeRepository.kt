@@ -15,6 +15,10 @@ interface HomeRepository {
         songString: String,
     ): Flow<Resource<Triple<String?, List<HomeItem>, String?>>>
 
+    val lastHomeWasAnonymous: Boolean
+
+    suspend fun getCachedHome(): Pair<List<HomeItem>, String?>?
+
     fun getHomeDataContinue(
         continueParam: String,
         viewString: String,

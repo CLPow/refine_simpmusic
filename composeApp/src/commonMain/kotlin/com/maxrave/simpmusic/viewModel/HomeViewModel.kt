@@ -14,7 +14,10 @@ import com.maxrave.domain.utils.Resource
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -78,18 +81,36 @@ class HomeViewModel(
     val chart: StateFlow<Chart?> = _chart
     var regionCodeChart: MutableStateFlow<String?> = MutableStateFlow(null)
 
-    private val HOME_ATTEMPT_TIMEOUT_MS = 20_000L
+    private val HOME_ATTEMPT_TIMEOUT_MS = 15_000L
 
-    private val HOME_MAX_ATTEMPTS = 6
+    private val HOME_MAX_ATTEMPTS = 4
+
+    private var servedAnonymously = false
+
+    private val speedDialLookups = Semaphore(2)
 
     private var lastLoadedAtMs = 0L
 
+    private var backgroundedAtMs = 0L
+
+    fun onAppBackgrounded() {
+        backgroundedAtMs = currentTimeMs()
+    }
+
     fun refreshIfStale() {
+        if (backgroundedAtMs != 0L && currentTimeMs() - backgroundedAtMs > RESET_CONNECTIONS_AFTER_MS) {
+            accountRepository.resetConnections()
+        }
+        backgroundedAtMs = 0L
         if (loading.value) return
-        if (_recommendationsFailed.value || (lastLoadedAtMs != 0L && currentTimeMs() - lastLoadedAtMs > STALE_AFTER_MS)) {
+        if (_recommendationsFailed.value || servedAnonymously ||
+            (lastLoadedAtMs != 0L && currentTimeMs() - lastLoadedAtMs > STALE_AFTER_MS)
+        ) {
             getHomeItemList(params.value)
         }
     }
+
+    private val RESET_CONNECTIONS_AFTER_MS = 5 * 60_000L
 
     private fun currentTimeMs(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 
@@ -124,6 +145,13 @@ class HomeViewModel(
             }
         }
         homeJob = Job()
+        viewModelScope.launch {
+            val cached = homeRepository.getCachedHome() ?: return@launch
+            if (_homeItemList.value.isEmpty() && params.value == null) {
+                _homeItemList.value = cached.first
+                if (_homeBackground.value == null) _homeBackground.value = cached.second
+            }
+        }
         viewModelScope.launch {
             regionCodeChart.value = dataStoreManager.chartKey.first()
             var lastCookie: String? = null
@@ -194,16 +222,19 @@ class HomeViewModel(
         }
         shownParams = params
         shownAny = true
-        homeJob =
-            viewModelScope.launch {
+        reloadAfterCooldownJob?.cancel()
+        lateinit var thisJob: Job
+        thisJob =
+            viewModelScope.launch(start = CoroutineStart.LAZY) {
                 regionCode = dataStoreManager.location.first()
-                // A reload of the same feed keeps it on screen while YouTube answers, so the page is never blank.
                 val previous = _homeItemList.value
 
-                // YouTube Music never parks Home on an error at launch: it keeps the spinner and asks again.
                 var home: Resource<Triple<String?, List<HomeItem>, String?>>? = null
                 for (attempt in 0 until HOME_MAX_ATTEMPTS) {
-                    if (attempt > 0) delay(minOf(1_000L shl (attempt - 1), 15_000L))
+                    if (attempt > 0) {
+                        if (_homeItemList.value.isEmpty()) _recommendationsFailed.value = true
+                        delay(minOf(2_000L shl (attempt - 1), 8_000L))
+                    }
                     home =
                         try {
                             withTimeoutOrNull(HOME_ATTEMPT_TIMEOUT_MS) {
@@ -220,7 +251,7 @@ class HomeViewModel(
                             Resource.Error<Triple<String?, List<HomeItem>, String?>>(e.message ?: "Home unavailable")
                         }
                     if (home is Resource.Success && !home.data?.second.isNullOrEmpty()) break
-                    if (home is Resource.Error && isOfflineError(home.message) && attempt >= 1) {
+                    if (home is Resource.Error && isOfflineError(home.message)) {
                         _offline.value = true
                         break
                     }
@@ -228,12 +259,15 @@ class HomeViewModel(
                         "HomeViewModel",
                         "Home attempt ${attempt + 1}/$HOME_MAX_ATTEMPTS failed: " +
                             when (home) {
-                                null -> "timed out"
+                                null -> "timed out after ${HOME_ATTEMPT_TIMEOUT_MS / 1000}s"
                                 is Resource.Error -> home.message
                                 else -> "no shelves"
-                            },
+                            } +
+                            if (accountRepository.isAccountCoolingDown()) " (account cooling down)" else "",
                     )
+                    if (home == null && attempt == 0) accountRepository.resetConnections()
                 }
+                if (homeJob !== thisJob) return@launch
                 if (home is Resource.Success && !home.data?.second.isNullOrEmpty()) {
                     _recommendationsFailed.value = false
                     _offline.value = false
@@ -241,8 +275,13 @@ class HomeViewModel(
                     _homeItemList.value = home.data?.second ?: listOf()
                     _homeBackground.value = home.data?.third
                     lastLoadedAtMs = currentTimeMs()
-                    launch { showSongVersionsOnSpeedDial() }
-                    launch { accountRepository.verifySignIn() }
+                    servedAnonymously = homeRepository.lastHomeWasAnonymous
+                    if (servedAnonymously) {
+                        scheduleSignedInReload()
+                    } else {
+                        launch { showSongVersionsOnSpeedDial() }
+                        launch { accountRepository.verifySignIn() }
+                    }
                 } else {
                     _recommendationsFailed.value = true
                     _continuation.value = null
@@ -254,18 +293,31 @@ class HomeViewModel(
                     } else {
                         ListState.IDLE
                     }
-                runCatching {
-                    val cookie = dataStoreManager.cookie.first()
-                    if (cookie.isNotEmpty()) {
-                        _accountInfo.emit(
-                            Pair(
-                                dataStoreManager.getString("AccountName").first(),
-                                dataStoreManager.getString("AccountThumbUrl").first(),
-                            ),
-                        )
-                    }
-                }
                 loading.value = false
+                val cookie = dataStoreManager.cookie.first()
+                if (cookie.isNotEmpty()) {
+                    _accountInfo.emit(
+                        Pair(
+                            dataStoreManager.getString("AccountName").first(),
+                            dataStoreManager.getString("AccountThumbUrl").first(),
+                        ),
+                    )
+                }
+            }
+        homeJob = thisJob
+        thisJob.start()
+    }
+
+    private var reloadAfterCooldownJob: Job? = null
+
+    private fun scheduleSignedInReload() {
+        reloadAfterCooldownJob?.cancel()
+        reloadAfterCooldownJob =
+            viewModelScope.launch {
+                val wait = (accountRepository.accountCooldownUntil.value - currentTimeMs()).coerceAtLeast(0L)
+                delay(wait + 1_000L)
+                Logger.i(tag, "Account cooldown over, reloading Home signed in")
+                getHomeItemList(params.value)
             }
     }
 
@@ -348,7 +400,14 @@ class HomeViewModel(
         if (videos.isEmpty()) return
         val songs =
             videos
-                .map { tile -> viewModelScope.async { tile.videoId to songVersionLookup.findSongVersion(tile.toTrack()) } }
+                .map { tile ->
+                    viewModelScope.async {
+                        tile.videoId to
+                            speedDialLookups.withPermit {
+                                if (accountRepository.isAccountCoolingDown()) null else songVersionLookup.findSongVersion(tile.toTrack())
+                            }
+                    }
+                }
                 .awaitAll()
                 .mapNotNull { (videoId, song) -> song?.let { videoId to it } }
                 .toMap()

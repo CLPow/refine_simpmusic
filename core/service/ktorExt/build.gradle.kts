@@ -51,6 +51,7 @@ kotlin {
         androidMain {
             dependencies {
                 implementation(libs.ktor.client.okhttp)
+                implementation(libs.okhttp3.okhttp)
                 implementation(libs.brotli.dec)
             }
         }
@@ -58,6 +59,7 @@ kotlin {
         jvmMain {
             dependencies {
                 implementation(libs.ktor.client.okhttp)
+                implementation(libs.okhttp3.okhttp)
                 implementation(libs.brotli.dec)
             }
         }

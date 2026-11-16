@@ -14,6 +14,12 @@ interface AccountRepository {
 
     suspend fun verifySignIn(): Boolean?
 
+    val accountCooldownUntil: StateFlow<Long>
+
+    fun isAccountCoolingDown(): Boolean
+
+    fun resetConnections()
+
     fun insertGoogleAccount(googleAccountEntity: GoogleAccountEntity): Flow<Long>
 
     fun getGoogleAccounts(): Flow<List<GoogleAccountEntity>?>

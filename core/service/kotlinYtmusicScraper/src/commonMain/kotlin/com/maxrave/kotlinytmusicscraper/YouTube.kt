@@ -81,6 +81,7 @@ import com.mohamedrejeb.ksoup.html.parser.KsoupHtmlHandler
 import com.mohamedrejeb.ksoup.html.parser.KsoupHtmlParser
 import io.ktor.client.call.body
 import io.ktor.client.statement.bodyAsText
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.CoroutineScope
@@ -157,9 +158,16 @@ class YouTube {
             signInExpired.value = false
             return true
         }
-        val response = runCatching { ytMusic.accountMenu(null, WEB_REMIX) }.getOrNull() ?: return null
-        if (response.status.value !in 200..299) return null
-        val body = runCatching { response.bodyAsText() }.getOrNull() ?: return null
+        val body =
+            try {
+                val response = ytMusic.accountMenu(null, WEB_REMIX)
+                if (response.status.value !in 200..299) return null
+                response.bodyAsText()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return null
+            }
         val signedIn = body.contains("activeAccountHeaderRenderer")
         signInExpired.value = !signedIn
         if (!signedIn) Logger.w(TAG, "Saved sign-in is no longer accepted by YouTube")
@@ -235,6 +243,8 @@ class YouTube {
         runCatching { ytMusic.search(WEB_REMIX, query).body<SearchResponse>() }
 
     val accountGuard get() = ytMusic.accountGuard
+
+    fun resetConnections() = ytMusic.resetConnections()
 
     suspend fun searchContinuation(continuation: String): Result<SearchResult> =
         runCatching {
@@ -673,9 +683,17 @@ class YouTube {
         continuation: String? = null,
         country: String? = null,
         setLogin: Boolean = true,
-    ) = runCatching {
-        ytMusic.browse(WEB_REMIX, browseId, params, continuation, country, setLogin).body<BrowseResponse>()
-    }
+        withoutLogin: Boolean = false,
+    ): Result<BrowseResponse> =
+        try {
+            Result.success(
+                ytMusic.browse(WEB_REMIX, browseId, params, continuation, country, setLogin, withoutLogin).body<BrowseResponse>(),
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
 
     suspend fun getSkipSegments(videoId: String): Result<List<SkipSegments>> =
         runCatching {

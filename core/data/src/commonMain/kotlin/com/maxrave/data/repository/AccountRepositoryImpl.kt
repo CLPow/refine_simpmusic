@@ -14,10 +14,17 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 private const val TAG = "AccountRepositoryImpl"
 
+private const val VERIFY_INTERVAL_MS = 6 * 60 * 60_000L
+
+@OptIn(ExperimentalTime::class)
 internal class AccountRepositoryImpl(
     private val localDataSource: LocalDataSource,
     private val youTube: YouTube,
@@ -26,7 +33,32 @@ internal class AccountRepositoryImpl(
 
     override val signInExpired: StateFlow<Boolean> = youTube.signInExpired.asStateFlow()
 
-    override suspend fun verifySignIn(): Boolean? = withContext(Dispatchers.IO) { youTube.verifySignIn() }
+    private val verifyLock = Mutex()
+    private var lastVerifiedAtMs = 0L
+    private var lastVerifiedCookie: String? = null
+
+    override suspend fun verifySignIn(): Boolean? =
+        withContext(Dispatchers.IO) {
+            verifyLock.withLock {
+                val cookie = youTube.cookie
+                val now = Clock.System.now().toEpochMilliseconds()
+                if (cookie == lastVerifiedCookie && now - lastVerifiedAtMs < VERIFY_INTERVAL_MS) {
+                    return@withContext !youTube.signInExpired.value
+                }
+                val result = youTube.verifySignIn()
+                if (result != null) {
+                    lastVerifiedCookie = cookie
+                    lastVerifiedAtMs = now
+                }
+                result
+            }
+        }
+
+    override val accountCooldownUntil: StateFlow<Long> = youTube.accountGuard.cooldownUntil
+
+    override fun isAccountCoolingDown(): Boolean = youTube.accountGuard.isCoolingDown
+
+    override fun resetConnections() = youTube.resetConnections()
 
     override fun getAccountInfo(cookie: String): Flow<List<AccountInfo>> =
         flow {

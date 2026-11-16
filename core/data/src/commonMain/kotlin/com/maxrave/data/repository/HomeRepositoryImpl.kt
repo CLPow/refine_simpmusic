@@ -25,6 +25,11 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import com.maxrave.data.db.datasource.LocalDataSource
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.withContext
+import com.maxrave.data.io.fileDir
+import com.maxrave.data.io.fileSystem
+import okio.Path.Companion.toPath
+import kotlin.concurrent.Volatile
 
 @Serializable
 private data class MoodArtwork(
@@ -36,6 +41,12 @@ private data class MoodArtwork(
 }
 
 private const val MOOD_ARTWORK_TTL_MILLIS = 7L * 24 * 60 * 60 * 1000
+
+@Serializable
+private data class CachedHome(
+    val items: List<HomeItem>,
+    val background: String? = null,
+)
 
 @OptIn(ExperimentalTime::class)
 internal class HomeRepositoryImpl(
@@ -56,19 +67,22 @@ internal class HomeRepositoryImpl(
         songString: String,
     ): Flow<Resource<Triple<String?, List<HomeItem>, String?>>> =
         flow {
+            val anonymous = youTube.accountGuard.isCoolingDown
+            if (anonymous) Logger.w("Repository", "Account cooling down ${youTube.accountGuard.cooldownRemainingMs / 1000}s, loading Home signed out")
             val response =
                 try {
-                    if (youTube.cookie.isNullOrEmpty() && dataStoreManager.cookie.first().isNotEmpty()) {
+                    if (!anonymous && youTube.cookie.isNullOrEmpty() && dataStoreManager.cookie.first().isNotEmpty()) {
                         withTimeoutOrNull(3_000) {
                             while (youTube.cookie.isNullOrEmpty()) delay(50)
                         }
                     }
-                    youTube.customQuery(browseId = "FEmusic_home", params = params)
+                    youTube.customQuery(browseId = "FEmusic_home", params = params, withoutLogin = anonymous)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
                     Result.failure(e)
                 }
+            lastHomeWasAnonymous = anonymous
             val home =
                 response.mapCatching { result ->
                         val list: ArrayList<HomeItem> = arrayListOf()
@@ -137,7 +151,7 @@ internal class HomeRepositoryImpl(
                                     ?.thumbnails
                                     ?.firstOrNull()?.url
                                     ?.replace("s88", "s352") ?: ""
-                            if (accountName != "" && accountThumbUrl != "") {
+                            if (!anonymous && accountName != "" && accountThumbUrl != "") {
                                 dataStoreManager.putString("AccountName", accountName)
                                 dataStoreManager.putString("AccountThumbUrl", accountThumbUrl)
                                 hasAccountShelf = params == null
@@ -176,7 +190,10 @@ internal class HomeRepositoryImpl(
                         Triple(continueParam, list.toList(), background)
                     }
             home
-                .onSuccess { emit(Resource.Success(it)) }
+                .onSuccess {
+                    if (params == null && !anonymous && it.second.isNotEmpty()) saveCachedHome(it.second, it.third)
+                    emit(Resource.Success(it))
+                }
                 .onFailure { error ->
                     Logger.e("Repository", "Home failed: ${error.message}")
                     emit(Resource.Error<Triple<String?, List<HomeItem>, String?>>(error.message ?: "Home unavailable"))
@@ -212,6 +229,43 @@ internal class HomeRepositoryImpl(
                 emit(Resource.Error<Pair<String?, List<HomeItem>>>(it.message.toString()))
             }
     }.flowOn(Dispatchers.IO)
+
+    @Volatile
+    override var lastHomeWasAnonymous: Boolean = false
+        private set
+
+    private val homeCachePath get() = "${fileDir()}/home_cache.json".toPath()
+
+    override suspend fun getCachedHome(): Pair<List<HomeItem>, String?>? =
+        withContext(Dispatchers.IO) {
+            try {
+                val fs = fileSystem()
+                if (!fs.exists(homeCachePath)) return@withContext null
+                val cached = moodJson.decodeFromString<CachedHome>(fs.read(homeCachePath) { readUtf8() })
+                cached.items.takeIf { it.isNotEmpty() }?.let { it to cached.background }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Logger.w("Repository", "Home cache unreadable: ${e.message}")
+                null
+            }
+        }
+
+    private suspend fun saveCachedHome(
+        items: List<HomeItem>,
+        background: String?,
+    ) {
+        try {
+            val fs = fileSystem()
+            val tmp = "${fileDir()}/home_cache.json.tmp".toPath()
+            fs.write(tmp) { writeUtf8(moodJson.encodeToString(CachedHome(items, background))) }
+            fs.atomicMove(tmp, homeCachePath)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Logger.w("Repository", "Home cache not saved: ${e.message}")
+        }
+    }
 
     private suspend fun readMoodArtworkCache(): Map<String, MoodArtwork> =
         dataStoreManager.moodArtworkCache
