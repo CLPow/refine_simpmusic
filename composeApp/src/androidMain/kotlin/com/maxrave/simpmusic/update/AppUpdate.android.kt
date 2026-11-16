@@ -28,9 +28,27 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 private const val TAG = "AppUpdater"
-private const val PREFS = "app_updater"
+internal const val UPDATER_PREFS = "app_updater"
+private const val PREFS = UPDATER_PREFS
 private const val KEY_LAST_CHECK = "last_check"
+internal const val KEY_NOTIFIED_VERSION = "notified_version"
 private const val START_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000L
+
+internal fun fetchLatestAndroidRelease(): AppRelease? {
+    val connection = (URL(RELEASES_LATEST_URL).openConnection() as HttpURLConnection)
+    try {
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 15_000
+        connection.setRequestProperty("Accept", "application/vnd.github+json")
+        connection.setRequestProperty("User-Agent", "RefineMusic")
+        if (connection.responseCode == HttpURLConnection.HTTP_NOT_FOUND) return null
+        if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
+        val body = connection.inputStream.bufferedReader().use { it.readText() }
+        return parseLatestRelease(body, Build.SUPPORTED_ABIS.firstOrNull())
+    } finally {
+        connection.disconnect()
+    }
+}
 
 private val instance: AndroidAppUpdater by lazy { AndroidAppUpdater(getKoin().get<Context>().applicationContext) }
 
@@ -53,7 +71,9 @@ private class AndroidAppUpdater(
 
     override fun checkOnStart() {
         val last = prefs.getLong(KEY_LAST_CHECK, 0L)
-        if (System.currentTimeMillis() - last < START_CHECK_INTERVAL_MS) return
+        val notified = prefs.getString(KEY_NOTIFIED_VERSION, null)
+        val pending = notified != null && UpdateVersion.isNewer(notified, VersionManager.getVersionName())
+        if (!pending && System.currentTimeMillis() - last < START_CHECK_INTERVAL_MS) return
         check(manual = false)
     }
 
@@ -86,21 +106,7 @@ private class AndroidAppUpdater(
             }
     }
 
-    private fun fetchLatest(): AppRelease? {
-        val connection = (URL(RELEASES_LATEST_URL).openConnection() as HttpURLConnection)
-        try {
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 15_000
-            connection.setRequestProperty("Accept", "application/vnd.github+json")
-            connection.setRequestProperty("User-Agent", "RefineMusic")
-            if (connection.responseCode == HttpURLConnection.HTTP_NOT_FOUND) return null
-            if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
-            val body = connection.inputStream.bufferedReader().use { it.readText() }
-            return parseLatestRelease(body, Build.SUPPORTED_ABIS.firstOrNull())
-        } finally {
-            connection.disconnect()
-        }
-    }
+    private fun fetchLatest(): AppRelease? = fetchLatestAndroidRelease()
 
     override fun update() {
         val release =
@@ -111,6 +117,7 @@ private class AndroidAppUpdater(
                 else -> null
             } ?: return
         if (job?.isActive == true) return
+        UpdateCheckWorker.clear(context)
         if (!canInstall()) {
             state.value = UpdateState.NeedsInstallPermission(release)
             openInstallPermission()
@@ -119,8 +126,8 @@ private class AndroidAppUpdater(
         job =
             scope.launch {
                 val apk = apkFile(release)
-                if (!apk.exists() || (release.apkSize > 0 && apk.length() != release.apkSize)) {
-                    state.value = UpdateState.Downloading(release, if (release.apkSize > 0) 0f else -1f)
+                if (!apk.exists() || (release.assetSize > 0 && apk.length() != release.assetSize)) {
+                    state.value = UpdateState.Downloading(release, if (release.assetSize > 0) 0f else -1f)
                     val ok =
                         try {
                             withContext(Dispatchers.IO) { download(release, apk) }
@@ -156,13 +163,13 @@ private class AndroidAppUpdater(
         clearDownloads()
         updatesDir.mkdirs()
         val part = File(updatesDir, target.name + ".part")
-        val connection = (URL(release.apkUrl).openConnection() as HttpURLConnection)
+        val connection = (URL(release.assetUrl).openConnection() as HttpURLConnection)
         try {
             connection.connectTimeout = 15_000
             connection.readTimeout = 30_000
             connection.setRequestProperty("User-Agent", "RefineMusic")
             if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
-            val total = connection.contentLengthLong.takeIf { it > 0 } ?: release.apkSize
+            val total = connection.contentLengthLong.takeIf { it > 0 } ?: release.assetSize
             connection.inputStream.use { input ->
                 part.outputStream().use { output ->
                     val buffer = ByteArray(64 * 1024)

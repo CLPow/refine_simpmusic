@@ -248,7 +248,8 @@
     <string name="ytm_update_retry">Retry</string>
     <string name="ytm_update_not_signed">The downloaded file isn\'t signed with Refine\'s key, so it was deleted instead of installed.</string>
     <string name="ytm_update_ok">OK</string>
-    <string name="ytm_comments">Comments</string>
+    <string name="ytm_update_channel">App updates</string>
+    <string name="ytm_update_notification_body">Tap to see what\'s new and install.</string>    <string name="ytm_comments">Comments</string>
     <string name="ytm_comments_none">Comments are turned off</string>
     <string name="ytm_comments_failed">Couldn\'t load comments</string>
     <string name="ytm_comments_reply">Reply</string>

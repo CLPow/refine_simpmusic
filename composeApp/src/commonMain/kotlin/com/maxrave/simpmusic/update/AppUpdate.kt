@@ -10,8 +10,8 @@ const val RELEASES_LATEST_URL = "https://api.github.com/repos/CLPow/refine_simpm
 data class AppRelease(
     val version: String,
     val notes: String,
-    val apkUrl: String,
-    val apkSize: Long,
+    val assetUrl: String,
+    val assetSize: Long,
 )
 
 sealed interface UpdateState {
@@ -103,15 +103,16 @@ private val releaseJson = Json { ignoreUnknownKeys = true }
 fun parseLatestRelease(
     json: String,
     abi: String?,
+    extension: String = ".apk",
 ): AppRelease? {
     val release = runCatching { releaseJson.decodeFromString<GithubRelease>(json) }.getOrNull() ?: return null
     if (release.draft || release.prerelease || release.tagName.isBlank()) return null
-    val apks = release.assets.filter { it.name.endsWith(".apk", ignoreCase = true) && it.url.isNotBlank() }
-    val apk = apks.firstOrNull { abi != null && it.name.contains(abi, ignoreCase = true) } ?: apks.firstOrNull() ?: return null
+    val files = release.assets.filter { it.name.endsWith(extension, ignoreCase = true) && it.url.isNotBlank() }
+    val file = files.firstOrNull { abi != null && it.name.contains(abi, ignoreCase = true) } ?: files.firstOrNull() ?: return null
     return AppRelease(
         version = UpdateVersion.normalize(release.tagName),
         notes = release.body.orEmpty().trim(),
-        apkUrl = apk.url,
-        apkSize = apk.size,
+        assetUrl = file.url,
+        assetSize = file.size,
     )
 }

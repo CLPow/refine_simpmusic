@@ -32,8 +32,8 @@ class AppUpdateTest {
         val parsed = parseLatestRelease(release(), "arm64-v8a")!!
         assertEquals("2.4.1", parsed.version)
         assertEquals("Notes", parsed.notes)
-        assertEquals("https://example.invalid/a.apk", parsed.apkUrl)
-        assertEquals(123, parsed.apkSize)
+        assertEquals("https://example.invalid/a.apk", parsed.assetUrl)
+        assertEquals(123, parsed.assetSize)
     }
 
     @Test
@@ -41,7 +41,18 @@ class AppUpdateTest {
         val assets =
             """{"name":"RefineMusic-2.4.1-armeabi-v7a.apk","size":1,"browser_download_url":"https://example.invalid/v7.apk"},""" +
                 """{"name":"RefineMusic-2.4.1-arm64-v8a.apk","size":2,"browser_download_url":"https://example.invalid/v8.apk"}"""
-        assertEquals("https://example.invalid/v8.apk", parseLatestRelease(release(assets = assets), "arm64-v8a")!!.apkUrl)
+        assertEquals("https://example.invalid/v8.apk", parseLatestRelease(release(assets = assets), "arm64-v8a")!!.assetUrl)
+    }
+
+    @Test
+    fun picksTheMsiForDesktop() {
+        val assets =
+            """{"name":"RefineMusic-2.4.1-arm64-v8a.apk","size":1,"browser_download_url":"https://example.invalid/a.apk"},""" +
+                """{"name":"RefineMusic-2.4.1.msi","size":2,"browser_download_url":"https://example.invalid/r.msi"}"""
+        val parsed = parseLatestRelease(release(assets = assets), null, ".msi")!!
+        assertEquals("https://example.invalid/r.msi", parsed.assetUrl)
+        assertEquals(2, parsed.assetSize)
+        assertNull(parseLatestRelease(release(), null, ".msi"))
     }
 
     @Test

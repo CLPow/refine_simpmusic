@@ -36,6 +36,10 @@ import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.CachePolicy
 import coil3.request.crossfade
 import com.kdroid.composetray.tray.api.Tray
+import com.maxrave.simpmusic.desktop.UpdateToast
+import com.maxrave.simpmusic.update.DesktopUpdateNotice
+import simpmusic.composeapp.generated.resources.ytm_update_available_body
+import simpmusic.composeapp.generated.resources.ytm_update_notification_body
 import com.kdroid.composetray.utils.SingleInstanceManager
 import com.maxrave.data.di.loader.loadAllModules
 import com.maxrave.common.SUPPORTED_LOCATION
@@ -240,6 +244,17 @@ fun runDesktopApp(args: Array<String> = emptyArray()) {
         val nowPlayingArtist = nowPlayingData.artistName
         val hasTrack = nowPlayingTitle.isNotBlank()
         val trayLabel: (String) -> String = { if (it.length > 40) it.take(39).trimEnd() + "…" else it }
+        LaunchedEffect(Unit) {
+            DesktopUpdateNotice.available.collect { release ->
+                if (release != null && !isVisible) {
+                    UpdateToast.show(
+                        title = getString(Res.string.ytm_update_available_body, release.version),
+                        body = getString(Res.string.ytm_update_notification_body),
+                        onClick = { DesktopRestoreSignal.request() },
+                    )
+                }
+            }
+        }
         Tray(
             icon = painterResource(Res.drawable.circle_app_icon),
             tooltip =

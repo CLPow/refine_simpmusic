@@ -22,6 +22,7 @@ import coil3.request.crossfade
 import com.maxrave.data.di.loader.loadAllModules
 import com.maxrave.logger.Logger
 import com.maxrave.simpmusic.di.viewModelModule
+import com.maxrave.simpmusic.update.UpdateCheckWorker
 import com.maxrave.simpmusic.ui.widget.TurntableWidget
 import androidx.glance.appwidget.updateAll
 import com.maxrave.simpmusic.utils.NetworkFirstInterceptor
@@ -65,6 +66,7 @@ class SimpMusicApplication :
                 .build()
 
         WorkManager.initialize(this, workConfig)
+        runCatching { UpdateCheckWorker.schedule(this) }
 
         applicationScope.launch {
             runCatching { TurntableWidget().updateAll(this@SimpMusicApplication) }
