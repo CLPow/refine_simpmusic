@@ -39,6 +39,7 @@ open class MpvPlayerEventAdapter {
 class MpvPlayer private constructor(
     private val ctx: Pointer,
     private val lib: MpvLibrary,
+    val videoFrames: MpvVideoFrameSource? = null,
 ) {
     companion object {
         private const val OBSERVE_USERDATA = 1L
@@ -51,6 +52,7 @@ class MpvPlayer private constructor(
         private const val PITCH_LABEL = "simpPitch"
 
         fun create(
+            audioOnly: Boolean = true,
             networkCacheSeconds: Int = 10,
         ): MpvPlayer? {
             val lib = MpvLibrary.INSTANCE ?: return null
@@ -114,8 +116,13 @@ class MpvPlayer private constructor(
                 return true
             }
 
-            option("vid", "no")
-            val voPinned = requiredOption("vo", "null")
+            val voPinned =
+                if (audioOnly) {
+                    option("vid", "no")
+                    requiredOption("vo", "null")
+                } else {
+                    requiredOption("vo", "libmpv")
+                }
             if (!voPinned) {
                 // Never hand an unpinned VO to mpv_initialize: auto-probing can pick a terminal-graphics driver that aborts the process.
                 Logger.e(TAG, "Refusing to initialize mpv without a pinned video output")
@@ -130,7 +137,19 @@ class MpvPlayer private constructor(
                 return null
             }
 
-            return MpvPlayer(ctx, lib).also {
+            var frameSource: MpvVideoFrameSource? = null
+            if (!audioOnly) {
+                val created = MpvVideoFrameSource()
+                if (created.attach(ctx)) {
+                    frameSource = created
+                } else {
+                    Logger.e(TAG, "Software render context unavailable; continuing without video")
+                    lib.mpv_set_property_string(ctx, "vid", "no")
+                    lib.mpv_set_property_string(ctx, "vo", "null")
+                }
+            }
+
+            return MpvPlayer(ctx, lib, frameSource).also {
                 it.start()
             }
         }
@@ -440,12 +459,18 @@ class MpvPlayer private constructor(
 
         val thread = pumpThread
         pumpThread = null
+        val frameSource = videoFrames
 
         Thread({
             try {
                 thread?.join()
             } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
+            }
+            try {
+                frameSource?.detach()
+            } catch (e: Throwable) {
+                Logger.w(TAG, "Error detaching video frame source: ${e.message}")
             }
             try {
                 lib.mpv_terminate_destroy(ctx)

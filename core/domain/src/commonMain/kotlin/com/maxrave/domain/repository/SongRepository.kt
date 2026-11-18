@@ -17,6 +17,8 @@ import kotlinx.datetime.LocalDateTime
 interface SongRepository {
     suspend fun findSongVersion(track: Track): Track?
 
+    suspend fun findVideoVersion(track: Track): Track?
+
     suspend fun getRadioChips(
         videoId: String,
         playlistId: String,

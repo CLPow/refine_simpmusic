@@ -360,6 +360,7 @@ enum class PlaylistType {
     ALBUM,
     LOCAL_PLAYLIST,
     RADIO,
+    PODCAST,
 }
 
 sealed class ToastType(

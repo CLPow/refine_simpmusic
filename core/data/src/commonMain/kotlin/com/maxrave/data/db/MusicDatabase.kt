@@ -9,6 +9,9 @@ import androidx.room.execSQL
 import androidx.room.useWriterConnection
 import com.maxrave.domain.data.entities.AlbumEntity
 import com.maxrave.domain.data.entities.ArtistEntity
+import com.maxrave.domain.data.entities.EpisodeEntity
+import com.maxrave.domain.data.entities.PodcastsEntity
+import com.maxrave.domain.data.entities.RenditionPairEntity
 import com.maxrave.domain.data.entities.GoogleAccountEntity
 import com.maxrave.domain.data.entities.LocalPlaylistEntity
 import com.maxrave.domain.data.entities.LyricsEntity
@@ -27,8 +30,9 @@ import com.maxrave.domain.data.entities.YourYouTubePlaylistList
         NewFormatEntity::class, SongInfoEntity::class, SearchHistory::class, SongEntity::class, ArtistEntity::class,
         AlbumEntity::class, PlaylistEntity::class, LocalPlaylistEntity::class, LyricsEntity::class, QueueEntity::class,
         SetVideoIdEntity::class, PairSongLocalPlaylist::class, GoogleAccountEntity::class, YourYouTubePlaylistList::class,
+        PodcastsEntity::class, EpisodeEntity::class, RenditionPairEntity::class,
     ],
-    version = 31,
+    version = 32,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 2, to = 3), AutoMigration(
@@ -78,11 +82,14 @@ import com.maxrave.domain.data.entities.YourYouTubePlaylistList
         AutoMigration(22, 25),
         AutoMigration(29, 30),
         AutoMigration(30, 31, spec = AutoMigration30_31::class),
+        AutoMigration(31, 32),
     ],
 )
 @TypeConverters(Converters::class)
 abstract class MusicDatabase : RoomDatabase() {
     abstract fun getDatabaseDao(): DatabaseDao
+
+    abstract fun getPodcastDao(): PodcastDao
 
     // Do not wrap this call in [androidx.room.Transactor.withTransaction].
     suspend fun vacuum() {

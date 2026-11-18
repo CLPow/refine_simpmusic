@@ -462,6 +462,12 @@ internal fun parseMixedContent(
                                     playlistId = null,
                                     browseId = null,
                                     views = null,
+                                    videoType =
+                                        multiRow.onTap
+                                            ?.watchEndpoint
+                                            ?.watchEndpointMusicSupportedConfigs
+                                            ?.watchEndpointMusicConfig
+                                            ?.musicVideoType,
                                 )
                             listContent.add(content)
                         } else {

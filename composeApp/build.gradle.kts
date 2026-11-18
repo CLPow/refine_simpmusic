@@ -75,6 +75,7 @@ kotlin {
             api(libs.startup.runtime)
 
             api(projects.media3)
+            implementation(libs.media3.ui.compose)
 
             if (isFullBuild) {
                 implementation(projects.cast)
@@ -143,6 +144,7 @@ kotlin {
             implementation(libs.native.tray)
             implementation(libs.jna)
             implementation(libs.jna.platform)
+            implementation(projects.mediaJvm)
         }
     }
 }

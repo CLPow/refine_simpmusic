@@ -201,10 +201,10 @@ internal class StreamRepositoryImpl(
                 if (!muxed) {
                     VIDEO_QUALITY.itags.getOrNull(
                         VIDEO_QUALITY.items.indexOf(
-                            if (isDownloading) {
-                                dataStoreManager.videoDownloadQuality.first()
-                            } else {
-                                dataStoreManager.videoQuality.first()
+                            when {
+                                isDownloading -> dataStoreManager.videoDownloadQuality.first()
+                                isNetworkMetered() -> dataStoreManager.videoQualityMobile.first()
+                                else -> dataStoreManager.videoQuality.first()
                             },
                         ),
                     )

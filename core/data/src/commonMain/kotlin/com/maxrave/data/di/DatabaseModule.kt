@@ -39,6 +39,9 @@ val databaseModule =
             LocalDataSource(get<DatabaseDao>(), get<MusicDatabase>())
         }
         single(createdAtStart = true) {
+            get<MusicDatabase>().getPodcastDao()
+        }
+        single(createdAtStart = true) {
             createDataStoreInstance()
         }
         single<DataStoreManager>(createdAtStart = true) {

@@ -29,6 +29,7 @@ private val desktopPlayerModule =
                 coroutineScope = get(named(SERVICE_SCOPE)),
                 dataStoreManager = get(),
                 streamRepository = get(),
+                renditions = get(),
             )
         }
 

@@ -33,6 +33,7 @@ import com.maxrave.domain.repository.StreamRepository
 import com.maxrave.logger.Logger
 import com.maxrave.media3.audio.SleepFadeAudioProcessor
 import com.maxrave.media3.service.mediasourcefactory.MergingMediaSourceFactory
+import com.maxrave.domain.mediaservice.RenditionController
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -60,6 +61,7 @@ internal class ExoPlayerAdapter(
     private val mediaSourceFactory: MergingMediaSourceFactory,
     private val audioAttributes: AudioAttributes,
     private val streamRepository: StreamRepository,
+    private val renditions: RenditionController,
 ) : MediaPlayerInterface {
     private enum class InternalState {
         IDLE,
@@ -251,6 +253,20 @@ internal class ExoPlayerAdapter(
                     this@ExoPlayerAdapter.playWhenReady = playWhenReady
                 }
             }
+        coroutineScope.launch {
+            renditions.reloadRequests.collect { mediaId -> reloadRendition(mediaId) }
+        }
+    }
+
+    private fun reloadRendition(mediaId: String) {
+        clearPrecacheExceptCurrentInternal()
+        if (isCastActive || currentMediaItem?.mediaId != mediaId) return
+        val player = currentPlayer ?: return
+        val position = player.currentPosition
+        val play = player.playWhenReady
+        precachedPlayers.remove(mediaId)?.let { cleanupPlayerInternal(it.player) }
+        Logger.d(TAG, "Reloading $mediaId at $position for a different rendition")
+        loadAndPlayTrackInternal(localCurrentMediaItemIndex, position, play, announce = false)
     }
 
     @Volatile
@@ -1302,6 +1318,14 @@ internal class ExoPlayerAdapter(
 
                     if (error.isWifiOnlyRefusal()) {
                         propagatePlayerError(error)
+                        return
+                    }
+
+                    val playing = renditions.current.value
+                    val failedId = playlist.getOrNull(localCurrentMediaItemIndex)?.mediaId
+                    if (playing?.playingVideo == true && playing.mediaId == failedId) {
+                        Logger.w(TAG, "Video playback failed for $failedId (${error.errorCodeName}); falling back to audio")
+                        renditions.reportVideoFailed(failedId)
                         return
                     }
 

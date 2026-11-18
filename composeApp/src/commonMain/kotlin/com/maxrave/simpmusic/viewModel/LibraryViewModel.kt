@@ -3,7 +3,9 @@ package com.maxrave.simpmusic.viewModel
 import androidx.lifecycle.viewModelScope
 import com.maxrave.domain.data.entities.AlbumEntity
 import com.maxrave.domain.data.entities.ArtistEntity
+import com.maxrave.domain.data.entities.EpisodeEntity
 import com.maxrave.domain.data.entities.LocalPlaylistEntity
+import com.maxrave.domain.data.entities.PodcastsEntity
 import com.maxrave.domain.data.entities.SongEntity
 import com.maxrave.domain.data.model.searchResult.playlists.PlaylistsResult
 import com.maxrave.domain.manager.DataStoreManager
@@ -11,6 +13,7 @@ import com.maxrave.domain.repository.AlbumRepository
 import com.maxrave.domain.repository.ArtistRepository
 import com.maxrave.domain.repository.LocalPlaylistRepository
 import com.maxrave.domain.repository.PlaylistRepository
+import com.maxrave.domain.repository.PodcastRepository
 import com.maxrave.domain.repository.SongRepository
 import com.maxrave.simpmusic.viewModel.base.BaseViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +32,7 @@ import simpmusic.composeapp.generated.resources.added_local_playlist
 import simpmusic.composeapp.generated.resources.albums
 import simpmusic.composeapp.generated.resources.artists
 import simpmusic.composeapp.generated.resources.playlists
+import simpmusic.composeapp.generated.resources.podcast_podcasts
 import simpmusic.composeapp.generated.resources.songs
 import simpmusic.composeapp.generated.resources.ytm_downloads
 import simpmusic.composeapp.generated.resources.ytm_sort_alphabetical
@@ -40,6 +44,7 @@ enum class LibraryChip(val label: StringResource) {
     Songs(Res.string.songs),
     Albums(Res.string.albums),
     Artists(Res.string.artists),
+    Podcasts(Res.string.podcast_podcasts),
     Downloads(Res.string.ytm_downloads),
 }
 
@@ -59,6 +64,7 @@ class LibraryViewModel(
     private val localPlaylistRepository: LocalPlaylistRepository,
     private val albumRepository: AlbumRepository,
     private val artistRepository: ArtistRepository,
+    private val podcastRepository: PodcastRepository,
 ) : BaseViewModel() {
     private val _chip = MutableStateFlow<LibraryChip?>(null)
     val chip: StateFlow<LibraryChip?> = _chip.asStateFlow()
@@ -94,6 +100,12 @@ class LibraryViewModel(
             .getDownloadedSongs()
             .map { it.orEmpty() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val podcasts: StateFlow<List<PodcastsEntity>> =
+        podcastRepository.savedPodcasts().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val episodesForLater: StateFlow<List<EpisodeEntity>> =
+        podcastRepository.episodesForLater().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _refreshing = MutableStateFlow(false)
     val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()

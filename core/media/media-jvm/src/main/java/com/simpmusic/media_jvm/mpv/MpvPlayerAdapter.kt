@@ -7,6 +7,8 @@ import com.maxrave.domain.data.player.PlayerConstants
 import com.maxrave.domain.data.player.PlayerError
 import com.maxrave.domain.extension.isVideo
 import com.maxrave.domain.manager.DataStoreManager
+import com.maxrave.domain.mediaservice.Rendition
+import com.maxrave.domain.mediaservice.RenditionController
 import com.maxrave.domain.mediaservice.player.MediaPlayerInterface
 import com.maxrave.domain.mediaservice.player.MediaPlayerListener
 import com.maxrave.domain.repository.StreamRepository
@@ -21,6 +23,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.lastOrNull
@@ -44,6 +47,7 @@ class MpvPlayerAdapter(
     private val coroutineScope: CoroutineScope,
     private val dataStoreManager: DataStoreManager,
     private val streamRepository: StreamRepository,
+    private val renditions: RenditionController,
 ) : MediaPlayerInterface {
     private enum class InternalState {
         IDLE,
@@ -61,7 +65,17 @@ class MpvPlayerAdapter(
         if (MpvLibrary.INSTANCE == null) {
             Logger.e(TAG, "libmpv not available — playback will fail until mpv is installed.")
         }
+        coroutineScope.launch {
+            renditions.reloadRequests.collect { mediaId -> reloadRendition(mediaId) }
+        }
     }
+
+    private val _currentVideoFrames = MutableStateFlow<MpvVideoFrameSource?>(null)
+
+    val currentVideoFrames: StateFlow<MpvVideoFrameSource?> = _currentVideoFrames.asStateFlow()
+
+    @Volatile
+    private var currentRendition: Rendition? = null
 
     private val listeners = mutableListOf<MediaPlayerListener>()
 
@@ -151,6 +165,8 @@ class MpvPlayerAdapter(
 
     private data class PlayableSource(
         val url: String,
+        val rendition: Rendition,
+        val isVideo: Boolean = false,
     )
 
     override fun play() {
@@ -191,7 +207,7 @@ class MpvPlayerAdapter(
                     if (videoId != null) {
                         Logger.d(TAG, "Play: reloading $videoId after an error")
                         internalPlayWhenReady = true
-                        withContext(Dispatchers.IO) { streamRepository.invalidateFormat(videoId) }
+                        withContext(Dispatchers.IO) { invalidateStreams(videoId) }
                         loadAndPlayTrackInternal(index, cachedPosition.coerceAtLeast(0L), shouldPlay = true, announce = false)
                     }
                 }
@@ -280,6 +296,7 @@ class MpvPlayerAdapter(
             localCurrentMediaItemIndex = mediaItemIndex
             currentPlayer?.release()
             currentPlayer = null
+            _currentVideoFrames.value = null
             loadAndPlayTrackInternal(mediaItemIndex, positionMs, shouldPlay)
         }
     }
@@ -964,12 +981,13 @@ class MpvPlayerAdapter(
                     cleanupEventListenerInternal()
                     stopPositionUpdates()
 
+                    val rendition = renditions.renditionFor(videoId)
                     val cachedPrecache =
                         precachedPlayers.remove(videoId)?.let { cached ->
-                            if (cached.isUsable()) {
+                            if (cached.isUsable() && cached.source.rendition == rendition) {
                                 cached
                             } else {
-                                Logger.w(TAG, "Precached handle for $videoId failed or is too old; loading it again")
+                                Logger.w(TAG, "Precached handle for $videoId is stale; loading it again")
                                 cleanupPlayerInternal(cached.player)
                                 null
                             }
@@ -979,14 +997,11 @@ class MpvPlayerAdapter(
                         if (cachedPrecache != null) {
                             cachedPrecache.player
                         } else {
-                            var source = withContext(Dispatchers.IO) { extractPlayableUrl(mediaItem) }
+                            var source = withContext(Dispatchers.IO) { extractPlayableUrl(videoId, rendition) }
                             if (source == null || source.url.isEmpty()) {
                                 Logger.w(TAG, "First extract failed for $videoId, invalidating and retrying...")
-                                withContext(Dispatchers.IO) {
-                                    streamRepository.invalidateFormat(videoId)
-                                    streamRepository.invalidateFormat("${MERGING_DATA_TYPE.VIDEO}$videoId")
-                                }
-                                source = withContext(Dispatchers.IO) { extractPlayableUrl(mediaItem) }
+                                withContext(Dispatchers.IO) { invalidateStreams(videoId, rendition) }
+                                source = withContext(Dispatchers.IO) { extractPlayableUrl(videoId, rendition) }
                             }
                             if (source == null || source.url.isEmpty()) {
                                 Logger.e(TAG, "Failed to extract playable URL for $videoId after retry")
@@ -994,7 +1009,7 @@ class MpvPlayerAdapter(
                                 return@launch
                             }
                             resolvedSource = source
-                            createMediaPlayerInternal(source, mediaItem.mediaId)
+                            createMediaPlayerInternal(source)
                         }
 
                     if (player == null) {
@@ -1005,6 +1020,8 @@ class MpvPlayerAdapter(
 
                     cleanupCurrentPlayerInternal()
                     currentPlayer = player
+                    currentRendition = (cachedPrecache?.source ?: resolvedSource)?.rendition
+                    _currentVideoFrames.value = player.videoFrames
                     setupPlayerEventsInternal(player)
                     player.applyPlaybackLevels()
 
@@ -1038,6 +1055,8 @@ class MpvPlayerAdapter(
 
                     transitionToState(InternalState.READY)
 
+                    currentRendition?.let { renditions.markBuilt(videoId, it) }
+
                     startPositionUpdates()
 
                     triggerPrecachingInternal()
@@ -1052,13 +1071,39 @@ class MpvPlayerAdapter(
 
     private fun buildPlaybackUrl(source: PlayableSource): String = source.url
 
-    private fun createMediaPlayerInternal(
-        source: PlayableSource,
-        mediaId: String,
-    ): MpvPlayer? {
-        val player = MpvPlayer.create(networkCacheSeconds = 10)
+    private fun createMediaPlayerInternal(source: PlayableSource): MpvPlayer? {
+        val player =
+            if (source.isVideo) {
+                MpvPlayer.create(audioOnly = false, networkCacheSeconds = 15)
+            } else {
+                MpvPlayer.create(audioOnly = true, networkCacheSeconds = 10)
+            }
         player?.setMasterVolume((internalVolume * 100).toInt())
         return player
+    }
+
+    private fun reloadRendition(mediaId: String) {
+        precachedPlayers.remove(mediaId)?.let { cleanupPlayerInternal(it.player) }
+        clearPrecacheExceptCurrentInternal()
+        if (currentMediaItem?.mediaId != mediaId || currentPlayer == null || !internalState.isInReadyState()) {
+            triggerPrecachingInternal()
+            return
+        }
+        val position = cachedPosition.coerceAtLeast(0L)
+        val play = internalPlayWhenReady
+        Logger.d(TAG, "Reloading $mediaId at $position for a different rendition")
+        loadAndPlayTrackInternal(localCurrentMediaItemIndex, position, play, announce = false)
+    }
+
+    private suspend fun invalidateStreams(
+        mediaId: String,
+        rendition: Rendition? = currentRendition,
+    ) {
+        val ids = setOfNotNull(mediaId, rendition?.audioId, rendition?.videoId)
+        ids.forEach {
+            streamRepository.invalidateFormat(it)
+            streamRepository.invalidateFormat("${MERGING_DATA_TYPE.VIDEO}$it")
+        }
     }
 
     private fun setupPlayerEventsInternal(player: MpvPlayer) {
@@ -1097,8 +1142,7 @@ class MpvPlayerAdapter(
                                 Logger.w(TAG, "Retrying playback (attempt $retryCount/$maxRetryCount) for $currentVideoId")
                                 val resumePositionMs = cachedPosition.coerceAtLeast(0L)
                                 try {
-                                    streamRepository.invalidateFormat(currentVideoId)
-                                    streamRepository.invalidateFormat("${MERGING_DATA_TYPE.VIDEO}$currentVideoId")
+                                    invalidateStreams(currentVideoId)
                                     precachedPlayers.remove(currentVideoId)?.player?.release()
                                     loadAndPlayTrackInternal(localCurrentMediaItemIndex, resumePositionMs, shouldPlay = true, announce = false)
                                     return@launch
@@ -1204,6 +1248,7 @@ class MpvPlayerAdapter(
 
         currentPlayer?.let { cleanupPlayerInternal(it) }
         currentPlayer = null
+        _currentVideoFrames.value = null
     }
 
     private fun handleTrackEndInternal() {
@@ -1275,11 +1320,12 @@ class MpvPlayerAdapter(
 
                         val mediaItem = playlist.getOrNull(idx) ?: continue
 
-                        val source = withContext(Dispatchers.IO) { extractPlayableUrl(mediaItem) }
+                        val rendition = renditions.renditionFor(mediaItem.mediaId)
+                        val source = withContext(Dispatchers.IO) { extractPlayableUrl(mediaItem.mediaId, rendition) }
 
                         if (source != null && source.url.isNotEmpty()) {
                             try {
-                                val player = createMediaPlayerInternal(source, mediaItem.mediaId)
+                                val player = createMediaPlayerInternal(source)
                                 if (player == null) {
                                     Logger.w(TAG, "Precaching skipped for $idx: could not create mpv player")
                                 } else {
@@ -1298,6 +1344,7 @@ class MpvPlayerAdapter(
                                     player.applyPlaybackLevels()
                                     player.loadFile(buildPlaybackUrl(source), startPaused = true)
                                     precachedPlayers.put(mediaItem.mediaId, precached)?.let { cleanupPlayerInternal(it.player) }
+                                    renditions.markBuilt(mediaItem.mediaId, source.rendition)
                                     Logger.d(TAG, "Precached player for index $idx")
                                 }
                             } catch (e: Exception) {
@@ -1444,27 +1491,49 @@ class MpvPlayerAdapter(
         }
     }
 
-    private suspend fun extractPlayableUrl(mediaItem: GenericMediaItem): PlayableSource? {
-        Logger.w(TAG, "Extracting playable URL for ${mediaItem.mediaId}")
-        val videoId = mediaItem.mediaId
+    private suspend fun extractPlayableUrl(
+        mediaId: String,
+        rendition: Rendition,
+    ): PlayableSource? {
+        val videoId = rendition.videoId ?: return extractAudioUrl(rendition.audioId)?.let { PlayableSource(it, rendition) }
+        Logger.w(TAG, "Extracting video for $mediaId from $videoId")
+        val videoUrl =
+            streamRepository
+                .getStream(
+                    dataStoreManager,
+                    videoId,
+                    isDownloading = false,
+                    isVideo = true,
+                ).lastOrNull()
+        val audioUrl = extractAudioUrl(rendition.audioId) ?: return null
+        if (videoUrl.isNullOrEmpty()) {
+            Logger.w(TAG, "No video stream for $videoId; playing its audio only")
+            renditions.reportVideoFailed(mediaId)
+            return PlayableSource(audioUrl, rendition.copy(videoId = null))
+        }
+        return PlayableSource(buildEdlUrl(videoUrl, audioUrl), rendition, isVideo = true)
+    }
+
+    private suspend fun extractAudioUrl(audioId: String): String? {
+        Logger.w(TAG, "Extracting playable URL for $audioId")
 
         val downloadFiles =
             File(getDownloadPath()).listFiles()?.filter {
-                it.name.contains(videoId)
+                it.name.contains(audioId)
             }
         if (!downloadFiles.isNullOrEmpty()) {
             val audioFile = downloadFiles.firstOrNull { !it.name.contains(MERGING_DATA_TYPE.VIDEO) }
             if (audioFile != null && audioFile.length() > 0 && audioFile.exists()) {
-                return PlayableSource(url = audioFile.absolutePath)
+                return audioFile.absolutePath
             }
         }
 
-        streamRepository.getNewFormat(videoId).lastOrNull()?.let { stored ->
+        streamRepository.getNewFormat(audioId).lastOrNull()?.let { stored ->
             val audioUrl = stored.audioUrl
             val wantedQuality = streamRepository.deliversQuality(stored.itag, streamRepository.wantedAudioItag(dataStoreManager))
             if (!audioUrl.isNullOrEmpty() && wantedQuality && streamRepository.is403Url(audioUrl).firstOrNull() == false) {
                 Logger.w("Stream", "Audio from format")
-                return PlayableSource(url = audioUrl)
+                return audioUrl
             }
         }
 
@@ -1472,13 +1541,13 @@ class MpvPlayerAdapter(
             streamRepository
                 .getStream(
                     dataStoreManager,
-                    videoId,
+                    audioId,
                     isDownloading = false,
                     isVideo = false,
                 ).lastOrNull()
         if (audioUrl != null) {
             Logger.d(TAG, "Stream Audio $audioUrl")
-            return PlayableSource(url = audioUrl)
+            return audioUrl
         }
 
         return null

@@ -1,4 +1,4 @@
-# SimpMusic Contributor Covenant Code of Conduct
+# Refine Music Contributor Covenant Code of Conduct
 
 ## Our Pledge
 

@@ -55,6 +55,7 @@ data class PlayerState(
     val nextAvailable: Boolean = false,
     val prevAvailable: Boolean = false,
     val playEpoch: Long = 0,
+    val videoMode: Boolean = false,
 )
 
 @Serializable

@@ -95,6 +95,12 @@ interface DataStoreManager {
 
     val videoQuality: Flow<String>
 
+    suspend fun setVideoQuality(quality: String)
+
+    val videoQualityMobile: Flow<String>
+
+    suspend fun setVideoQualityMobile(quality: String)
+
     val syncFollowToYouTube: Flow<String>
 
     val chartKey: Flow<String>

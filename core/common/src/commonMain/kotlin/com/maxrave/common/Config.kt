@@ -570,7 +570,6 @@ enum class LibraryChipType {
     LOCAL_PLAYLIST,
     FAVORITE_PLAYLIST,
     DOWNLOADED_PLAYLIST,
-    FAVORITE_PODCAST,
     ;
 
     fun toStringValue(): String =
@@ -581,7 +580,6 @@ enum class LibraryChipType {
             LOCAL_PLAYLIST -> "local_playlist"
             FAVORITE_PLAYLIST -> "favorite_playlist"
             DOWNLOADED_PLAYLIST -> "downloaded_playlist"
-            FAVORITE_PODCAST -> "favorite_podcast"
             CHART -> "chart"
             WRAPPED -> "wrapped"
         }
@@ -595,7 +593,6 @@ enum class LibraryChipType {
                 "local_playlist" -> LOCAL_PLAYLIST
                 "favorite_playlist" -> FAVORITE_PLAYLIST
                 "downloaded_playlist" -> DOWNLOADED_PLAYLIST
-                "favorite_podcast" -> FAVORITE_PODCAST
                 "chart" -> CHART
                 "wrapped" -> WRAPPED
                 else -> null

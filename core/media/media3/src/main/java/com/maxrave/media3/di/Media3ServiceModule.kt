@@ -66,6 +66,7 @@ import com.maxrave.media3.service.SimpleMediaService
 import com.maxrave.media3.service.callback.SimpleMediaSessionCallback
 import com.maxrave.media3.service.download.DownloadUtils
 import com.maxrave.media3.service.mediasourcefactory.MergingMediaSourceFactory
+import com.maxrave.domain.mediaservice.RenditionController
 import com.maxrave.media3.utils.CoilBitmapLoader
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -139,6 +140,7 @@ private val mediaServiceModule =
                 get(),
                 get(named(SERVICE_SCOPE)),
                 get(),
+                get(),
             )
         }
 
@@ -160,6 +162,7 @@ private val mediaServiceModule =
                 mediaSourceFactory = get(),
                 audioAttributes = get(),
                 streamRepository = get(),
+                renditions = get(),
             )
         }
 
@@ -348,6 +351,7 @@ private fun provideMergingMediaSource(
     streamRepository: StreamRepository,
     coroutineScope: CoroutineScope,
     dataStoreManager: DataStoreManager,
+    renditions: RenditionController,
 ): MergingMediaSourceFactory =
     MergingMediaSourceFactory(
         provideMediaSourceFactory(
@@ -358,7 +362,53 @@ private fun provideMergingMediaSource(
             dataStoreManager,
             coroutineScope,
         ),
+        DefaultMediaSourceFactory(
+            provideVideoDataSourceFactory(context, streamRepository, dataStoreManager),
+            provideExtractorFactory(),
+        ),
+        renditions,
     )
+
+private class VideoUrl(
+    val url: String,
+    val fetchedAtMs: Long,
+)
+
+@UnstableApi
+private fun provideVideoDataSourceFactory(
+    context: Context,
+    streamRepository: StreamRepository,
+    dataStoreManager: DataStoreManager,
+): DataSource.Factory {
+    val chunkLength = 10 * 512 * 1024L
+    val urls = java.util.concurrent.ConcurrentHashMap<String, VideoUrl>()
+    val upstream =
+        DefaultDataSource.Factory(
+            context,
+            OkHttpDataSource.Factory(
+                OkHttpClient
+                    .Builder()
+                    .connectTimeout(30.seconds)
+                    .readTimeout(30.seconds)
+                    .build(),
+            ),
+        )
+    return ResolvingDataSource.Factory(upstream) { dataSpec ->
+        val videoId = (dataSpec.key ?: error("No media id")).removePrefix(MERGING_DATA_TYPE.VIDEO)
+        val nowMs = System.currentTimeMillis()
+        val known = urls[videoId]?.takeIf { dataSpec.position > 0L || nowMs - it.fetchedAtMs < VIDEO_URL_TTL_MS }
+        val url =
+            known?.url ?: runBlocking(Dispatchers.IO) {
+                streamRepository
+                    .getStream(dataStoreManager, videoId, isDownloading = false, isVideo = true)
+                    .lastOrNull()
+            }?.also { urls[videoId] = VideoUrl(it, nowMs) }
+                ?: throw java.io.IOException("Failed to resolve video stream for $videoId")
+        dataSpec.withUri(url.toUri()).subrange(dataSpec.uriPositionOffset, chunkLength)
+    }
+}
+
+private const val VIDEO_URL_TTL_MS = 3 * 3600 * 1000L
 
 @UnstableApi
 private fun provideCacheDataSource(

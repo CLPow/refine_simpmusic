@@ -3,7 +3,7 @@
     <string name="widget_turntable_label">Now playing</string>
     <string name="widget_turntable_description">YouTube Music widget: 2×2 round cover, 4×1 row, 4×2 with recently played</string>
     <string name="widget_playlists_label">Playlists</string>
-    <string name="widget_playlists_description">Now playing with controls, over your recently added</string>
+    <string name="widget_playlists_description">Now playing with controls, above your recently added songs</string>
     <string name="widget_insights_label">Listening insights</string>
     <string name="widget_insights_description">Listening time, play count and your 30-day top songs and artists</string>
     <string name="widget_insights_time">listening time</string>

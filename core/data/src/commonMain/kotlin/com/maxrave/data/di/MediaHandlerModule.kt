@@ -2,7 +2,11 @@ package com.maxrave.data.di
 
 import com.maxrave.common.Config
 import com.maxrave.data.control.createRefineControlRepository
+import com.maxrave.data.mediaservice.RenditionControllerImpl
+import com.maxrave.data.mediaservice.PodcastPlaybackTracker
+import com.maxrave.data.mediaservice.RenditionFeeder
 import com.maxrave.data.mediaservice.RoutingMediaPlayerHandler
+import com.maxrave.domain.mediaservice.RenditionController
 import com.maxrave.data.mediaservice.createMediaServiceHandler
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.repository.RefineControlRepository
@@ -12,6 +16,14 @@ import org.koin.dsl.module
 
 val mediaHandlerModule =
     module {
+        single<RenditionController>(createdAtStart = true) {
+            RenditionControllerImpl(
+                songRepository = get(),
+                podcastDao = get(),
+                dataStoreManager = get(),
+                scope = get<CoroutineScope>(named(Config.SERVICE_SCOPE)),
+            )
+        }
         single<MediaPlayerHandler>(named(Config.LOCAL_PLAYER), createdAtStart = true) {
             createMediaServiceHandler(
                 dataStoreManager = get(),
@@ -27,6 +39,21 @@ val mediaHandlerModule =
                 localPlayer = get(named(Config.LOCAL_PLAYER)),
                 coroutineScope = get<CoroutineScope>(named(Config.SERVICE_SCOPE)),
             )
+        }
+        single(createdAtStart = true) {
+            RenditionFeeder(
+                controller = get(),
+                player = get(named(Config.LOCAL_PLAYER)),
+                scope = get<CoroutineScope>(named(Config.SERVICE_SCOPE)),
+            ).also { it.start() }
+        }
+        single(createdAtStart = true) {
+            PodcastPlaybackTracker(
+                player = get(named(Config.LOCAL_PLAYER)),
+                podcastDao = get(),
+                dataStoreManager = get(),
+                scope = get<CoroutineScope>(named(Config.SERVICE_SCOPE)),
+            ).also { it.start() }
         }
         single<MediaPlayerHandler>(createdAtStart = true) {
             RoutingMediaPlayerHandler(

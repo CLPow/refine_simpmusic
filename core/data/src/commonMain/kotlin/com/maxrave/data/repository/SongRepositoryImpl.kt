@@ -30,6 +30,7 @@ import com.maxrave.domain.utils.Resource
 import com.maxrave.data.mapping.toTrack
 import com.maxrave.kotlinytmusicscraper.YouTube
 import com.maxrave.kotlinytmusicscraper.models.SongItem
+import com.maxrave.kotlinytmusicscraper.models.VideoItem
 import com.maxrave.kotlinytmusicscraper.models.WatchEndpoint
 import com.maxrave.kotlinytmusicscraper.models.response.LikeStatus
 import com.maxrave.kotlinytmusicscraper.pages.NextPage
@@ -309,6 +310,46 @@ internal class SongRepositoryImpl(
             songVersionsLock.withLock { songVersions[track.videoId] = song }
             song
         }
+
+    private val videoVersions = mutableMapOf<String, Track?>()
+
+    override suspend fun findVideoVersion(track: Track): Track? =
+        withContext(Dispatchers.IO) {
+            if (MusicVideoType.isVideoSong(track.videoType)) return@withContext null
+            songVersionsLock.withLock {
+                if (videoVersions.containsKey(track.videoId)) return@withContext videoVersions[track.videoId]
+            }
+            val title = track.title.songTitleKey()
+            val artistIds = track.artists.orEmpty().mapNotNull { it.id?.takeIf(String::isNotBlank) }.toSet()
+            val artistNames = track.artists.orEmpty().map { it.name.trim().lowercase() }.filter(String::isNotEmpty).toSet()
+            if (title.isEmpty() || (artistIds.isEmpty() && artistNames.isEmpty())) return@withContext null
+            val query = (listOf(track.title.songTitleQuery()) + track.artists.orEmpty().map { it.name }).joinToString(" ")
+            val result = youTube.search(query, YouTube.SearchFilter.FILTER_VIDEO).getOrNull() ?: return@withContext null
+            val video =
+                result.items
+                    .take(6)
+                    .mapNotNull { item ->
+                        when (item) {
+                            is VideoItem -> VideoCandidate(item.musicVideoType, item.title, item.artists.map { it.id to it.name }, item.toTrack())
+                            is SongItem -> VideoCandidate(item.musicVideoType, item.title, item.artists.map { it.id to it.name }, item.toTrack())
+                            else -> null
+                        }
+                    }.firstOrNull { candidate ->
+                        MusicVideoType.isOfficialVideo(candidate.type) &&
+                            candidate.title.videoTitleKey(artistNames) == title &&
+                            candidate.artists.any { (id, name) -> (id != null && id in artistIds) || name.trim().lowercase() in artistNames }
+                    }?.track
+            Logger.d(TAG, "findVideoVersion ${track.videoId} (${track.title}) -> ${video?.videoId}")
+            songVersionsLock.withLock { videoVersions[track.videoId] = video }
+            video
+        }
+
+    private class VideoCandidate(
+        val type: String?,
+        val title: String,
+        val artists: List<Pair<String?, String>>,
+        val track: Track,
+    )
 
     private suspend fun List<SongItem>.dropShortWhenConfigured(): List<SongItem> {
         val minSeconds = dataStoreManager.skipShortTrackSeconds.first()
@@ -610,3 +651,11 @@ private val VIDEO_LABEL =
 private fun String.songTitleQuery(): String = (QUOTED_TITLE.find(this)?.groupValues?.get(1) ?: this).replace(VIDEO_LABEL, "").trim()
 
 private fun String.songTitleKey(): String = songTitleQuery().lowercase().replace(Regex("\\s+"), " ")
+
+internal fun String.videoTitleKey(artistNames: Set<String>): String {
+    val key = songTitleKey()
+    val dash = key.indexOf(" - ")
+    if (dash <= 0) return key
+    val leftArtists = key.substring(0, dash).split(Regex("\\s*(?:,|&|\\bx\\b|\\bfeat\\.?|\\bft\\.?|\\bwith\\b)\\s*")).map(String::trim)
+    return if (leftArtists.any { it in artistNames }) key.substring(dash + 3).trim() else key
+}

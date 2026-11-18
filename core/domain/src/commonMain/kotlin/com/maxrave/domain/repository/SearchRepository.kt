@@ -1,5 +1,6 @@
 package com.maxrave.domain.repository
 
+import com.maxrave.domain.data.model.podcast.PodcastEpisode
 import com.maxrave.domain.data.model.searchResult.SearchSummary
 import com.maxrave.domain.data.entities.SearchHistory
 import com.maxrave.domain.data.model.searchResult.SearchSuggestions
@@ -31,6 +32,10 @@ interface SearchRepository {
     fun getSearchDataAlbum(query: String): Flow<Resource<ArrayList<AlbumsResult>>>
 
     fun getSearchDataPlaylist(query: String): Flow<Resource<ArrayList<PlaylistsResult>>>
+
+    fun getSearchDataPodcast(query: String): Flow<Resource<ArrayList<PlaylistsResult>>>
+
+    fun getSearchDataEpisode(query: String): Flow<Resource<ArrayList<PodcastEpisode>>>
 
     fun getSuggestQuery(query: String): Flow<Resource<SearchSuggestions>>
 

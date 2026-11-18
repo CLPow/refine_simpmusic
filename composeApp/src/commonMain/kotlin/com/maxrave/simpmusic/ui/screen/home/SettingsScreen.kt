@@ -59,6 +59,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil3.compose.LocalPlatformContext
 import com.maxrave.common.QUALITY
+import com.maxrave.common.VIDEO_QUALITY
 import com.maxrave.common.SUPPORTED_LOCATION
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.repository.AccountRepository
@@ -100,6 +101,8 @@ import simpmusic.composeapp.generated.resources.ytm_autoplay
 import simpmusic.composeapp.generated.resources.ytm_autoplay_summary
 import simpmusic.composeapp.generated.resources.ytm_audio_quality_wifi
 import simpmusic.composeapp.generated.resources.ytm_audio_quality_mobile
+import simpmusic.composeapp.generated.resources.ytm_video_quality_wifi
+import simpmusic.composeapp.generated.resources.ytm_video_quality_mobile
 import simpmusic.composeapp.generated.resources.ytm_double_tap_seek
 import simpmusic.composeapp.generated.resources.ytm_n_seconds
 import simpmusic.composeapp.generated.resources.ytm_allow_external_start
@@ -220,6 +223,8 @@ fun SettingScreen(
     val autoplay by dataStoreManager.endlessQueue.map { it == DataStoreManager.TRUE }.collectAsStateWithLifecycle(false)
     val qualityMobile by dataStoreManager.qualityMobile.map { QUALITY.normalize(it) }.collectAsStateWithLifecycle(null)
     val streamOverWifiOnly by dataStoreManager.streamOverWifiOnly.collectAsStateWithLifecycle(false)
+    val videoQuality by dataStoreManager.videoQuality.collectAsStateWithLifecycle(null)
+    val videoQualityMobile by dataStoreManager.videoQualityMobile.collectAsStateWithLifecycle(null)
     val doubleTapSeekSeconds by dataStoreManager.doubleTapSeekSeconds.collectAsStateWithLifecycle(10)
     val allowExternalStart by dataStoreManager.allowExternalStartPlayback.collectAsStateWithLifecycle(true)
     val sponsorBlock by dataStoreManager.sponsorBlockEnabled.map { it == DataStoreManager.TRUE }.collectAsStateWithLifecycle(false)
@@ -352,6 +357,23 @@ fun SettingScreen(
                             choice =
                                 ChoiceDialog(audioQualityMobile, options, options.indexOf(qualityMobile)) {
                                     scope.launch { dataStoreManager.setQualityMobile(options[it]) }
+                                }
+                        }
+                    }
+                    val videoOptions = VIDEO_QUALITY.items.map { it.toString() }
+                    val videoQualityWifiTitle = stringResource(Res.string.ytm_video_quality_wifi)
+                    SettingRow(title = videoQualityWifiTitle, summary = videoQuality.orEmpty()) {
+                        choice =
+                            ChoiceDialog(videoQualityWifiTitle, videoOptions, videoOptions.indexOf(videoQuality)) {
+                                scope.launch { dataStoreManager.setVideoQuality(videoOptions[it]) }
+                            }
+                    }
+                    if (isPhone) {
+                        val videoQualityMobileTitle = stringResource(Res.string.ytm_video_quality_mobile)
+                        SettingRow(title = videoQualityMobileTitle, summary = videoQualityMobile.orEmpty()) {
+                            choice =
+                                ChoiceDialog(videoQualityMobileTitle, videoOptions, videoOptions.indexOf(videoQualityMobile)) {
+                                    scope.launch { dataStoreManager.setVideoQualityMobile(videoOptions[it]) }
                                 }
                         }
                         SwitchRow(

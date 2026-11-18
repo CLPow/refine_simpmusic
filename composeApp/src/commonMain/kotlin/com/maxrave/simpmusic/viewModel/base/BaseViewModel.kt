@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maxrave.common.Config
 import com.maxrave.domain.data.model.browse.album.Track
+import com.maxrave.domain.mediaservice.RenditionController
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
+import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.domain.mediaservice.handler.QueueData
 import com.maxrave.logger.LogLevel
 import com.maxrave.domain.repository.SongRepository
@@ -15,7 +17,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeoutOrNull
 import multiplatform.network.cmptoast.ToastDuration
 import multiplatform.network.cmptoast.ToastGravity
 import multiplatform.network.cmptoast.showToast
@@ -30,6 +31,7 @@ abstract class BaseViewModel :
     KoinComponent {
     protected val mediaPlayerHandler: MediaPlayerHandler by inject<MediaPlayerHandler>()
     protected val songVersionLookup: SongRepository by inject<SongRepository>()
+    protected val renditionController: RenditionController by inject<RenditionController>()
     private val _nowPlayingVideoId: MutableStateFlow<String> = MutableStateFlow("")
 
     val nowPlayingVideoId: StateFlow<String> get() = _nowPlayingVideoId
@@ -108,32 +110,19 @@ abstract class BaseViewModel :
         index: Int? = null,
     ) {
         viewModelScope.launch {
-            val song = (anyTrack as? Track)?.takeIf { type == Config.SONG_CLICK }?.let { useSongVersion(it) }
+            val video = (anyTrack as? Track)?.takeIf { type == Config.SONG_CLICK }?.videoType
+            if (MusicVideoType.isKnown(video) && MusicVideoType.isVideoSong(video) && !MusicVideoType.isPodcast(video)) {
+                renditionController.setVideoMode(true)
+            }
             mediaPlayerHandler.loadMediaItem(
-                anyTrack = song ?: anyTrack,
+                anyTrack = anyTrack,
                 type = type,
                 index = index,
             )
         }
     }
 
-    private suspend fun useSongVersion(track: Track): Track? {
-        val song = withTimeoutOrNull(SONG_VERSION_TIMEOUT_MS) { songVersionLookup.findSongVersion(track) } ?: return null
-        mediaPlayerHandler.queueData.value?.data?.let { data ->
-            mediaPlayerHandler.setQueueData(
-                data.copy(
-                    listTracks = data.listTracks.map { if (it.videoId == track.videoId) song else it },
-                    firstPlayedTrack = data.firstPlayedTrack?.let { if (it.videoId == track.videoId) song else it },
-                    playlistId = if (data.playlistId == "RDAMVM${track.videoId}") "RDAMVM${song.videoId}" else data.playlistId,
-                ),
-            )
-        }
-        return song
-    }
-
     fun shufflePlaylist(firstPlayIndex: Int = 0) {
         mediaPlayerHandler.shufflePlaylist(firstPlayIndex)
     }
 }
-
-private const val SONG_VERSION_TIMEOUT_MS = 4_000L

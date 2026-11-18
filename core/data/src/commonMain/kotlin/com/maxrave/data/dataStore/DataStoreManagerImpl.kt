@@ -355,6 +355,23 @@ internal class DataStoreManagerImpl(
             preferences[VIDEO_QUALITY] ?: "720p"
         }
 
+    override suspend fun setVideoQuality(quality: String) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { it[VIDEO_QUALITY] = quality }
+        }
+    }
+
+    override val videoQualityMobile: Flow<String> =
+        settingsDataStore.data.map { preferences ->
+            preferences[VIDEO_QUALITY_MOBILE] ?: "360p"
+        }
+
+    override suspend fun setVideoQualityMobile(quality: String) {
+        withContext(Dispatchers.IO) {
+            settingsDataStore.edit { it[VIDEO_QUALITY_MOBILE] = quality }
+        }
+    }
+
     override val syncFollowToYouTube: Flow<String> = flowOf(TRUE)
 
     override val chartKey =
@@ -580,6 +597,7 @@ internal class DataStoreManagerImpl(
         val WATCH_VIDEO_INSTEAD_OF_PLAYING_AUDIO =
             stringPreferencesKey("watch_video_instead_of_playing_audio")
         val VIDEO_QUALITY = stringPreferencesKey("video_quality")
+        val VIDEO_QUALITY_MOBILE = stringPreferencesKey("video_quality_mobile")
         val PLAYER_VOLUME = floatPreferencesKey("player_volume")
         val CHART_KEY = stringPreferencesKey("chart_key")
         val ENDLESS_QUEUE = stringPreferencesKey("endless_queue")

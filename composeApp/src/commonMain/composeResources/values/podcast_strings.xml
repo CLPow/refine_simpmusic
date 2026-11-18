@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="podcast_podcasts">Podcasts</string>
+    <string name="podcast_podcast">Podcast</string>
+    <string name="podcast_episode">Episode</string>
+    <string name="podcast_episodes">Episodes</string>
+    <string name="podcast_episodes_for_later">Episodes for later</string>
+    <string name="podcast_save_for_later">Save to Episodes for later</string>
+    <string name="podcast_remove_from_later">Remove from Episodes for later</string>
+    <string name="podcast_saved_for_later">Saved for later</string>
+    <string name="podcast_play_latest">Play latest</string>
+    <string name="podcast_resume">Resume</string>
+    <string name="podcast_played">Played</string>
+    <string name="podcast_min_left">%1$d min left</string>
+    <string name="podcast_hr_min_left">%1$d hr %2$d min left</string>
+    <string name="podcast_go_to_podcast">Go to podcast</string>
+    <string name="podcast_episode_details">Episode details</string>
+    <string name="podcast_show_more">More</string>
+    <string name="podcast_show_less">Less</string>
+    <string name="podcast_library_empty">Podcasts you save will show up here</string>
+    <string name="podcast_later_empty">Episodes you save for later will show up here</string>
+    <string name="podcast_unavailable">This podcast isn't available right now</string>
+    <string name="podcast_episode_unavailable">This episode isn't available right now</string>
+    <plurals name="podcast_n_episodes">
+        <item quantity="one">%1$d episode</item>
+        <item quantity="other">%1$d episodes</item>
+    </plurals>
+</resources>

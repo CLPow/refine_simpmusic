@@ -48,6 +48,7 @@ import com.maxrave.domain.data.entities.SongEntity
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.repository.SongRepository
 import com.maxrave.domain.utils.toTrack
+import com.maxrave.simpmusic.CrashLog
 import com.maxrave.simpmusic.MainActivity
 import com.maxrave.simpmusic.R
 import com.maxrave.simpmusic.viewModel.SharedViewModel
@@ -99,9 +100,8 @@ class TurntableWidget :
                 val thumbnail = if (idle) fallback?.thumbnails else screenData.thumbnailURL
 
                 var artwork by remember { mutableStateOf<Bitmap?>(null) }
-                LaunchedEffect(thumbnail, layout) {
-                    val art = context.loadWidgetArtwork(thumbnail)
-                    artwork = if (layout == Layout.Square) art?.let { runCatching { it.toCircle() }.getOrNull() } else art
+                LaunchedEffect(thumbnail) {
+                    artwork = context.loadWidgetArtwork(thumbnail)
                 }
 
                 var recent by remember { mutableStateOf<List<RecentTile>>(emptyList()) }
@@ -145,6 +145,16 @@ class TurntableWidget :
         }
     }
 
+    override fun onCompositionError(
+        context: Context,
+        glanceId: GlanceId,
+        appWidgetId: Int,
+        throwable: Throwable,
+    ) {
+        runCatching { CrashLog.append(context, "WIDGET $appWidgetId", throwable) }
+        super.onCompositionError(context, glanceId, appWidgetId, throwable)
+    }
+
     private enum class Layout { Square, Row, Header, Full }
 
     private val restoreScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -158,7 +168,7 @@ class TurntableWidget :
         val WIDE_MIN_WIDTH = 200.dp
         val STRIP_MIN_HEIGHT = 170.dp
         const val RECENT_COUNT = 5
-        const val RECENT_ART_PX = 112
+        const val RECENT_ART_PX = 96
     }
 }
 
@@ -204,7 +214,7 @@ private fun SquareLayout(
                     provider = ImageProvider(art),
                     contentDescription = state.title,
                     contentScale = ContentScale.Crop,
-                    modifier = GlanceModifier.fillMaxSize(),
+                    modifier = GlanceModifier.fillMaxSize().cornerRadius(side / 2),
                 )
             } else {
                 Box(

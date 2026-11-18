@@ -1,0 +1,221 @@
+{
+ "responseContext": {},
+ "contents": {
+  "twoColumnBrowseResultsRenderer": {
+   "tabs": [
+    {
+     "tabRenderer": {
+      "content": {
+       "sectionListRenderer": {
+        "contents": [
+         {
+          "musicResponsiveHeaderRenderer": {
+           "thumbnail": {
+            "musicThumbnailRenderer": {
+             "thumbnail": {
+              "thumbnails": [
+               {
+                "url": "https://i.ytimg.com/show.jpg",
+                "width": 544,
+                "height": 544
+               }
+              ]
+             }
+            }
+           },
+           "title": {
+            "runs": [
+             {
+              "text": "Huberman Lab"
+             }
+            ]
+           },
+           "straplineTextOne": {
+            "runs": [
+             {
+              "text": "Andrew Huberman",
+              "navigationEndpoint": {
+               "browseEndpoint": {
+                "browseId": "UC2D2CMWXMOVWx7giW1n3LIg"
+               }
+              }
+             }
+            ]
+           },
+           "description": {
+            "musicDescriptionShelfRenderer": {
+             "description": {
+              "runs": [
+               {
+                "text": "The Huberman Lab podcast."
+               }
+              ]
+             }
+            }
+           }
+          }
+         }
+        ]
+       }
+      }
+     }
+    }
+   ],
+   "secondaryContents": {
+    "sectionListRenderer": {
+     "contents": [
+      {
+       "musicShelfRenderer": {
+        "contents": [
+         {
+          "musicMultiRowListItemRenderer": {
+           "thumbnail": {
+            "musicThumbnailRenderer": {
+             "thumbnail": {
+              "thumbnails": [
+               {
+                "url": "https://i.ytimg.com/vi/7mEK5wZHpto/hqdefault.jpg",
+                "width": 400,
+                "height": 225
+               }
+              ]
+             }
+            }
+           },
+           "title": {
+            "runs": [
+             {
+              "text": "Mushrooms for the Mind & Immune System | Paul Stamets"
+             }
+            ]
+           },
+           "subtitle": {
+            "runs": [
+             {
+              "text": "230K views"
+             },
+             {
+              "text": " \u2022 "
+             },
+             {
+              "text": "1d ago"
+             }
+            ]
+           },
+           "description": {
+            "runs": [
+             {
+              "text": "Paul Stamets is widely regarded as the father of modern appl"
+             }
+            ]
+           },
+           "playbackProgress": {
+            "musicPlaybackProgressRenderer": {
+             "durationText": {
+              "runs": [
+               {
+                "text": " \u2022 "
+               },
+               {
+                "text": "2 hr 28 min"
+               }
+              ]
+             }
+            }
+           },
+           "onTap": {
+            "watchEndpoint": {
+             "videoId": "7mEK5wZHpto",
+             "watchEndpointMusicSupportedConfigs": {
+              "watchEndpointMusicConfig": {
+               "musicVideoType": "MUSIC_VIDEO_TYPE_PODCAST_EPISODE"
+              }
+             }
+            }
+           }
+          }
+         },
+         {
+          "musicMultiRowListItemRenderer": {
+           "thumbnail": {
+            "musicThumbnailRenderer": {
+             "thumbnail": {
+              "thumbnails": [
+               {
+                "url": "https://i.ytimg.com/vi/1rn_Clc-MM0/hqdefault.jpg",
+                "width": 400,
+                "height": 225
+               }
+              ]
+             }
+            }
+           },
+           "title": {
+            "runs": [
+             {
+              "text": "Essentials: How Emotions & Social Factors Impact Learning | Dr. Mary Helen Immordino-Yang"
+             }
+            ]
+           },
+           "subtitle": {
+            "runs": [
+             {
+              "text": "114K views"
+             },
+             {
+              "text": " \u2022 "
+             },
+             {
+              "text": "5d ago"
+             }
+            ]
+           },
+           "description": {
+            "runs": [
+             {
+              "text": "In this Huberman Lab Essentials episode, my guest is Dr. Mar"
+             }
+            ]
+           },
+           "playbackProgress": {
+            "musicPlaybackProgressRenderer": {
+             "durationText": {
+              "runs": [
+               {
+                "text": " \u2022 "
+               },
+               {
+                "text": "38 min"
+               }
+              ]
+             }
+            }
+           },
+           "onTap": {
+            "watchEndpoint": {
+             "videoId": "1rn_Clc-MM0",
+             "watchEndpointMusicSupportedConfigs": {
+              "watchEndpointMusicConfig": {
+               "musicVideoType": "MUSIC_VIDEO_TYPE_PODCAST_EPISODE"
+              }
+             }
+            }
+           }
+          }
+         }
+        ],
+        "continuations": [
+         {
+          "nextContinuationData": {
+           "continuation": "CONT_TOKEN"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   }
+  }
+ }
+}

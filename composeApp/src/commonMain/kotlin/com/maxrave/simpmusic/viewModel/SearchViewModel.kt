@@ -3,6 +3,7 @@ package com.maxrave.simpmusic.viewModel
 import com.maxrave.domain.data.model.searchResult.SearchSummary
 import androidx.lifecycle.viewModelScope
 import com.maxrave.domain.data.entities.SearchHistory
+import com.maxrave.domain.data.model.podcast.PodcastEpisode
 import com.maxrave.domain.data.model.searchResult.albums.AlbumsResult
 import com.maxrave.domain.data.model.searchResult.artists.ArtistsResult
 import com.maxrave.domain.data.model.searchResult.playlists.PlaylistsResult
@@ -36,6 +37,7 @@ data class SearchScreenState(
     val searchPlaylistsResult: List<PlaylistsResult> = emptyList(),
     val searchFeaturedPlaylistsResult: List<PlaylistsResult> = emptyList(),
     val searchPodcastsResult: List<PlaylistsResult> = emptyList(),
+    val searchEpisodesResult: List<PodcastEpisode> = emptyList(),
     val suggestQueries: List<String> = emptyList(),
     val suggestYTItems: List<SearchResultType> = emptyList(),
     val summary: SearchSummary? = null,
@@ -51,6 +53,7 @@ enum class SearchType {
     PLAYLISTS,
     FEATURED_PLAYLISTS,
     PODCASTS,
+    EPISODES,
 }
 
 sealed class SearchScreenUIState {
@@ -195,7 +198,8 @@ class SearchViewModel(
                 SearchType.ARTISTS -> state.searchArtistsResult.isNotEmpty()
                 SearchType.PLAYLISTS -> state.searchPlaylistsResult.isNotEmpty()
                 SearchType.FEATURED_PLAYLISTS -> state.searchFeaturedPlaylistsResult.isNotEmpty()
-                SearchType.PODCASTS -> true
+                SearchType.PODCASTS -> state.searchPodcastsResult.isNotEmpty()
+                SearchType.EPISODES -> state.searchEpisodesResult.isNotEmpty()
             }
         if (loaded) {
             _searchScreenUIState.value = SearchScreenUIState.Success
@@ -208,6 +212,8 @@ class SearchViewModel(
             SearchType.ARTISTS -> searchArtists(query)
             SearchType.PLAYLISTS -> searchPlaylists(query)
             SearchType.FEATURED_PLAYLISTS -> searchFeaturedPlaylist(query)
+            SearchType.PODCASTS -> searchPodcasts(query)
+            SearchType.EPISODES -> searchEpisodes(query)
             else -> Unit
         }
     }
@@ -367,6 +373,42 @@ class SearchViewModel(
                     is Resource.Error -> {
                         _searchScreenUIState.value = SearchScreenUIState.Error
                     }
+                }
+            }
+        }
+    }
+
+    fun searchPodcasts(query: String) {
+        _searchScreenUIState.value = SearchScreenUIState.Loading
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
+            searchRepository.getSearchDataPodcast(query).collect { values ->
+                if (_searchScreenState.value.query.isNotBlank() && _searchScreenState.value.query != query) return@collect
+                when (values) {
+                    is Resource.Success -> {
+                        values.data?.let { list -> _searchScreenState.update { it.copy(searchPodcastsResult = list) } }
+                        _searchScreenUIState.value = SearchScreenUIState.Success
+                    }
+
+                    is Resource.Error -> _searchScreenUIState.value = SearchScreenUIState.Error
+                }
+            }
+        }
+    }
+
+    fun searchEpisodes(query: String) {
+        _searchScreenUIState.value = SearchScreenUIState.Loading
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
+            searchRepository.getSearchDataEpisode(query).collect { values ->
+                if (_searchScreenState.value.query.isNotBlank() && _searchScreenState.value.query != query) return@collect
+                when (values) {
+                    is Resource.Success -> {
+                        values.data?.let { list -> _searchScreenState.update { it.copy(searchEpisodesResult = list) } }
+                        _searchScreenUIState.value = SearchScreenUIState.Success
+                    }
+
+                    is Resource.Error -> _searchScreenUIState.value = SearchScreenUIState.Error
                 }
             }
         }

@@ -16,13 +16,14 @@ import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.kotlinytmusicscraper.models.BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.Companion.MUSIC_PAGE_TYPE_ALBUM
 import com.maxrave.kotlinytmusicscraper.models.BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.Companion.MUSIC_PAGE_TYPE_ARTIST
 import com.maxrave.kotlinytmusicscraper.models.BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.Companion.MUSIC_PAGE_TYPE_PLAYLIST
+import com.maxrave.kotlinytmusicscraper.models.BrowseEndpoint.BrowseEndpointContextSupportedConfigs.BrowseEndpointContextMusicConfig.Companion.MUSIC_PAGE_TYPE_PODCAST_SHOW_DETAIL_PAGE
 import com.maxrave.kotlinytmusicscraper.models.MusicResponsiveListItemRenderer
 import com.maxrave.kotlinytmusicscraper.models.NavigationEndpoint
 import com.maxrave.kotlinytmusicscraper.models.Run
 import com.maxrave.kotlinytmusicscraper.models.ThumbnailRenderer
 import com.maxrave.kotlinytmusicscraper.models.response.SearchResponse
 
-private val SUPPORTED_CHIPS = setOf("Songs", "Videos", "Albums", "Artists", "Community playlists", "Featured playlists")
+private val SUPPORTED_CHIPS = setOf("Songs", "Videos", "Albums", "Artists", "Community playlists", "Featured playlists", "Podcasts", "Episodes")
 
 internal fun parseSearchSummary(response: SearchResponse): SearchSummary {
     val sectionList =
@@ -108,6 +109,8 @@ internal fun parseSearchSummary(response: SearchResponse): SearchSummary {
     )
 }
 
+private const val EPISODE_TYPE = "MUSIC_VIDEO_TYPE_PODCAST_EPISODE"
+
 private fun WatchEndpoint.musicVideoType(): String? = watchEndpointMusicSupportedConfigs?.watchEndpointMusicConfig?.musicVideoType
 
 private fun MusicResponsiveListItemRenderer.toSearchRow(): SearchRow? {
@@ -146,12 +149,13 @@ private fun rowFrom(
     val browseId = endpoint?.browseEndpoint?.browseId
     val kind =
         when {
+            videoType == EPISODE_TYPE && !videoId.isNullOrEmpty() -> SearchRowKind.EPISODE
+            pageType == MUSIC_PAGE_TYPE_PODCAST_SHOW_DETAIL_PAGE || browseId?.startsWith("MPSP") == true -> SearchRowKind.PODCAST
             pageType == MUSIC_PAGE_TYPE_ARTIST -> SearchRowKind.ARTIST
             pageType == MUSIC_PAGE_TYPE_ALBUM -> SearchRowKind.ALBUM
             pageType == MUSIC_PAGE_TYPE_PLAYLIST -> SearchRowKind.PLAYLIST
             browseId != null -> return null
             videoId.isNullOrEmpty() -> return null
-            videoType == "MUSIC_VIDEO_TYPE_PODCAST_EPISODE" -> return null
             MusicVideoType.isPlayableSong(videoType) -> SearchRowKind.SONG
             else -> SearchRowKind.VIDEO
         }
@@ -174,14 +178,13 @@ private fun rowFrom(
                     emptyList()
                 }
             }
+    val albumPageType = if (kind == SearchRowKind.EPISODE) MUSIC_PAGE_TYPE_PODCAST_SHOW_DETAIL_PAGE else MUSIC_PAGE_TYPE_ALBUM
     val album =
         secondLine
             .firstOrNull { run ->
-                run.navigationEndpoint
-                    ?.browseEndpoint
-                    ?.browseEndpointContextSupportedConfigs
-                    ?.browseEndpointContextMusicConfig
-                    ?.pageType == MUSIC_PAGE_TYPE_ALBUM
+                val endpoint = run.navigationEndpoint?.browseEndpoint
+                endpoint?.browseEndpointContextSupportedConfigs?.browseEndpointContextMusicConfig?.pageType == albumPageType ||
+                    (kind == SearchRowKind.EPISODE && endpoint?.browseId?.startsWith("MPSP") == true)
             }?.let { run -> run.navigationEndpoint?.browseEndpoint?.browseId?.let { Album(id = it, name = run.text) } }
     val duration =
         secondLine
@@ -211,12 +214,12 @@ private fun rowFrom(
             playlistId = null,
             browseId =
                 when (kind) {
-                    SearchRowKind.SONG, SearchRowKind.VIDEO -> null
+                    SearchRowKind.SONG, SearchRowKind.VIDEO, SearchRowKind.EPISODE -> null
                     else -> browseId
                 },
             thumbnails = thumbnails,
             title = title,
-            videoId = if (kind == SearchRowKind.SONG || kind == SearchRowKind.VIDEO) videoId else null,
+            videoId = if (kind == SearchRowKind.SONG || kind == SearchRowKind.VIDEO || kind == SearchRowKind.EPISODE) videoId else null,
             views = null,
             durationSeconds = duration,
             videoType = videoType,

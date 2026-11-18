@@ -4,12 +4,15 @@ import com.maxrave.domain.data.model.searchResult.SearchSummary
 import com.maxrave.data.parser.search.parseSearchSummary
 import com.maxrave.data.db.datasource.LocalDataSource
 import com.maxrave.data.mapping.toDomainSearchSuggestions
+import com.maxrave.data.parser.parseEpisodeSearch
+import com.maxrave.data.parser.parsePodcast
 import com.maxrave.data.parser.search.parseSearchAlbum
 import com.maxrave.data.parser.search.parseSearchArtist
 import com.maxrave.data.parser.search.parseSearchPlaylist
 import com.maxrave.data.parser.search.parseSearchSong
 import com.maxrave.data.parser.search.parseSearchVideo
 import com.maxrave.domain.data.entities.SearchHistory
+import com.maxrave.domain.data.model.podcast.PodcastEpisode
 import com.maxrave.domain.data.model.searchResult.SearchSuggestions
 import com.maxrave.domain.data.model.searchResult.albums.AlbumsResult
 import com.maxrave.domain.data.model.searchResult.artists.ArtistsResult
@@ -255,6 +258,48 @@ internal class SearchRepositoryImpl(
             }
         }.flowOn(Dispatchers.IO)
 
+    override fun getSearchDataPodcast(query: String): Flow<Resource<ArrayList<PlaylistsResult>>> =
+        flow {
+            val first = youTube.search(query, YouTube.SearchFilter.FILTER_PODCAST)
+            val result = first.getOrNull()
+            if (result == null) {
+                emit(Resource.Error<ArrayList<PlaylistsResult>>(first.exceptionOrNull()?.message.toString()))
+                return@flow
+            }
+            val list = ArrayList(parsePodcast(result.listPodcast))
+            emit(Resource.Success(ArrayList(list)))
+            var continueParam = result.continuation
+            var count = 0
+            while (count < 2 && continueParam != null) {
+                val values = youTube.searchContinuation(continueParam).getOrNull()
+                if (values != null) list.addAll(parsePodcast(values.listPodcast))
+                continueParam = values?.continuation
+                count++
+            }
+            emit(Resource.Success(ArrayList(list.distinctBy { it.browseId })))
+        }.flowOn(Dispatchers.IO)
+
+    override fun getSearchDataEpisode(query: String): Flow<Resource<ArrayList<PodcastEpisode>>> =
+        flow {
+            val first = youTube.search(query, FILTER_EPISODE)
+            val result = first.getOrNull()
+            if (result == null) {
+                emit(Resource.Error<ArrayList<PodcastEpisode>>(first.exceptionOrNull()?.message.toString()))
+                return@flow
+            }
+            val list = ArrayList(parseEpisodeSearch(result))
+            emit(Resource.Success(ArrayList(list)))
+            var continueParam = result.continuation
+            var count = 0
+            while (count < 2 && continueParam != null) {
+                val values = youTube.searchContinuation(continueParam).getOrNull()
+                if (values != null) list.addAll(parseEpisodeSearch(values))
+                continueParam = values?.continuation
+                count++
+            }
+            emit(Resource.Success(ArrayList(list.distinctBy { it.videoId })))
+        }.flowOn(Dispatchers.IO)
+
     override fun getSearchSummary(query: String): Flow<Resource<SearchSummary>> =
         flow {
             youTube
@@ -279,4 +324,8 @@ internal class SearchRepositoryImpl(
                     }
             }
         }.flowOn(Dispatchers.IO)
+
+    private companion object {
+        val FILTER_EPISODE = YouTube.SearchFilter("EgWKAQJIAWoMEA4QChADEAQQCRAF")
+    }
 }

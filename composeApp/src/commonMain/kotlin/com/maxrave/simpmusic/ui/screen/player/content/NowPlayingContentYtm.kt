@@ -1,5 +1,21 @@
 package com.maxrave.simpmusic.ui.screen.player.content
 
+import com.maxrave.domain.mediaservice.PodcastPlayback
+import com.maxrave.domain.utils.MusicVideoType
+import com.maxrave.simpmusic.ui.icon.Speed
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.maxrave.domain.mediaservice.RenditionController
+import com.maxrave.domain.repository.RefineControlRepository
+import com.maxrave.domain.repository.ControlTarget
+import com.maxrave.simpmusic.expect.ui.VideoSurface
+import com.maxrave.simpmusic.expect.ui.FullscreenOrientation
+import com.maxrave.simpmusic.ui.icon.Fullscreen
+import com.maxrave.simpmusic.ui.icon.FullscreenExit
+import simpmusic.composeapp.generated.resources.ytm_mode_song
+import simpmusic.composeapp.generated.resources.ytm_mode_video
+import simpmusic.composeapp.generated.resources.ytm_fullscreen
+import simpmusic.composeapp.generated.resources.ytm_exit_fullscreen
 import simpmusic.composeapp.generated.resources.ytm_comments
 import com.maxrave.simpmusic.ui.icon.Comment
 import com.maxrave.simpmusic.ui.component.ytm.rememberCommentsState
@@ -218,6 +234,11 @@ fun NowPlayingContentYtm(
     actions: NowPlayingContentActions,
 ) {
     var openTab by rememberSaveable { mutableStateOf<PlayerTab?>(null) }
+    var fullscreen by rememberSaveable { mutableStateOf(false) }
+    val renditionController: RenditionController = koinInject()
+    val renditions by renditionController.current.collectAsStateWithLifecycle()
+    val showingVideo = renditions?.playingVideo == true
+    LaunchedEffect(showingVideo) { if (!showingVideo) fullscreen = false }
     val tint = state.startColor.value.forPlayerBackground()
     val background =
         remember(tint) {
@@ -242,7 +263,9 @@ fun NowPlayingContentYtm(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     TopBar(state, actions)
-                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Artwork(state, actions) }
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Artwork(state, actions, showingVideo, onFullscreen = { fullscreen = true })
+                    }
                     Spacer(Modifier.height(24.dp))
                     Column(Modifier.widthIn(max = 560.dp)) {
                         TitleBlock(state, actions)
@@ -279,7 +302,7 @@ fun NowPlayingContentYtm(
             TopBar(state, actions)
             Spacer(Modifier.height(12.dp))
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Artwork(state, actions)
+                Artwork(state, actions, showingVideo, onFullscreen = { fullscreen = true })
             }
             Spacer(Modifier.height(24.dp))
             TitleBlock(state, actions)
@@ -318,6 +341,88 @@ fun NowPlayingContentYtm(
                 onClose = { openTab = null },
             )
         }
+
+        if (fullscreen) {
+            FullscreenVideo(state, actions, onExit = { fullscreen = false })
+        }
+    }
+}
+
+@Composable
+private fun SongVideoSwitch(controller: RenditionController) {
+    val renditions by controller.current.collectAsStateWithLifecycle()
+    val videoMode by controller.videoMode.collectAsStateWithLifecycle()
+    val current = renditions ?: return
+    if (current.videoId == null) return
+    val videoOnly = current.songId == null
+    val videoSelected = videoOnly || videoMode
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(50))
+            .background(Color.White.copy(alpha = 0.12f))
+            .padding(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        listOf(false, true).forEach { video ->
+            val selected = video == videoSelected
+            val enabled = !videoOnly || video
+            Text(
+                text = stringResource(if (video) Res.string.ytm_mode_video else Res.string.ytm_mode_song),
+                style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium),
+                color = if (selected) Color.Black else Color.White.copy(alpha = if (enabled) 0.9f else 0.4f),
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (selected) Color.White else Color.Transparent)
+                        .clickable(enabled = enabled && !selected) { controller.setVideoMode(video) }
+                        .padding(horizontal = 18.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun FullscreenVideo(
+    state: NowPlayingContentState,
+    actions: NowPlayingContentActions,
+    onExit: () -> Unit,
+) {
+    var controlsVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(controlsVisible) {
+        if (controlsVisible) {
+            delay(3_000)
+            controlsVisible = false
+        }
+    }
+    PlatformBackHandler(enabled = true) { onExit() }
+    FullscreenOrientation()
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+            .pointerInput(Unit) { detectTapGestures(onTap = { controlsVisible = !controlsVisible }) },
+    ) {
+        VideoSurface(Modifier.fillMaxSize())
+        AnimatedVisibility(visible = controlsVisible, modifier = Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f))) {
+                IconButton(
+                    onClick = onExit,
+                    modifier = Modifier.align(Alignment.TopStart).windowInsetsPadding(WindowInsets.statusBars).padding(8.dp),
+                ) {
+                    Icon(SimpIcons.FullscreenExit, contentDescription = stringResource(Res.string.ytm_exit_fullscreen), tint = Color.White)
+                }
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(horizontal = 24.dp, vertical = 12.dp),
+                ) {
+                    SeekBar(state, actions)
+                    Transport(state, actions)
+                }
+            }
+        }
     }
 }
 
@@ -330,7 +435,11 @@ private fun TopBar(
         IconButton(onClick = actions.onDismiss) {
             Icon(state.dismissIcon, contentDescription = stringResource(Res.string.ytm_close_player), tint = Color.White)
         }
-        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { RefineControlPlayingOn() }
+        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+            val control: RefineControlRepository = koinInject()
+            val target by control.target.collectAsStateWithLifecycle()
+            if (target is ControlTarget.Remote) RefineControlPlayingOn() else SongVideoSwitch(koinInject())
+        }
         RefineControlButton()
         PlatformCastButton(tint = Color.White)
         IconButton(onClick = actions.onShowMoreSheet) {
@@ -344,6 +453,8 @@ private fun TopBar(
 private fun Artwork(
     state: NowPlayingContentState,
     actions: NowPlayingContentActions,
+    showingVideo: Boolean,
+    onFullscreen: () -> Unit,
 ) {
     val queue = state.artworkQueue
     val dataStoreManager: DataStoreManager = koinInject()
@@ -357,9 +468,9 @@ private fun Artwork(
     }
     Box(
         Modifier
-            .widthIn(max = 520.dp)
+            .widthIn(max = if (showingVideo) 960.dp else 520.dp)
             .fillMaxWidth()
-            .aspectRatio(1f, matchHeightConstraintsFirst = true)
+            .aspectRatio(if (showingVideo) 16f / 9f else 1f, matchHeightConstraintsFirst = true)
             .pointerInput(seekSeconds) {
                 detectTapGestures(
                     onDoubleTap = { offset ->
@@ -391,7 +502,18 @@ private fun Artwork(
                     } else {
                         queue.getOrNull(page)?.thumbnails?.lastOrNull()?.url
                     }
-                CoverImage(url, onLoaded = if (isCurrent) actions.onArtworkBitmap else null)
+                if (isCurrent && showingVideo) {
+                    Box(Modifier.fillMaxSize().clip(RoundedCornerShape(8.dp)).background(Color.Black)) {
+                        VideoSurface(Modifier.fillMaxSize())
+                    }
+                } else {
+                    CoverImage(url, onLoaded = if (isCurrent) actions.onArtworkBitmap else null)
+                }
+            }
+        }
+        if (showingVideo) {
+            IconButton(onClick = onFullscreen, modifier = Modifier.align(Alignment.BottomEnd)) {
+                Icon(SimpIcons.Fullscreen, contentDescription = stringResource(Res.string.ytm_fullscreen), tint = Color.White)
             }
         }
         seekFlash?.let { (forward, _) ->
@@ -470,6 +592,8 @@ private fun ActionPills(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        val current = state.artworkQueue.getOrNull(state.currentOrderIndex)
+        if (MusicVideoType.isPodcast(current?.videoType)) SpeedPill()
         val liked = state.controllerState.isLiked
         Pill(
             icon = SimpIcons.ThumbUp,
@@ -504,6 +628,36 @@ private fun ActionPills(
             )
         }
     }
+}
+
+@Composable
+private fun SpeedPill() {
+    val dataStoreManager: DataStoreManager = koinInject()
+    val scope = rememberCoroutineScope()
+    val speed by dataStoreManager.playbackSpeed.collectAsState(1f)
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Pill(icon = SimpIcons.Speed, label = speedLabel(speed), onClick = { open = true })
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            PodcastPlayback.SPEEDS.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(speedLabel(option), fontWeight = if (option == speed) FontWeight.Bold else FontWeight.Normal) },
+                    onClick = {
+                        open = false
+                        scope.launch {
+                            dataStoreManager.putString(PodcastPlayback.SPEED_KEY, option.toString())
+                            dataStoreManager.setPlaybackSpeed(option)
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
+private fun speedLabel(speed: Float): String {
+    val text = if (speed % 1f == 0f) speed.toInt().toString() else speed.toString().trimEnd('0')
+    return "${text}\u00D7"
 }
 
 @Composable

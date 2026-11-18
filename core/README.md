@@ -1,2 +1,2 @@
 # core
-SimpMusic app's core modules
+Refine Music core modules (based on SimpMusic)

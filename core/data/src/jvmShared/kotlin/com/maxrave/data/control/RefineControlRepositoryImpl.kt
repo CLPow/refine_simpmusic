@@ -1,5 +1,7 @@
 package com.maxrave.data.control
 
+import com.maxrave.domain.mediaservice.RenditionController
+import org.koin.mp.KoinPlatform.getKoin
 import com.maxrave.common.LOCAL_PLAYLIST_ID
 import com.maxrave.data.security.SecretCodec
 import com.maxrave.domain.data.model.browse.album.Track
@@ -506,8 +508,11 @@ internal class RefineControlRepositoryImpl(
             nextAvailable = control.isNextAvailable,
             prevAvailable = control.isPreviousAvailable,
             playEpoch = epochFor(control.isPlaying),
+            videoMode = renditions?.videoMode?.value == true,
         )
     }
+
+    private val renditions: RenditionController? by lazy { runCatching { getKoin().getOrNull<RenditionController>() }.getOrNull() }
 
     override suspend fun onCommand(
         from: DeviceInfo,
@@ -622,6 +627,7 @@ internal class RefineControlRepositoryImpl(
     ): String? =
         withContext(playerContext) {
             if (!_enabled.value) return@withContext "off"
+            renditions?.setVideoMode(player.videoMode)
             takeOver(decodeQueue(queue), player.index, player.positionMs, player.repeat, play)
         }
 

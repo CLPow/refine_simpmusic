@@ -228,6 +228,9 @@ class JvmMediaPlayerHandlerImpl(
             .map { it == TRUE }
             .stateIn(coroutineScope, SharingStarted.Eagerly, false)
 
+    private val autoplayAllowed: Boolean
+        get() = endlessQueueOn.value && queueData.value?.data?.playlistType != PlaylistType.PODCAST
+
     private var unavailableSkips = 0
 
     private val networkResume = NetworkResumeWatcher(coroutineScope) { player.play() }
@@ -1321,7 +1324,7 @@ class JvmMediaPlayerHandlerImpl(
                                             ),
                                     )
                                 }
-                                if (endlessQueueOn.value) {
+                                if (autoplayAllowed) {
                                     Logger.w(TAG, "loadMore: Endless Queue")
                                     val lastTrack =
                                         queueData.value.data.listTracks
@@ -1348,7 +1351,7 @@ class JvmMediaPlayerHandlerImpl(
                         }
                 }
             }
-        } else if (endlessQueueOn.value) {
+        } else if (autoplayAllowed) {
             Logger.w(TAG, "loadMore: Endless Queue")
             val lastTrack =
                 queueData.value.data.listTracks
@@ -2245,7 +2248,7 @@ class JvmMediaPlayerHandlerImpl(
             startReporting(nowPlayingState.value.songEntity?.videoId ?: mediaItem.mediaId.removePrefix(MERGING_DATA_TYPE.VIDEO))
         }
         queueData.value.data.listTracks.let { list ->
-            if ((list.size > 3 || endlessQueueOn.value) &&
+            if ((list.size > 3 || autoplayAllowed) &&
                 list.size - player.currentMediaItemIndex < 3 &&
                 list.size - player.currentMediaItemIndex >= 0 &&
                 queueData.value.queueState == QueueData.StateSource.STATE_INITIALIZED

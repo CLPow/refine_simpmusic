@@ -8,6 +8,7 @@ import com.maxrave.simpmusic.ui.component.selection.SongSelectionOverlay
 import com.maxrave.simpmusic.ui.component.selection.rememberSongSelectionState
 import com.maxrave.simpmusic.ui.icon.PushPin
 import kotlinx.coroutines.launch
+import kotlinx.datetime.toLocalDateTime
 import simpmusic.composeapp.generated.resources.ytm_pin
 import simpmusic.composeapp.generated.resources.ytm_unpin
 import simpmusic.composeapp.generated.resources.ytm_pinned
@@ -82,6 +83,13 @@ import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.LocalPlaylistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
+import com.maxrave.simpmusic.ui.navigation.destination.list.EpisodesForLaterDestination
+import com.maxrave.simpmusic.ui.navigation.destination.list.PodcastDestination
+import com.maxrave.simpmusic.ui.icon.Bookmark
+import simpmusic.composeapp.generated.resources.podcast_episodes_for_later
+import simpmusic.composeapp.generated.resources.podcast_library_empty
+import simpmusic.composeapp.generated.resources.podcast_n_episodes
+import simpmusic.composeapp.generated.resources.podcast_podcast
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.LibraryChip
 import com.maxrave.simpmusic.viewModel.LibrarySort
@@ -151,6 +159,8 @@ fun LibraryScreen(
     val albums by viewModel.albums.collectAsStateWithLifecycle()
     val artists by viewModel.artists.collectAsStateWithLifecycle()
     val downloads by viewModel.downloads.collectAsStateWithLifecycle()
+    val podcasts by viewModel.podcasts.collectAsStateWithLifecycle()
+    val episodesForLater by viewModel.episodesForLater.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     var menuSong by remember { mutableStateOf<SongEntity?>(null) }
     var showNewPlaylist by remember { mutableStateOf(false) }
@@ -180,6 +190,9 @@ fun LibraryScreen(
     val artistLabel = stringResource(Res.string.ytm_artist)
     val likedSongsName = stringResource(Res.string.ytm_liked_songs)
     val downloadsName = stringResource(Res.string.ytm_downloads)
+    val podcastLabel = stringResource(Res.string.podcast_podcast)
+    val laterName = stringResource(Res.string.podcast_episodes_for_later)
+    val laterCount = pluralStringResource(Res.plurals.podcast_n_episodes, episodesForLater.size, episodesForLater.size)
 
     fun playSongs(
         songs: List<SongEntity>,
@@ -200,7 +213,7 @@ fun LibraryScreen(
     }
 
     val entries: List<LibraryEntry> =
-        remember(chip, sort, loggedIn, youTubePlaylists, localPlaylists, liked, albums, artists, downloads, likedMusic, pinnedKeys) {
+        remember(chip, sort, loggedIn, youTubePlaylists, localPlaylists, liked, albums, artists, downloads, likedMusic, pinnedKeys, podcasts, episodesForLater, laterCount) {
             fun playlistEntries() =
                 buildList {
                     add(
@@ -265,6 +278,32 @@ fun LibraryScreen(
                     ) { navController.navigate(ArtistDestination(channelId = a.channelId)) }
                 }
 
+            fun podcastEntries(includeLater: Boolean) =
+                buildList {
+                    if (includeLater) {
+                        add(
+                            LibraryEntry(
+                                key = LATER_KEY,
+                                title = laterName,
+                                subtitle = listOf(autoPlaylist, laterCount).joinToString(" • "),
+                                thumbnail = null,
+                                sortKey = Long.MAX_VALUE - 1,
+                            ) { navController.navigate(EpisodesForLaterDestination) },
+                        )
+                    }
+                    podcasts.forEach { p ->
+                        add(
+                            LibraryEntry(
+                                key = "podcast-${p.podcastId}",
+                                title = p.title,
+                                subtitle = listOf(podcastLabel, p.authorName).filter { it.isNotBlank() }.joinToString(" • "),
+                                thumbnail = p.thumbnail,
+                                sortKey = p.savedAt.millisToEpochKey(),
+                            ) { navController.navigate(PodcastDestination(podcastId = p.podcastId)) },
+                        )
+                    }
+                }
+
             fun songEntries(
                 songs: List<SongEntity>,
                 name: String,
@@ -281,11 +320,12 @@ fun LibraryScreen(
 
             val list =
                 when (chip) {
-                    null -> playlistEntries() + albumEntries() + artistEntries()
+                    null -> playlistEntries() + albumEntries() + artistEntries() + podcastEntries(episodesForLater.isNotEmpty())
                     LibraryChip.Playlists -> playlistEntries()
                     LibraryChip.Songs -> songEntries(liked, likedSongsName) { (it.favoriteAt ?: it.inLibrary).toEpochKey() }
                     LibraryChip.Albums -> albumEntries()
                     LibraryChip.Artists -> artistEntries()
+                    LibraryChip.Podcasts -> podcastEntries(true)
                     LibraryChip.Downloads -> songEntries(downloads, downloadsName) { (it.downloadedAt ?: it.inLibrary).toEpochKey() }
                 }
             val sorted =
@@ -348,6 +388,7 @@ fun LibraryScreen(
                                     LibraryChip.Songs -> stringResource(Res.string.ytm_library_empty_songs)
                                     LibraryChip.Albums -> stringResource(Res.string.ytm_library_empty_albums)
                                     LibraryChip.Artists -> stringResource(Res.string.ytm_library_empty_artists)
+                                    LibraryChip.Podcasts -> stringResource(Res.string.podcast_library_empty)
                                     LibraryChip.Downloads -> stringResource(Res.string.ytm_library_empty_downloads)
                                     LibraryChip.Playlists, null -> ""
                                 },
@@ -446,6 +487,13 @@ private fun EntryThumb(
             contentAlignment = Alignment.Center,
         ) {
             Icon(SimpIcons.ThumbUp, contentDescription = null, tint = Color.White, modifier = Modifier.size(side * 0.45f))
+        }
+    } else if (entry.key == LATER_KEY) {
+        Box(
+            Modifier.size(side).clip(shape).background(Color(0xFF2E5C8A)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(SimpIcons.Bookmark, contentDescription = null, tint = Color.White, modifier = Modifier.size(side * 0.45f))
         }
     } else if (entry.thumbnail == null) {
         Box(Modifier.size(side).clip(shape).background(Ytm.Raised), contentAlignment = Alignment.Center) {
@@ -596,5 +644,13 @@ internal fun NewPlaylistDialog(
 private fun kotlinx.datetime.LocalDateTime.toEpochKey(): Long =
     ((((year * 12L + month.ordinal) * 31 + day) * 24 + hour) * 60 + minute) * 60 + second
 
+private fun Long.millisToEpochKey(): Long =
+    kotlin.time.Instant
+        .fromEpochMilliseconds(this)
+        .toLocalDateTime(kotlinx.datetime.TimeZone.currentSystemDefault())
+        .toEpochKey()
+
 // Liked Music's entry: always first, never pinned.
 private const val LIKED_KEY = "liked"
+
+private const val LATER_KEY = "episodes-for-later"

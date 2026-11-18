@@ -25,6 +25,7 @@ import com.maxrave.common.FIRST_TIME_MIGRATION
 import com.maxrave.common.STATUS_DONE
 import com.maxrave.common.SUPPORTED_LOCATION
 import com.maxrave.domain.data.model.intent.GenericIntent
+import com.maxrave.domain.data.player.AppOnScreen
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
 import com.maxrave.domain.mediaservice.handler.ToastType
@@ -71,11 +72,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        AppOnScreen.set(true)
         startMusicService()
     }
 
     override fun onStop() {
         super.onStop()
+        if (!isChangingConfigurations) AppOnScreen.set(false)
         if (shouldUnbind) {
             unbindService(serviceConnection)
         }

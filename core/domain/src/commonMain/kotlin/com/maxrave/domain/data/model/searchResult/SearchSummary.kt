@@ -3,7 +3,7 @@ package com.maxrave.domain.data.model.searchResult
 import com.maxrave.domain.data.model.home.Content
 import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
 
-enum class SearchRowKind { SONG, VIDEO, ALBUM, ARTIST, PLAYLIST }
+enum class SearchRowKind { SONG, VIDEO, ALBUM, ARTIST, PLAYLIST, PODCAST, EPISODE }
 
 data class SearchRow(
     val kind: SearchRowKind,

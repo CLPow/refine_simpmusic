@@ -266,7 +266,7 @@ internal fun SearchSuggestions.toDomainSearchSuggestions(): com.maxrave.domain.d
         queries = this.queries,
         recommendedItems =
             this.recommendedItems
-                .filterNot { it is VideoItem || (it is SongItem && !MusicVideoType.isPlayableSong(it.musicVideoType)) }
+                .filterNot { it is SongItem && MusicVideoType.isPodcast(it.musicVideoType) }
                 .map {
                 when (it) {
                     is SongItem -> {

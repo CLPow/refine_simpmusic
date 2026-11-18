@@ -1,10 +1,13 @@
 package com.simpmusic.media_jvm.mpv
 
 import com.maxrave.logger.Logger
+import com.sun.jna.Callback
 import com.sun.jna.Library
+import com.sun.jna.Memory
 import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
+import com.sun.jna.ptr.PointerByReference
 
 private const val TAG = "MpvLibrary"
 
@@ -65,6 +68,27 @@ interface MpvLibrary : Library {
     ): Pointer?
 
     fun mpv_wakeup(ctx: Pointer)
+
+    fun mpv_render_context_create(
+        res: PointerByReference,
+        mpv: Pointer,
+        params: Pointer,
+    ): Int
+
+    fun mpv_render_context_render(
+        ctx: Pointer,
+        params: Pointer,
+    ): Int
+
+    fun mpv_render_context_set_update_callback(
+        ctx: Pointer,
+        callback: MpvRenderUpdateFn?,
+        callbackCtx: Pointer?,
+    )
+
+    fun mpv_render_context_update(ctx: Pointer): Long
+
+    fun mpv_render_context_free(ctx: Pointer)
 
     fun mpv_free(data: Pointer)
 
@@ -312,4 +336,51 @@ open class MpvEventEndFile(
     @JvmField var reason: Int = 0
 
     @JvmField var error: Int = 0
+}
+
+object MpvRenderParamType {
+    const val INVALID = 0
+    const val API_TYPE = 1
+    const val ADVANCED_CONTROL = 10
+    const val SW_SIZE = 17
+    const val SW_FORMAT = 18
+    const val SW_STRIDE = 19
+    const val SW_POINTER = 20
+}
+
+const val MPV_RENDER_API_TYPE_SW = "sw"
+
+object MpvRenderUpdateFlag {
+    const val FRAME = 1 shl 0
+}
+
+fun interface MpvRenderUpdateFn : Callback {
+    fun invoke(cbCtx: Pointer?)
+}
+
+private const val RENDER_PARAM_SIZE = 16L
+private const val RENDER_PARAM_DATA_OFFSET = 8L
+
+internal fun buildRenderParams(params: List<Pair<Int, Pointer?>>): Memory {
+    val block = Memory(RENDER_PARAM_SIZE * (params.size + 1))
+    block.clear()
+    params.forEachIndexed { i, (type, data) ->
+        val base = RENDER_PARAM_SIZE * i
+        block.setInt(base, type)
+        block.setPointer(base + RENDER_PARAM_DATA_OFFSET, data)
+    }
+    return block
+}
+
+internal fun buildEdlUrl(
+    videoUrl: String,
+    audioUrl: String,
+): String =
+    listOf(videoUrl, audioUrl).joinToString(separator = ";", prefix = "edl://") { url ->
+        "!new_stream;${edlEscape(url)}"
+    }
+
+internal fun edlEscape(value: String): String {
+    val byteLength = value.toByteArray(Charsets.UTF_8).size
+    return "%$byteLength%$value"
 }

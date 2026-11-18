@@ -27,8 +27,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.graphics.Brush
-import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
-import com.maxrave.domain.utils.MusicVideoType
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -1010,14 +1008,16 @@ fun openContent(
     val browseId = content.browseId
     val playlistId = content.playlistId
     when {
-        !videoId.isNullOrEmpty() &&
-            !MusicVideoType.isPlayableSong(content.videoType) &&
-            !MusicVideoType.isOfficialVideo(content.videoType) ->
-            sharedViewModel.playRadio(
-                YouTubeWatchEndpoint(videoId = videoId, playlistId = "RDAMVM$videoId"),
-                content.title,
+        !videoId.isNullOrEmpty() && com.maxrave.domain.utils.MusicVideoType.isPodcast(content.videoType) ->
+            com.maxrave.simpmusic.ui.component.podcast.playEpisodes(
+                sharedViewModel,
+                emptyList(),
+                com.maxrave.simpmusic.ui.component.podcast.episodeFromContent(content),
             )
-
+        !browseId.isNullOrEmpty() && browseId.startsWith("MPSP") ->
+            navController.navigate(com.maxrave.simpmusic.ui.navigation.destination.list.PodcastDestination(podcastId = browseId))
+        !browseId.isNullOrEmpty() && browseId.startsWith("MPED") ->
+            navController.navigate(com.maxrave.simpmusic.ui.navigation.destination.list.EpisodeDestination(videoId = browseId.removePrefix("MPED")))
         !videoId.isNullOrEmpty() -> {
             val track = content.toTrack()
             sharedViewModel.setQueueData(

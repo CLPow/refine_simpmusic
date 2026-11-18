@@ -99,6 +99,12 @@ import com.maxrave.simpmusic.ui.icon.SimpIcons
 import com.maxrave.simpmusic.ui.navigation.destination.list.AlbumDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.ArtistDestination
 import com.maxrave.simpmusic.ui.navigation.destination.list.PlaylistDestination
+import com.maxrave.simpmusic.ui.navigation.destination.list.PodcastDestination
+import com.maxrave.domain.data.model.podcast.PodcastEpisode
+import com.maxrave.simpmusic.ui.component.podcast.EpisodeMenuFor
+import com.maxrave.simpmusic.ui.component.podcast.episodeFromContent
+import com.maxrave.simpmusic.ui.component.podcast.playEpisodes
+import simpmusic.composeapp.generated.resources.podcast_podcast
 import com.maxrave.simpmusic.ui.navigation.destination.search.SearchDestination
 import com.maxrave.simpmusic.ui.theme.typo
 import com.maxrave.simpmusic.viewModel.SearchScreenUIState
@@ -136,6 +142,8 @@ private val chipTypes =
         "Artists" to SearchType.ARTISTS,
         "Community playlists" to SearchType.PLAYLISTS,
         "Featured playlists" to SearchType.FEATURED_PLAYLISTS,
+        "Podcasts" to SearchType.PODCASTS,
+        "Episodes" to SearchType.EPISODES,
     )
 
 @Composable
@@ -153,6 +161,7 @@ fun SearchScreen(
     var editing by rememberSaveable { mutableStateOf(true) }
     var songSearch by remember { mutableStateOf(false) }
     var menuTrack by remember { mutableStateOf<Track?>(null) }
+    var menuEpisode by remember { mutableStateOf<PodcastEpisode?>(null) }
     var removeHistory by remember { mutableStateOf<String?>(null) }
     val focus = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
@@ -186,6 +195,9 @@ fun SearchScreen(
     }
 
     menuTrack?.let { NowPlayingBottomSheet(onDismiss = { menuTrack = null }, navController = navController, song = it.toSongEntity()) }
+    menuEpisode?.let { episode ->
+        EpisodeMenuFor(episode = episode, navController = navController, sharedViewModel = sharedViewModel, onDismiss = { menuEpisode = null })
+    }
 
     LaunchedEffect(Unit) { if (submitted == null) focus.requestFocus() }
     LaunchedEffect(query, editing) {
@@ -335,7 +347,13 @@ fun SearchScreen(
                 onVideo = ::playVideo,
                 onAlbum = { navController.navigate(AlbumDestination(browseId = it.browseId)) },
                 onArtist = { navController.navigate(ArtistDestination(channelId = it.browseId)) },
-                onPlaylist = { navController.navigate(PlaylistDestination(playlistId = it.browseId)) },
+                onPlaylist = {
+                    if (it.browseId.startsWith("MPSP")) {
+                        navController.navigate(PodcastDestination(podcastId = it.browseId))
+                    } else {
+                        navController.navigate(PlaylistDestination(playlistId = it.browseId))
+                    }
+                },
             )
             return@Column
         }
@@ -404,13 +422,42 @@ fun SearchScreen(
                                 PlaylistResultRow(p) { navController.navigate(PlaylistDestination(playlistId = p.browseId)) }
                             }
 
+                        SearchType.PODCASTS ->
+                            itemsIndexed(state.searchPodcastsResult, key = { i, it -> "pc-$i-" + it.browseId }) { _, p ->
+                                ResultRow(
+                                    title = p.title,
+                                    subtitle = listOf(stringResource(Res.string.podcast_podcast), p.author).filter { it.isNotBlank() }.joinToString(" • "),
+                                    thumbnail = p.thumbnails.lastOrNull()?.url,
+                                    shape = ThumbShape.Square,
+                                    onClick = { navController.navigate(PodcastDestination(podcastId = p.browseId)) },
+                                )
+                            }
+
+                        SearchType.EPISODES ->
+                            itemsIndexed(state.searchEpisodesResult, key = { i, it -> "e-$i-" + it.videoId }) { _, episode ->
+                                ResultRow(
+                                    title = episode.title,
+                                    subtitle = listOfNotNull(episode.createdDay, episode.podcastTitle).filter { it.isNotBlank() }.joinToString(" • "),
+                                    thumbnail = episode.thumbnails.lastOrNull()?.url,
+                                    shape = ThumbShape.Wide,
+                                    onClick = { playEpisodes(sharedViewModel, emptyList(), episode) },
+                                    onMore = { menuEpisode = episode },
+                                )
+                            }
+
                         else ->
                             summaryPage(
                                 summary = state.summary,
                                 onRow = { openContent(it.content, navController, sharedViewModel) },
-                                onMore = { menuTrack = it.content.toTrack() },
+                                onMore = {
+                                    if (it.kind == SearchRowKind.EPISODE) {
+                                        menuEpisode = episodeFromContent(it.content)
+                                    } else {
+                                        menuTrack = it.content.toTrack()
+                                    }
+                                },
                                 onButton = { top, button ->
-                                    if (top.row.kind == SearchRowKind.SONG || top.row.kind == SearchRowKind.VIDEO) {
+                                    if (top.row.kind == SearchRowKind.SONG || top.row.kind == SearchRowKind.VIDEO || top.row.kind == SearchRowKind.EPISODE) {
                                         openContent(top.row.content, navController, sharedViewModel)
                                     } else {
                                         sharedViewModel.playRadio(button.endpoint, top.row.content.title)
@@ -426,6 +473,8 @@ fun SearchScreen(
                             SearchType.ARTISTS -> state.searchArtistsResult.isEmpty()
                             SearchType.PLAYLISTS -> state.searchPlaylistsResult.isEmpty()
                             SearchType.FEATURED_PLAYLISTS -> state.searchFeaturedPlaylistsResult.isEmpty()
+                            SearchType.PODCASTS -> state.searchPodcastsResult.isEmpty()
+                            SearchType.EPISODES -> state.searchEpisodesResult.isEmpty()
                             else -> false
                         }
                     if (filteredEmpty && uiState == SearchScreenUIState.Success) {
@@ -463,7 +512,7 @@ private fun LazyListScope.summaryPage(
     summary.sections.forEachIndexed { sectionIndex, (title, rows) ->
         if (title.isNotBlank()) item(key = "h-$sectionIndex") { SectionTitle(title) }
         itemsIndexed(rows, key = { index, _ -> "r-$sectionIndex-$index" }) { _, row ->
-            SummaryRow(row, { onRow(row) }, if (row.kind == SearchRowKind.SONG || row.kind == SearchRowKind.VIDEO) ({ onMore(row) }) else null)
+            SummaryRow(row, { onRow(row) }, if (row.hasMenu()) ({ onMore(row) }) else null)
         }
     }
 }
@@ -536,7 +585,7 @@ private fun TopResultCard(
             }
         }
         top.rows.forEach { sub ->
-            SummaryRow(sub, { onRow(sub) }, if (sub.kind == SearchRowKind.SONG || sub.kind == SearchRowKind.VIDEO) ({ onMore(sub) }) else null)
+            SummaryRow(sub, { onRow(sub) }, if (sub.hasMenu()) ({ onMore(sub) }) else null)
         }
         if (top.rows.isNotEmpty()) Spacer(Modifier.height(8.dp))
     }
@@ -554,12 +603,14 @@ private fun SummaryRow(
     shape =
         when (row.kind) {
             SearchRowKind.ARTIST -> ThumbShape.Round
-            SearchRowKind.VIDEO -> ThumbShape.Wide
+            SearchRowKind.VIDEO, SearchRowKind.EPISODE -> ThumbShape.Wide
             else -> ThumbShape.Square
         },
     onClick = onClick,
     onMore = onMore,
 )
+
+private fun SearchRow.hasMenu(): Boolean = kind == SearchRowKind.SONG || kind == SearchRowKind.VIDEO || kind == SearchRowKind.EPISODE
 
 @Composable
 private fun SectionTitle(title: String) {

@@ -22,11 +22,17 @@ class CachedSong(
     val isPartial: Boolean get() = contentLength <= 0L || bytes < contentLength
 }
 
-fun evictionOrder(songs: List<CachedSong>): List<CachedSong> =
+const val ACTIVE_WINDOW_MS = 30 * 60_000L
+
+fun evictionOrder(
+    songs: List<CachedSong>,
+    now: Long,
+): List<CachedSong> =
     songs.sortedWith(
         compareBy<CachedSong>(
             {
                 when {
+                    now - it.lastTouch < ACTIVE_WINDOW_MS -> 3
                     it.isPartial -> 0
                     it.plays <= 1 -> 1
                     else -> 2
@@ -114,7 +120,7 @@ class SongCacheEvictor(
                         plays = entry.plays,
                     )
                 }
-        for (song in evictionOrder(songs)) {
+        for (song in evictionOrder(songs, System.currentTimeMillis())) {
             if (currentSize + required <= maxBytes) return
             for (span in cache.getCachedSpans(song.key)) {
                 runCatching { cache.removeSpan(span) }

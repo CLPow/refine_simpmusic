@@ -2,10 +2,6 @@ package com.maxrave.simpmusic.ui.widget
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.unit.sp
@@ -27,6 +23,8 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import java.util.concurrent.atomic.AtomicBoolean
@@ -95,7 +93,27 @@ internal suspend fun Context.loadWidgetArtwork(
     px: Int = WIDGET_ART_PX,
 ): Bitmap? {
     if (url.isNullOrBlank()) return null
-    return runCatching { decodeWidgetArtwork(url, px) }.getOrNull()
+    return WidgetArtCache.get(this, url, px)
+}
+
+private object WidgetArtCache {
+    private const val MAX_ENTRIES = 12
+    private val mutex = Mutex()
+    private val entries = LinkedHashMap<String, Bitmap>(MAX_ENTRIES, 0.75f, true)
+
+    suspend fun get(
+        context: Context,
+        url: String,
+        px: Int,
+    ): Bitmap? =
+        mutex.withLock {
+            val key = "$px@$url"
+            entries[key]?.let { return@withLock it }
+            val bitmap = runCatching { context.decodeWidgetArtwork(url, px) }.getOrNull() ?: return@withLock null
+            entries[key] = bitmap
+            while (entries.size > MAX_ENTRIES) entries.remove(entries.keys.first())
+            bitmap
+        }
 }
 
 private suspend fun Context.decodeWidgetArtwork(
@@ -115,14 +133,3 @@ private suspend fun Context.decodeWidgetArtwork(
 }
 
 private const val WIDGET_ART_PX = 240
-
-internal fun Bitmap.toCircle(): Bitmap {
-    val side = minOf(width, height)
-    val out = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(out)
-    val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    canvas.drawCircle(side / 2f, side / 2f, side / 2f, paint)
-    paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-    canvas.drawBitmap(this, (side - width) / 2f, (side - height) / 2f, paint)
-    return out
-}
