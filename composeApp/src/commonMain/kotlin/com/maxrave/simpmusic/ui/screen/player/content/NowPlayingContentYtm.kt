@@ -249,6 +249,11 @@ fun NowPlayingContentYtm(
             )
         }
 
+    if (fullscreen) {
+        FullscreenVideo(state, actions, onExit = { fullscreen = false })
+        return
+    }
+
     BoxWithConstraints(Modifier.fillMaxSize().background(PageBlack).background(background)) {
         if (maxWidth >= 840.dp) {
             Row(
@@ -340,10 +345,6 @@ fun NowPlayingContentYtm(
                 onSelect = { openTab = it },
                 onClose = { openTab = null },
             )
-        }
-
-        if (fullscreen) {
-            FullscreenVideo(state, actions, onExit = { fullscreen = false })
         }
     }
 }

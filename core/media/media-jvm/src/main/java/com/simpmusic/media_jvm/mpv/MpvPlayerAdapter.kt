@@ -9,6 +9,7 @@ import com.maxrave.domain.extension.isVideo
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.mediaservice.Rendition
 import com.maxrave.domain.mediaservice.RenditionController
+import com.maxrave.domain.mediaservice.handler.PREMIUM_ONLY_ERROR_CODE_NAME
 import com.maxrave.domain.mediaservice.player.MediaPlayerInterface
 import com.maxrave.domain.mediaservice.player.MediaPlayerListener
 import com.maxrave.domain.repository.StreamRepository
@@ -1002,6 +1003,23 @@ class MpvPlayerAdapter(
                                 Logger.w(TAG, "First extract failed for $videoId, invalidating and retrying...")
                                 withContext(Dispatchers.IO) { invalidateStreams(videoId, rendition) }
                                 source = withContext(Dispatchers.IO) { extractPlayableUrl(videoId, rendition) }
+                            }
+                            if ((source == null || source.url.isEmpty()) && streamRepository.isPremiumOnly(rendition.audioId)) {
+                                if (renditions.fallBackToVideoAudio(videoId)) {
+                                    Logger.w(TAG, "$videoId needs Premium; playing its music video's audio")
+                                    val fallback = renditions.renditionFor(videoId)
+                                    source = withContext(Dispatchers.IO) { extractPlayableUrl(videoId, fallback) }
+                                } else {
+                                    val error =
+                                        PlayerError(
+                                            errorCode = MPV_ERROR_CODE,
+                                            errorCodeName = PREMIUM_ONLY_ERROR_CODE_NAME,
+                                            message = "$videoId is only available to YouTube Music Premium members",
+                                        )
+                                    listeners.forEach { it.onPlayerError(error) }
+                                    transitionToState(InternalState.ERROR, emitError = false)
+                                    return@launch
+                                }
                             }
                             if (source == null || source.url.isEmpty()) {
                                 Logger.e(TAG, "Failed to extract playable URL for $videoId after retry")

@@ -1,6 +1,8 @@
 package com.maxrave.media3.exoplayer
 
+import com.maxrave.media3.di.PremiumOnlyException
 import com.maxrave.media3.di.WifiOnlyException
+import com.maxrave.domain.mediaservice.handler.PREMIUM_ONLY_ERROR_CODE_NAME
 import com.maxrave.domain.mediaservice.handler.WIFI_ONLY_ERROR_CODE_NAME
 import android.annotation.SuppressLint
 import android.content.Context
@@ -1062,7 +1064,12 @@ internal class ExoPlayerAdapter(
                         PlaybackException.ERROR_CODE_TIMEOUT -> PlayerConstants.ERROR_CODE_TIMEOUT
                         else -> error.errorCode
                     },
-                errorCodeName = if (error.isWifiOnlyRefusal()) WIFI_ONLY_ERROR_CODE_NAME else error.errorCodeName,
+                errorCodeName =
+                    when {
+                        error.isWifiOnlyRefusal() -> WIFI_ONLY_ERROR_CODE_NAME
+                        error.isPremiumOnlyRefusal() -> PREMIUM_ONLY_ERROR_CODE_NAME
+                        else -> error.errorCodeName
+                    },
                 message = error.message,
             )
         Logger.e(TAG, "Playback error: ${error.message}")
@@ -1071,6 +1078,8 @@ internal class ExoPlayerAdapter(
     }
 
     private fun Throwable.isWifiOnlyRefusal(): Boolean = generateSequence(this) { it.cause }.any { it is WifiOnlyException }
+
+    private fun Throwable.isPremiumOnlyRefusal(): Boolean = generateSequence(this) { it.cause }.any { it is PremiumOnlyException }
 
     private fun transitionToState(
         newState: InternalState,
@@ -1323,6 +1332,16 @@ internal class ExoPlayerAdapter(
 
                     val playing = renditions.current.value
                     val failedId = playlist.getOrNull(localCurrentMediaItemIndex)?.mediaId
+                    if (error.isPremiumOnlyRefusal() && failedId != null) {
+                        coroutineScope.launch {
+                            if (renditions.fallBackToVideoAudio(failedId)) {
+                                Logger.w(TAG, "$failedId needs Premium; playing its music video's audio")
+                            } else if (player == currentPlayer && currentMediaItem?.mediaId == failedId) {
+                                propagatePlayerError(error)
+                            }
+                        }
+                        return
+                    }
                     if (playing?.playingVideo == true && playing.mediaId == failedId) {
                         Logger.w(TAG, "Video playback failed for $failedId (${error.errorCodeName}); falling back to audio")
                         renditions.reportVideoFailed(failedId)

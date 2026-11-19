@@ -5,6 +5,7 @@ import com.eygraber.uri.toKmpUri
 import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.kotlinytmusicscraper.YouTube.Companion.DEFAULT_VISITOR_DATA
 import com.maxrave.kotlinytmusicscraper.extractor.ExtractSource
+import com.maxrave.kotlinytmusicscraper.extractor.PremiumOnly
 import com.maxrave.kotlinytmusicscraper.extractor.contentLengthOf
 import com.maxrave.kotlinytmusicscraper.extractor.orderByAudioTrack
 import com.maxrave.kotlinytmusicscraper.models.AccountInfo
@@ -979,6 +980,7 @@ class YouTube {
         var sigResponse: PlayerResponse?
         Logger.d(TAG, "YouTube TempRes ${tempRes.playabilityStatus}")
         if (tempRes.playabilityStatus.status != "OK") {
+            PremiumOnly.noteFailure(videoId, tempRes.playabilityStatus.reason)
             return null
         } else {
             sigResponse = tempRes
@@ -1703,6 +1705,8 @@ class YouTube {
         }
 
     fun getExtractSource(videoId: String): String? = ExtractSource.of(videoId)
+
+    fun isPremiumOnly(videoId: String): Boolean = PremiumOnly.contains(videoId)
 
     fun download(
         track: SongItem,

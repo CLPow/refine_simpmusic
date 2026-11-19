@@ -292,6 +292,7 @@ private fun provideResolvingDataSourceFactory(
         }
         if (!resolved) {
             Logger.e("Stream", "Failed to resolve stream URL for $mediaId")
+            if (streamRepository.isPremiumOnly(mediaId)) throw PremiumOnlyException(mediaId)
             throw java.io.IOException("Failed to resolve stream URL for $mediaId")
         }
         return@Factory dataSpecReturn
@@ -522,3 +523,7 @@ private const val STREAMING_IDS_KEPT = 8
 class WifiOnlyException(
     mediaId: String,
 ) : java.io.FileNotFoundException("Stream via Wi-Fi only: not streaming $mediaId on a metered network")
+
+class PremiumOnlyException(
+    mediaId: String,
+) : java.io.IOException("$mediaId is only available to YouTube Music Premium members")

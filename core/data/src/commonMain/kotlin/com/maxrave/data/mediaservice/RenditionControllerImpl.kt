@@ -27,6 +27,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 private const val TAG = "Rendition"
 private const val VIDEO_MODE_KEY = "video_mode"
 private const val RECHECK_MISSING_MS = 14L * 24 * 3600 * 1000
+private const val MATCHER_REVISED_AT_MS = 1_795_132_800_000L
 private const val LOOKUP_TIMEOUT_MS = 10_000L
 private const val BUILT_KEPT = 12
 
@@ -53,6 +54,7 @@ internal class RenditionControllerImpl(
     private val resolving = MutableStateFlow<Set<String>>(emptySet())
     private val nowPlayingId = MutableStateFlow<String?>(null)
     private val failedVideos = MutableStateFlow<Set<String>>(emptySet())
+    private val premiumAudio = MutableStateFlow<Set<String>>(emptySet())
 
     init {
         scope.launch {
@@ -105,7 +107,7 @@ internal class RenditionControllerImpl(
         return if (videoActive && video != null) {
             Rendition(audioId = video, videoId = video)
         } else {
-            Rendition(audioId = songIdOf(mediaId) ?: mediaId, videoId = null)
+            Rendition(audioId = songIdOf(mediaId) ?: video ?: mediaId, videoId = null)
         }
     }
 
@@ -124,6 +126,19 @@ internal class RenditionControllerImpl(
         refresh()
     }
 
+    override suspend fun fallBackToVideoAudio(mediaId: String): Boolean {
+        val audio = songIdOf(mediaId) ?: return false
+        premiumAudio.update { it + audio }
+        if (videoIdOf(mediaId) == null) {
+            tracks.value[mediaId]?.let { resolve(it) }
+            withTimeoutOrNull(LOOKUP_TIMEOUT_MS + 2_000) { resolving.first { mediaId !in it } }
+        }
+        val video = videoIdOf(mediaId)
+        Logger.w(TAG, "Song $audio for $mediaId needs Premium; video counterpart: $video")
+        refresh()
+        return video != null
+    }
+
     private fun remember(track: Track) {
         tracks.update { if (it[track.videoId] == track) it else it + (track.videoId to track) }
     }
@@ -136,7 +151,8 @@ internal class RenditionControllerImpl(
     private fun videoIdOf(mediaId: String): String? =
         (if (isVideoType(mediaId)) mediaId else pairs.value[mediaId])?.takeUnless { it in failedVideos.value }
 
-    private fun songIdOf(mediaId: String): String? = if (isVideoType(mediaId)) pairs.value[mediaId] else mediaId
+    private fun songIdOf(mediaId: String): String? =
+        (if (isVideoType(mediaId)) pairs.value[mediaId] else mediaId)?.takeUnless { it in premiumAudio.value }
 
     private fun resolve(track: Track) {
         val id = track.videoId
@@ -152,7 +168,9 @@ internal class RenditionControllerImpl(
                 val now = nowMs()
                 val stored = runCatching { podcastDao.getRenditionPair(id) }.getOrNull()
                 val counterpart =
-                    if (stored != null && (stored.counterpartId != null || now - stored.checkedAt < RECHECK_MISSING_MS)) {
+                    if (stored != null &&
+                        (stored.counterpartId != null || (stored.checkedAt >= MATCHER_REVISED_AT_MS && now - stored.checkedAt < RECHECK_MISSING_MS))
+                    ) {
                         stored.counterpartId
                     } else {
                         val found =

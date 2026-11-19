@@ -46,4 +46,6 @@ interface RenditionController {
     )
 
     fun reportVideoFailed(mediaId: String)
+
+    suspend fun fallBackToVideoAudio(mediaId: String): Boolean
 }

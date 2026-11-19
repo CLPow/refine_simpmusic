@@ -98,6 +98,8 @@ internal class StreamRepositoryImpl(
 
     override fun getExtractSource(videoId: String): String? = youTube.getExtractSource(videoId)
 
+    override fun isPremiumOnly(videoId: String): Boolean = youTube.isPremiumOnly(videoId)
+
     override suspend fun getPlaybackTracking(videoId: String): PlaybackTracking? =
         withContext(Dispatchers.IO) {
             val stored = localDataSource.getNewFormat(videoId)

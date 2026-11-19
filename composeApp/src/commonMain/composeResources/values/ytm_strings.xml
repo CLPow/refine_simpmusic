@@ -172,6 +172,8 @@
     <string name="ytm_single">Single</string>
     <string name="ytm_explicit">Explicit</string>
     <string name="ytm_track_skipped">Track is unavailable. Skipping to the next one.</string>
+    <string name="ytm_premium_only">This song is only available with YouTube Music Premium.</string>
+    <string name="ytm_playback_error">Can't play this song (%1$s)</string>
     <string name="ytm_stream_wifi_only_blocked">Current settings allow streaming over Wi-Fi or unmetered data only.</string>
     <string name="ytm_audio_quality_wifi">Audio quality on Wi-Fi</string>
     <string name="ytm_audio_quality_mobile">Audio quality on mobile network</string>

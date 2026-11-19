@@ -281,23 +281,17 @@ internal class SongRepositoryImpl(
             songVersionsLock.withLock {
                 if (songVersions.containsKey(track.videoId)) return@withContext songVersions[track.videoId]
             }
-            val title = track.title.songTitleKey()
-            val artistIds = track.artists.orEmpty().mapNotNull { it.id?.takeIf(String::isNotBlank) }.toSet()
-            val artistNames = track.artists.orEmpty().map { it.name.trim().lowercase() }.filter(String::isNotEmpty).toSet()
-            if (title.isEmpty() || (artistIds.isEmpty() && artistNames.isEmpty())) return@withContext null
-            val query = (listOf(track.title.songTitleQuery()) + track.artists.orEmpty().map { it.name }).joinToString(" ")
-            val result = youTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull() ?: return@withContext null
+            val target = CounterpartTarget.of(track) ?: return@withContext null
+            val result = youTube.search(target.query, YouTube.SearchFilter.FILTER_SONG).getOrNull() ?: return@withContext null
             val song =
                 result.items
                     .filterIsInstance<SongItem>()
                     .take(5)
-                    .firstOrNull { item ->
-                        (item.musicVideoType == null || MusicVideoType.isAudio(item.musicVideoType)) &&
-                            item.title.songTitleKey() == title &&
-                            item.artists.any { artist ->
-                                (artist.id != null && artist.id in artistIds) || artist.name.trim().lowercase() in artistNames
-                            }
-                    }?.toTrack()
+                    .filter { it.musicVideoType == null || MusicVideoType.isAudio(it.musicVideoType) }
+                    .map { CounterpartCandidate(it.title, it.artists.map { a -> a.id to a.name }, it.duration, it) }
+                    .let { target.pick(it) }
+                    ?.item
+                    ?.toTrack()
                     ?.let { found ->
                         found.copy(
                             thumbnails =
@@ -319,37 +313,29 @@ internal class SongRepositoryImpl(
             songVersionsLock.withLock {
                 if (videoVersions.containsKey(track.videoId)) return@withContext videoVersions[track.videoId]
             }
-            val title = track.title.songTitleKey()
-            val artistIds = track.artists.orEmpty().mapNotNull { it.id?.takeIf(String::isNotBlank) }.toSet()
-            val artistNames = track.artists.orEmpty().map { it.name.trim().lowercase() }.filter(String::isNotEmpty).toSet()
-            if (title.isEmpty() || (artistIds.isEmpty() && artistNames.isEmpty())) return@withContext null
-            val query = (listOf(track.title.songTitleQuery()) + track.artists.orEmpty().map { it.name }).joinToString(" ")
-            val result = youTube.search(query, YouTube.SearchFilter.FILTER_VIDEO).getOrNull() ?: return@withContext null
+            val target = CounterpartTarget.of(track) ?: return@withContext null
+            val result = youTube.search(target.query, YouTube.SearchFilter.FILTER_VIDEO).getOrNull() ?: return@withContext null
             val video =
                 result.items
                     .take(6)
                     .mapNotNull { item ->
                         when (item) {
-                            is VideoItem -> VideoCandidate(item.musicVideoType, item.title, item.artists.map { it.id to it.name }, item.toTrack())
-                            is SongItem -> VideoCandidate(item.musicVideoType, item.title, item.artists.map { it.id to it.name }, item.toTrack())
+                            is VideoItem ->
+                                item.takeIf { MusicVideoType.isOfficialVideo(it.musicVideoType) }?.let {
+                                    CounterpartCandidate(it.title, it.artists.map { a -> a.id to a.name }, it.duration, it.toTrack())
+                                }
+                            is SongItem ->
+                                item.takeIf { MusicVideoType.isOfficialVideo(it.musicVideoType) }?.let {
+                                    CounterpartCandidate(it.title, it.artists.map { a -> a.id to a.name }, it.duration, it.toTrack())
+                                }
                             else -> null
                         }
-                    }.firstOrNull { candidate ->
-                        MusicVideoType.isOfficialVideo(candidate.type) &&
-                            candidate.title.videoTitleKey(artistNames) == title &&
-                            candidate.artists.any { (id, name) -> (id != null && id in artistIds) || name.trim().lowercase() in artistNames }
-                    }?.track
+                    }.let { target.pick(it) }
+                    ?.item
             Logger.d(TAG, "findVideoVersion ${track.videoId} (${track.title}) -> ${video?.videoId}")
             songVersionsLock.withLock { videoVersions[track.videoId] = video }
             video
         }
-
-    private class VideoCandidate(
-        val type: String?,
-        val title: String,
-        val artists: List<Pair<String?, String>>,
-        val track: Track,
-    )
 
     private suspend fun List<SongItem>.dropShortWhenConfigured(): List<SongItem> {
         val minSeconds = dataStoreManager.skipShortTrackSeconds.first()
@@ -651,6 +637,76 @@ private val VIDEO_LABEL =
 private fun String.songTitleQuery(): String = (QUOTED_TITLE.find(this)?.groupValues?.get(1) ?: this).replace(VIDEO_LABEL, "").trim()
 
 private fun String.songTitleKey(): String = songTitleQuery().lowercase().replace(Regex("\\s+"), " ")
+
+private const val DURATION_MATCH_S = 3
+
+internal fun String.artistKey(): String =
+    lowercase()
+        .replace(" - topic", "")
+        .replace("vevo", "")
+        .filter { it.isLetterOrDigit() }
+
+internal fun String.artistQueryName(): String {
+    val name = replace(Regex("\\s*-\\s*Topic$"), "").trim()
+    if (!name.endsWith("VEVO")) return name
+    return name.removeSuffix("VEVO").replace(Regex("(?<=\\p{Ll})(?=\\p{Lu})"), " ").trim()
+}
+
+private fun String.titleVariants(artistNames: Set<String>): Set<String> {
+    val key = songTitleKey()
+    val dash = key.indexOf(" - ")
+    return setOfNotNull(
+        key,
+        videoTitleKey(artistNames),
+        if (dash > 0) key.substring(dash + 3).trim() else null,
+    ).filter(String::isNotEmpty).toSet()
+}
+
+internal class CounterpartCandidate<T>(
+    val title: String,
+    val artists: List<Pair<String?, String>>,
+    val durationSeconds: Int?,
+    val item: T,
+)
+
+internal class CounterpartTarget(
+    private val titles: Set<String>,
+    private val artistIds: Set<String>,
+    private val artistNames: Set<String>,
+    private val artistKeys: Set<String>,
+    private val durationSeconds: Int?,
+    val query: String,
+) {
+    private fun sameArtist(artists: List<Pair<String?, String>>): Boolean =
+        artists.any { (id, name) ->
+            (id != null && id in artistIds) ||
+                name.trim().lowercase() in artistNames ||
+                name.artistKey().let { it.isNotEmpty() && it in artistKeys }
+        }
+
+    private fun sameLength(seconds: Int?): Boolean =
+        durationSeconds != null && durationSeconds > 0 && seconds != null && seconds > 0 &&
+            kotlin.math.abs(durationSeconds - seconds) <= DURATION_MATCH_S
+
+    fun <T> pick(candidates: List<CounterpartCandidate<T>>): CounterpartCandidate<T>? {
+        val sameArtist = candidates.filter { sameArtist(it.artists) }
+        return sameArtist.firstOrNull { candidate -> candidate.title.titleVariants(artistNames).any { it in titles } }
+            ?: sameArtist.firstOrNull { sameLength(it.durationSeconds) }
+    }
+
+    companion object {
+        fun of(track: Track): CounterpartTarget? {
+            val artists = track.artists.orEmpty()
+            val artistIds = artists.mapNotNull { it.id?.takeIf(String::isNotBlank) }.toSet()
+            val artistNames = artists.map { it.name.trim().lowercase() }.filter(String::isNotEmpty).toSet()
+            val artistKeys = artists.map { it.name.artistKey() }.filter(String::isNotEmpty).toSet()
+            val titles = track.title.titleVariants(artistNames)
+            if (titles.isEmpty() || (artistIds.isEmpty() && artistNames.isEmpty())) return null
+            val query = (listOf(track.title.songTitleQuery()) + artists.map { it.name.artistQueryName() }).joinToString(" ")
+            return CounterpartTarget(titles, artistIds, artistNames, artistKeys, track.durationSeconds, query)
+        }
+    }
+}
 
 internal fun String.videoTitleKey(artistNames: Set<String>): String {
     val key = songTitleKey()

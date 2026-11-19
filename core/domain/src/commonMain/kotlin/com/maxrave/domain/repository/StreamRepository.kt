@@ -96,4 +96,6 @@ interface StreamRepository {
     suspend fun invalidateFormat(videoId: String)
 
     fun getExtractSource(videoId: String): String?
+
+    fun isPremiumOnly(videoId: String): Boolean
 }

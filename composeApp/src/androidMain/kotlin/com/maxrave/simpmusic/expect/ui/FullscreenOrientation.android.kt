@@ -12,7 +12,9 @@ import androidx.core.view.WindowInsetsControllerCompat
 actual fun FullscreenOrientation() {
     val activity = LocalActivity.current ?: return
     DisposableEffect(activity) {
-        val previous = activity.requestedOrientation
+        val previous =
+            activity.requestedOrientation.takeUnless { it == ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE }
+                ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE

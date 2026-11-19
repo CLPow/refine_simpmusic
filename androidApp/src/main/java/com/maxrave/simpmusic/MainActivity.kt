@@ -213,8 +213,13 @@ class MainActivity : AppCompatActivity() {
                             ComposeResUtils.getResString(ComposeResUtils.StringType.TRACK_SKIPPED)
                         is ToastType.WifiOnly ->
                             ComposeResUtils.getResString(ComposeResUtils.StringType.WIFI_ONLY)
+                        is ToastType.PremiumOnly ->
+                            ComposeResUtils.getResString(ComposeResUtils.StringType.PREMIUM_ONLY)
                         is ToastType.PlayerError ->
-                            ComposeResUtils.getResString(ComposeResUtils.StringType.TIME_OUT_ERROR, type.error)
+                            ComposeResUtils.getResString(
+                                if (type.network) ComposeResUtils.StringType.TIME_OUT_ERROR else ComposeResUtils.StringType.PLAYBACK_ERROR,
+                                type.error,
+                            )
                     },
                 )
             }

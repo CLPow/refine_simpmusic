@@ -372,7 +372,10 @@ sealed class ToastType(
 
     data object WifiOnly : ToastType()
 
+    data object PremiumOnly : ToastType()
+
     data class PlayerError(
         val error: String,
+        val network: Boolean = false,
     ) : ToastType(error)
 }

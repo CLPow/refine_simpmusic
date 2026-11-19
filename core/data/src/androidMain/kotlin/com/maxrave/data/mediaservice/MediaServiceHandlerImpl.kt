@@ -1,6 +1,7 @@
 package com.maxrave.data.mediaservice
 
 import com.maxrave.domain.mediaservice.handler.playerErrorAction
+import com.maxrave.domain.mediaservice.handler.PREMIUM_ONLY_ERROR_CODE_NAME
 import com.maxrave.domain.mediaservice.handler.WIFI_ONLY_ERROR_CODE_NAME
 import com.maxrave.domain.mediaservice.handler.PlayerErrorAction
 import kotlinx.coroutines.async
@@ -2201,7 +2202,9 @@ internal class MediaServiceHandlerImpl(
         when (val action = playerErrorAction(error, hasValidatedInternet(), player.hasNextMediaItem(), unavailableSkips)) {
             PlayerErrorAction.Skip -> {
                 unavailableSkips++
-                if (isAppInForeground()) showToast(ToastType.TrackSkipped)
+                if (isAppInForeground()) {
+                    showToast(if (error.errorCodeName == PREMIUM_ONLY_ERROR_CODE_NAME) ToastType.PremiumOnly else ToastType.TrackSkipped)
+                }
                 player.seekToNext()
                 player.play()
             }

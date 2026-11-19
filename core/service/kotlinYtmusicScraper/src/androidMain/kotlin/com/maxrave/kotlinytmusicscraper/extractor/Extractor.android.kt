@@ -64,6 +64,7 @@ actual class Extractor {
             }
         } catch (e: Throwable) {
             Logger.w(TAG, "PipePipe extractor failed for $videoId: ${e.message}, falling back to BravePipe")
+            PremiumOnly.noteFailure(videoId, e.message)
         }
 
         return runCatching {
@@ -79,6 +80,7 @@ actual class Extractor {
                 }
         }.onFailure {
             Logger.w(TAG, "BravePipe extractor failed for $videoId: ${it.message}")
+            PremiumOnly.noteFailure(videoId, it.message)
         }.getOrElse { emptyList() }
     }
 
