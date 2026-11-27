@@ -27,7 +27,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 private const val TAG = "Rendition"
 private const val VIDEO_MODE_KEY = "video_mode"
 private const val RECHECK_MISSING_MS = 14L * 24 * 3600 * 1000
-private const val MATCHER_REVISED_AT_MS = 1_795_132_800_000L
+private const val MATCHER_REVISED_AT_MS = 1_795_910_400_000L
 private const val LOOKUP_TIMEOUT_MS = 10_000L
 private const val BUILT_KEPT = 12
 
@@ -169,7 +169,8 @@ internal class RenditionControllerImpl(
                 val stored = runCatching { podcastDao.getRenditionPair(id) }.getOrNull()
                 val counterpart =
                     if (stored != null &&
-                        (stored.counterpartId != null || (stored.checkedAt >= MATCHER_REVISED_AT_MS && now - stored.checkedAt < RECHECK_MISSING_MS))
+                        stored.checkedAt >= MATCHER_REVISED_AT_MS &&
+                        (stored.counterpartId != null || now - stored.checkedAt < RECHECK_MISSING_MS)
                     ) {
                         stored.counterpartId
                     } else {
@@ -177,6 +178,11 @@ internal class RenditionControllerImpl(
                             withTimeoutOrNull(LOOKUP_TIMEOUT_MS) {
                                 if (isVideoType(id)) songRepository.findSongVersion(track) else songRepository.findVideoVersion(track)
                             }
+                        val stale = stored?.counterpartId?.takeIf { it != found?.videoId }
+                        if (stale != null) {
+                            runCatching { podcastDao.upsertRenditionPair(RenditionPairEntity(stale, null, 0L)) }
+                            pairs.update { it - stale }
+                        }
                         if (found != null) {
                             remember(found)
                             runCatching { podcastDao.upsertRenditionPair(RenditionPairEntity(found.videoId, id, now)) }

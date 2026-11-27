@@ -4,9 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.maxrave.common.Config
 import com.maxrave.domain.data.model.browse.album.Track
-import com.maxrave.domain.mediaservice.RenditionController
 import com.maxrave.domain.mediaservice.handler.MediaPlayerHandler
-import com.maxrave.domain.utils.MusicVideoType
 import com.maxrave.domain.mediaservice.handler.QueueData
 import com.maxrave.logger.LogLevel
 import com.maxrave.domain.repository.SongRepository
@@ -31,7 +29,6 @@ abstract class BaseViewModel :
     KoinComponent {
     protected val mediaPlayerHandler: MediaPlayerHandler by inject<MediaPlayerHandler>()
     protected val songVersionLookup: SongRepository by inject<SongRepository>()
-    protected val renditionController: RenditionController by inject<RenditionController>()
     private val _nowPlayingVideoId: MutableStateFlow<String> = MutableStateFlow("")
 
     val nowPlayingVideoId: StateFlow<String> get() = _nowPlayingVideoId
@@ -110,10 +107,6 @@ abstract class BaseViewModel :
         index: Int? = null,
     ) {
         viewModelScope.launch {
-            val video = (anyTrack as? Track)?.takeIf { type == Config.SONG_CLICK }?.videoType
-            if (MusicVideoType.isKnown(video) && MusicVideoType.isVideoSong(video) && !MusicVideoType.isPodcast(video)) {
-                renditionController.setVideoMode(true)
-            }
             mediaPlayerHandler.loadMediaItem(
                 anyTrack = anyTrack,
                 type = type,

@@ -101,4 +101,30 @@ class CounterpartMatchTest {
         assertEquals("Hikaru Utada", "HikaruUtadaVEVO".artistQueryName())
         assertEquals("WeiBird", "WeiBird - Topic".artistQueryName())
     }
+
+    @Test
+    fun instrumentalOfTheSameLengthNeverPairs() {
+        val video = track("HYBS - Tip Toe (Official Video)", listOf(Artist("UChybs", "HYBS")), 226)
+        val picked =
+            assertNotNull(CounterpartTarget.of(video)).pick(
+                listOf(
+                    candidate("inst", "Tip Toe (Instrumental)", "UChybs" to "HYBS", 225),
+                    candidate("eng", "Tip Toe (English Ver.)", "UChybs" to "HYBS", 226),
+                ),
+            )
+        assertNull(picked)
+    }
+
+    @Test
+    fun lengthFallbackTakesTheClosestRecording() {
+        val video = track("如果可以", listOf(Artist("UCwei", "韦礼安")), 275)
+        val picked =
+            assertNotNull(CounterpartTarget.of(video)).pick(
+                listOf(
+                    candidate("near", "A Little Longer", "UCwei" to "WeiBird", 273),
+                    candidate("song", "Red Scarf", "UCwei" to "WeiBird", 275),
+                ),
+            )
+        assertEquals("song", picked?.item)
+    }
 }

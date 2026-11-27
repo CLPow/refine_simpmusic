@@ -1,6 +1,7 @@
 package org.simpmusic.lyrics
 
 import com.maxrave.domain.lyrics.TrackMatch
+import com.maxrave.domain.lyrics.VersionMarkers
 import com.maxrave.logger.Logger
 import io.ktor.client.call.body
 import io.ktor.client.statement.HttpResponse
@@ -14,6 +15,9 @@ import org.simpmusic.lyrics.parser.parseSyncedLyrics
 import org.simpmusic.lyrics.parser.parseUnsyncedLyrics
 
 private const val TAG = "SimpMusicLyricsClient"
+private const val BETTER_LYRICS_MAX_DELTA_S = 5
+private val BODY_DURATION = Regex("<body[^>]*\\bdur=\"([^\"]+)\"")
+private val TTML_TEXT = Regex(">([^<]+)<")
 
 class SimpMusicLyricsClient {
     private val lyricsService = SimpMusicLyrics()
@@ -43,7 +47,9 @@ class SimpMusicLyricsClient {
                 artist = artistName,
                 durationSeconds = duration,
                 candidates =
-                    rs.map { entry ->
+                    rs.filter { entry ->
+                        VersionMarkers.lyricsFitTitle(trackName, entry.syncedLyrics ?: entry.plainLyrics.orEmpty())
+                    }.map { entry ->
                         TrackMatch.Candidate(
                             title = entry.trackName ?: entry.name,
                             artist = entry.artistName,
@@ -73,6 +79,7 @@ class SimpMusicLyricsClient {
         q_track: String,
         q_artist: String,
         durationSeconds: Int?,
+        trackTitle: String,
     ) = runCatching {
         val rs =
             lyricsService
@@ -81,7 +88,17 @@ class SimpMusicLyricsClient {
                     q_artist = q_artist,
                     durationSeconds = durationSeconds,
                 ).body<BetterLyricsResponse>()
-        rs.ttml
+        rs.ttml.takeIf { ttml ->
+            val length = BODY_DURATION.find(ttml)?.groupValues?.get(1)?.let(::ttmlSeconds)
+            val lengthFits = durationSeconds == null || durationSeconds <= 0 || length == null || kotlin.math.abs(length - durationSeconds) <= BETTER_LYRICS_MAX_DELTA_S
+            val text = TTML_TEXT.findAll(ttml.substringAfter("<body")).joinToString(" ") { it.groupValues[1] }
+            lengthFits && VersionMarkers.lyricsFitTitle(trackTitle, text)
+        }
+    }
+
+    private fun ttmlSeconds(clock: String): Int? {
+        val parts = clock.removeSuffix("s").split(":").map { it.toDoubleOrNull() ?: return null }
+        return parts.fold(0.0) { acc, part -> acc * 60 + part }.toInt()
     }
 
     suspend fun searchAMArtist(

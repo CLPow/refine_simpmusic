@@ -273,4 +273,14 @@ class TrackMatchTest {
     fun `returns nothing when there is nothing to choose from`() {
         assertNull(TrackMatch.best("Someone Like You", "Adele", 285, emptyList()))
     }
+
+    @Test
+    fun `never gives a language version the lyrics of another language`() {
+        val english = candidate("Someone Like You (English Ver.)", name = "english")
+        val chinese = candidate("Someone Like You (Chinese Ver.)", name = "chinese")
+        val plain = candidate("Someone Like You", name = "plain")
+        assertNull(TrackMatch.best("Someone Like You (Chinese Ver.)", "Adele", 285, listOf(english, plain)))
+        assertEquals("chinese", TrackMatch.best("Someone Like You (Chinese Ver.)", "Adele", 285, listOf(plain, chinese)))
+        assertNull(TrackMatch.best("Someone Like You", "Adele", 285, listOf(english)))
+    }
 }

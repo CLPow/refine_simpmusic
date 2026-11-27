@@ -355,8 +355,6 @@ private fun SongVideoSwitch(controller: RenditionController) {
     val videoMode by controller.videoMode.collectAsStateWithLifecycle()
     val current = renditions ?: return
     if (current.videoId == null) return
-    val videoOnly = current.songId == null
-    val videoSelected = videoOnly || videoMode
     Row(
         Modifier
             .clip(RoundedCornerShape(50))
@@ -365,17 +363,16 @@ private fun SongVideoSwitch(controller: RenditionController) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         listOf(false, true).forEach { video ->
-            val selected = video == videoSelected
-            val enabled = !videoOnly || video
+            val selected = video == videoMode
             Text(
                 text = stringResource(if (video) Res.string.ytm_mode_video else Res.string.ytm_mode_song),
                 style = typo().bodyMedium.copy(fontWeight = FontWeight.Medium),
-                color = if (selected) Color.Black else Color.White.copy(alpha = if (enabled) 0.9f else 0.4f),
+                color = if (selected) Color.Black else Color.White.copy(alpha = 0.9f),
                 modifier =
                     Modifier
                         .clip(RoundedCornerShape(50))
                         .background(if (selected) Color.White else Color.Transparent)
-                        .clickable(enabled = enabled && !selected) { controller.setVideoMode(video) }
+                        .clickable(enabled = !selected) { controller.setVideoMode(video) }
                         .padding(horizontal = 18.dp, vertical = 6.dp),
             )
         }

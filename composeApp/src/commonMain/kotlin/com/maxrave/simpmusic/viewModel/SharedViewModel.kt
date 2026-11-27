@@ -514,11 +514,6 @@ class SharedViewModel(
                         LyricsProvider.OFFLINE,
                     )
                 } else {
-                    val plain = youTubePlainLyrics?.takeIf { it.first == track.videoId }?.second
-                    if (plain != null) {
-                        updateLyrics(track.videoId, track.durationSeconds ?: 0, plain, LyricsProvider.YOUTUBE_MUSIC)
-                        return
-                    }
                     Logger.d(tag, "No lyrics from any source for ${track.videoId}")
                     updateLyrics(
                         track.videoId,
@@ -826,11 +821,8 @@ class SharedViewModel(
             Logger.d(tag, "Dropping lyrics for $videoId: now showing $lyricsVideoId")
             return
         }
-        val youTubePlain = youTubePlainLyrics?.takeIf { it.first == videoId }?.second
-        val untimed = foundLyrics?.syncType == null || foundLyrics.syncType == "UNSYNCED"
-        val useYouTubePlain = youTubePlain != null && foundProvider != LyricsProvider.YOUTUBE_MUSIC && foundLyrics != null && untimed
-        val inputLyrics = if (useYouTubePlain) youTubePlain else foundLyrics
-        val lyricsProvider = if (useYouTubePlain) LyricsProvider.YOUTUBE_MUSIC else foundProvider
+        val inputLyrics = foundLyrics
+        val lyricsProvider = foundProvider
         if (inputLyrics == null) {
             _nowPlayingScreenData.update {
                 it.copy(
@@ -900,7 +892,6 @@ class SharedViewModel(
                         ?: ""
                 }
             triedLyricsSources.clear()
-            youTubePlainLyrics = null
             youTubeMusicLyricsSource = null
             tryLyricsSource(
                 preferred = null,
@@ -947,8 +938,6 @@ class SharedViewModel(
         }
     }
 
-    private var youTubePlainLyrics: Pair<String, Lyrics>? = null
-
     private var youTubeMusicLyricsSource: String? = null
 
     private suspend fun getYouTubeMusicLyrics(
@@ -967,8 +956,9 @@ class SharedViewModel(
                 updateLyrics(videoId, duration, lyrics, LyricsProvider.YOUTUBE_MUSIC)
                 return
             }
-            youTubePlainLyrics = videoId to lyrics
             youTubeMusicLyricsSource = source
+            updateLyrics(videoId, duration, lyrics, LyricsProvider.YOUTUBE_MUSIC)
+            return
         }
         tryLyricsSource(null, videoId, song, artist, duration)
     }

@@ -16,6 +16,7 @@ import com.maxrave.domain.data.entities.DownloadState
 import com.maxrave.domain.data.entities.SongEntity
 import com.maxrave.domain.data.entities.SongInfoEntity
 import com.maxrave.domain.data.model.browse.album.Track
+import com.maxrave.domain.lyrics.VersionMarkers
 import com.maxrave.domain.data.model.comments.YouTubeComment
 import com.maxrave.domain.data.model.comments.YouTubeCommentsPage
 import com.maxrave.domain.data.model.download.DownloadProgress
@@ -676,6 +677,7 @@ internal class CounterpartTarget(
     private val artistKeys: Set<String>,
     private val durationSeconds: Int?,
     val query: String,
+    private val versions: Set<String>,
 ) {
     private fun sameArtist(artists: List<Pair<String?, String>>): Boolean =
         artists.any { (id, name) ->
@@ -689,9 +691,11 @@ internal class CounterpartTarget(
             kotlin.math.abs(durationSeconds - seconds) <= DURATION_MATCH_S
 
     fun <T> pick(candidates: List<CounterpartCandidate<T>>): CounterpartCandidate<T>? {
-        val sameArtist = candidates.filter { sameArtist(it.artists) }
+        val sameArtist = candidates.filter { sameArtist(it.artists) && VersionMarkers.of(it.title) == versions }
         return sameArtist.firstOrNull { candidate -> candidate.title.titleVariants(artistNames).any { it in titles } }
-            ?: sameArtist.firstOrNull { sameLength(it.durationSeconds) }
+            ?: sameArtist
+                .filter { sameLength(it.durationSeconds) }
+                .minByOrNull { kotlin.math.abs((it.durationSeconds ?: 0) - (durationSeconds ?: 0)) }
     }
 
     companion object {
@@ -703,7 +707,7 @@ internal class CounterpartTarget(
             val titles = track.title.titleVariants(artistNames)
             if (titles.isEmpty() || (artistIds.isEmpty() && artistNames.isEmpty())) return null
             val query = (listOf(track.title.songTitleQuery()) + artists.map { it.name.artistQueryName() }).joinToString(" ")
-            return CounterpartTarget(titles, artistIds, artistNames, artistKeys, track.durationSeconds, query)
+            return CounterpartTarget(titles, artistIds, artistNames, artistKeys, track.durationSeconds, query, VersionMarkers.of(track.title))
         }
     }
 }

@@ -158,7 +158,7 @@ internal class LyricsCanvasRepositoryImpl(
                     .replace(Regex("([()])"), "")
                     .replace(".", " ")
             simpMusicLyrics
-                .searchBetterLyrics(qtrack, qartist, duration)
+                .searchBetterLyrics(qtrack, qartist, duration, track)
                 .onSuccess { ttml ->
                     if (ttml.isNullOrEmpty()) {
                         emit(Resource.Error<Lyrics>("No BetterLyrics found"))
