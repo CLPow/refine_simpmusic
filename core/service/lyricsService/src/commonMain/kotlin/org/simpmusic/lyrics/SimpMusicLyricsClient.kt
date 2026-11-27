@@ -13,11 +13,12 @@ import org.simpmusic.lyrics.models.response.LrclibObject
 import org.simpmusic.lyrics.models.response.LyricsResponse
 import org.simpmusic.lyrics.parser.parseSyncedLyrics
 import org.simpmusic.lyrics.parser.parseUnsyncedLyrics
+import org.simpmusic.lyrics.parser.ttmlDurationSeconds
+import org.simpmusic.lyrics.parser.ttmlLyricsText
+import kotlin.math.abs
 
 private const val TAG = "SimpMusicLyricsClient"
 private const val BETTER_LYRICS_MAX_DELTA_S = 5
-private val BODY_DURATION = Regex("<body[^>]*\\bdur=\"([^\"]+)\"")
-private val TTML_TEXT = Regex(">([^<]+)<")
 
 class SimpMusicLyricsClient {
     private val lyricsService = SimpMusicLyrics()
@@ -89,16 +90,12 @@ class SimpMusicLyricsClient {
                     durationSeconds = durationSeconds,
                 ).body<BetterLyricsResponse>()
         rs.ttml.takeIf { ttml ->
-            val length = BODY_DURATION.find(ttml)?.groupValues?.get(1)?.let(::ttmlSeconds)
-            val lengthFits = durationSeconds == null || durationSeconds <= 0 || length == null || kotlin.math.abs(length - durationSeconds) <= BETTER_LYRICS_MAX_DELTA_S
-            val text = TTML_TEXT.findAll(ttml.substringAfter("<body")).joinToString(" ") { it.groupValues[1] }
-            lengthFits && VersionMarkers.lyricsFitTitle(trackTitle, text)
+            val length = ttmlDurationSeconds(ttml)
+            val lengthFits =
+                durationSeconds == null || durationSeconds <= 0 || length == null ||
+                    abs(length - durationSeconds) <= BETTER_LYRICS_MAX_DELTA_S
+            VersionMarkers.lyricsVersion(trackTitle).isEmpty() && lengthFits && VersionMarkers.lyricsFitTitle(trackTitle, ttmlLyricsText(ttml))
         }
-    }
-
-    private fun ttmlSeconds(clock: String): Int? {
-        val parts = clock.removeSuffix("s").split(":").map { it.toDoubleOrNull() ?: return null }
-        return parts.fold(0.0) { acc, part -> acc * 60 + part }.toInt()
     }
 
     suspend fun searchAMArtist(

@@ -8,13 +8,13 @@ import kotlin.test.assertTrue
 class VersionMarkersTest {
     @Test
     fun detectsInstrumentalAndLanguageVersions() {
-        assertEquals(setOf(VersionMarkers.INSTRUMENTAL), VersionMarkers.of("Tip Toe (Instrumental)"))
-        assertEquals(setOf(VersionMarkers.INSTRUMENTAL), VersionMarkers.of("Nonstop (Inst.)"))
-        assertEquals(setOf(VersionMarkers.INSTRUMENTAL), VersionMarkers.of("光年之外 (伴奏)"))
-        assertEquals(setOf(VersionMarkers.ENGLISH), VersionMarkers.of("Love Story (English Ver.)"))
-        assertEquals(setOf(VersionMarkers.MANDARIN), VersionMarkers.of("Love Story (Chinese Version)"))
-        assertEquals(setOf(VersionMarkers.MANDARIN), VersionMarkers.of("Love Story (中文版)"))
-        assertEquals(setOf(VersionMarkers.JAPANESE), VersionMarkers.of("FIESTA (Japanese ver.)"))
+        assertEquals(setOf(VersionMarker.INSTRUMENTAL), VersionMarkers.of("Tip Toe (Instrumental)"))
+        assertEquals(setOf(VersionMarker.INSTRUMENTAL), VersionMarkers.of("Nonstop (Inst.)"))
+        assertEquals(setOf(VersionMarker.INSTRUMENTAL), VersionMarkers.of("光年之外 (伴奏)"))
+        assertEquals(setOf(VersionMarker.ENGLISH), VersionMarkers.of("Love Story (English Ver.)"))
+        assertEquals(setOf(VersionMarker.MANDARIN), VersionMarkers.of("Love Story (Chinese Version)"))
+        assertEquals(setOf(VersionMarker.MANDARIN), VersionMarkers.of("Love Story (中文版)"))
+        assertEquals(setOf(VersionMarker.JAPANESE), VersionMarkers.of("FIESTA (Japanese ver.)"))
     }
 
     @Test

@@ -235,3 +235,14 @@ fun parseUnsyncedLyrics(data: String): Lyrics {
             ),
     )
 }
+
+private val TTML_BODY_DURATION = Regex("""<body[^>]*dur="([^"]+)"""")
+private val TTML_TEXT = Regex(">([^<]+)<")
+
+fun ttmlDurationSeconds(ttml: String): Int? {
+    val clock = TTML_BODY_DURATION.find(ttml)?.groupValues?.get(1) ?: return null
+    val parts = clock.removeSuffix("s").split(":").map { it.toDoubleOrNull() ?: return null }
+    return parts.fold(0.0) { acc, part -> acc * 60 + part }.toInt()
+}
+
+fun ttmlLyricsText(ttml: String): String = TTML_TEXT.findAll(ttml.substringAfter("<body")).joinToString(" ") { it.groupValues[1] }

@@ -27,7 +27,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 private const val TAG = "Rendition"
 private const val VIDEO_MODE_KEY = "video_mode"
 private const val RECHECK_MISSING_MS = 14L * 24 * 3600 * 1000
-private const val MATCHER_REVISED_AT_MS = 1_795_910_400_000L
+private const val MATCHER_REVISED_AT_MS = 1_795_823_400_000L
 private const val LOOKUP_TIMEOUT_MS = 10_000L
 private const val BUILT_KEPT = 12
 

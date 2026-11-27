@@ -127,4 +127,17 @@ class CounterpartMatchTest {
             )
         assertEquals("song", picked?.item)
     }
+
+    @Test
+    fun sameTitleTakesTheClosestLengthSoAnUnlabelledInstrumentalLoses() {
+        val video = track("HYBS - Tip Toe (Official Video)", listOf(Artist("UChybs", "HYBS")), 226)
+        val picked =
+            assertNotNull(CounterpartTarget.of(video)).pick(
+                listOf(
+                    candidate("inst", "Tip Toe", "UChybs" to "HYBS", 198),
+                    candidate("song", "Tip Toe", "UChybs" to "HYBS", 225),
+                ),
+            )
+        assertEquals("song", picked?.item)
+    }
 }

@@ -55,10 +55,10 @@ object TrackMatch {
         val wantedTitle = normalise(title)
         val wantedMarkers = markersIn(wantedTitle)
         val wantedArtistTokens = artistTokens(artist)
-        val wantedVersion = VersionMarkers.of(title).filter { it in STRICT_VERSIONS }.toSet()
+        val wantedVersion = VersionMarkers.lyricsVersion(title)
 
         return candidates
-            .filter { candidate -> VersionMarkers.of(candidate.title.orEmpty()).filter { it in STRICT_VERSIONS }.toSet() == wantedVersion }
+            .filter { candidate -> VersionMarkers.lyricsVersion(candidate.title.orEmpty()) == wantedVersion }
             .mapNotNull { candidate ->
                 score(candidate, wantedTitle, wantedMarkers, wantedArtistTokens, durationSeconds)
                     ?.let { it to candidate.value }
@@ -154,17 +154,6 @@ object TrackMatch {
             .split(" ")
             .filter { it.length > 2 }
             .toSet()
-
-    private val STRICT_VERSIONS =
-        setOf(
-            VersionMarkers.INSTRUMENTAL,
-            VersionMarkers.SPED,
-            VersionMarkers.ENGLISH,
-            VersionMarkers.MANDARIN,
-            VersionMarkers.CANTONESE,
-            VersionMarkers.JAPANESE,
-            VersionMarkers.KOREAN,
-        )
 
     private val DECORATION_WORDS = setOf("version", "remaster", "remastered", "edit", "mix")
     private val FEATURE_REGEX = Regex("\\b(feat|ft|featuring|prod)\\b\\.?.*\$")

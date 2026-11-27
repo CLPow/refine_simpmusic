@@ -16,11 +16,12 @@ import com.maxrave.domain.data.entities.DownloadState
 import com.maxrave.domain.data.entities.SongEntity
 import com.maxrave.domain.data.entities.SongInfoEntity
 import com.maxrave.domain.data.model.browse.album.Track
-import com.maxrave.domain.lyrics.VersionMarkers
 import com.maxrave.domain.data.model.comments.YouTubeComment
 import com.maxrave.domain.data.model.comments.YouTubeCommentsPage
 import com.maxrave.domain.data.model.download.DownloadProgress
 import com.maxrave.domain.data.model.streams.YouTubeWatchEndpoint
+import com.maxrave.domain.lyrics.VersionMarker
+import com.maxrave.domain.lyrics.VersionMarkers
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.manager.DataStoreManager.Values.TRUE
 import com.maxrave.domain.mediaservice.handler.DownloadHandler
@@ -677,7 +678,7 @@ internal class CounterpartTarget(
     private val artistKeys: Set<String>,
     private val durationSeconds: Int?,
     val query: String,
-    private val versions: Set<String>,
+    private val versions: Set<VersionMarker>,
 ) {
     private fun sameArtist(artists: List<Pair<String?, String>>): Boolean =
         artists.any { (id, name) ->
@@ -691,12 +692,21 @@ internal class CounterpartTarget(
             kotlin.math.abs(durationSeconds - seconds) <= DURATION_MATCH_S
 
     fun <T> pick(candidates: List<CounterpartCandidate<T>>): CounterpartCandidate<T>? {
-        val sameArtist = candidates.filter { sameArtist(it.artists) && VersionMarkers.of(it.title) == versions }
-        return sameArtist.firstOrNull { candidate -> candidate.title.titleVariants(artistNames).any { it in titles } }
-            ?: sameArtist
+        val sameRecording = candidates.filter { sameArtist(it.artists) && VersionMarkers.of(it.title) == versions }
+        return sameRecording
+            .filter { candidate -> candidate.title.titleVariants(artistNames).any { it in titles } }
+            .minByOrNull { lengthGap(it.durationSeconds) }
+            ?: sameRecording
                 .filter { sameLength(it.durationSeconds) }
-                .minByOrNull { kotlin.math.abs((it.durationSeconds ?: 0) - (durationSeconds ?: 0)) }
+                .minByOrNull { lengthGap(it.durationSeconds) }
     }
+
+    private fun lengthGap(seconds: Int?): Int =
+        if (durationSeconds == null || durationSeconds <= 0 || seconds == null || seconds <= 0) {
+            Int.MAX_VALUE
+        } else {
+            kotlin.math.abs(durationSeconds - seconds)
+        }
 
     companion object {
         fun of(track: Track): CounterpartTarget? {

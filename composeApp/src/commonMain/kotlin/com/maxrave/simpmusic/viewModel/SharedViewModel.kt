@@ -29,6 +29,7 @@ import com.maxrave.domain.extension.isVideo
 import com.maxrave.domain.extension.toGenericMediaItem
 import com.maxrave.domain.manager.DataStoreManager
 import com.maxrave.domain.lyrics.LyricsSourceOrder
+import com.maxrave.domain.lyrics.VersionMarkers
 import com.maxrave.domain.manager.DataStoreManager.Values.TRUE
 import com.maxrave.domain.mediaservice.handler.ControlState
 import com.maxrave.domain.mediaservice.handler.DownloadHandler
@@ -814,15 +815,13 @@ class SharedViewModel(
     private suspend fun updateLyrics(
         videoId: String,
         duration: Int,
-        foundLyrics: Lyrics?,
-        foundProvider: LyricsProvider = LyricsProvider.SIMPMUSIC,
+        inputLyrics: Lyrics?,
+        lyricsProvider: LyricsProvider = LyricsProvider.SIMPMUSIC,
     ) {
         if (lyricsVideoId != null && videoId != lyricsVideoId) {
             Logger.d(tag, "Dropping lyrics for $videoId: now showing $lyricsVideoId")
             return
         }
-        val inputLyrics = foundLyrics
-        val lyricsProvider = foundProvider
         if (inputLyrics == null) {
             _nowPlayingScreenData.update {
                 it.copy(
@@ -940,6 +939,9 @@ class SharedViewModel(
 
     private var youTubeMusicLyricsSource: String? = null
 
+    private fun Lyrics.fitsTitleOf(song: SongEntity): Boolean =
+        VersionMarkers.lyricsFitTitle(song.title, lines.orEmpty().joinToString(" ") { it.words })
+
     private suspend fun getYouTubeMusicLyrics(
         videoId: String,
         song: SongEntity,
@@ -950,12 +952,7 @@ class SharedViewModel(
         val data = response?.data
         if (response is Resource.Success && data != null) {
             val (lyrics, source) = data
-            if (lyrics.syncType == "LINE_SYNCED") {
-                Logger.d(tag, "YouTube Music timed lyrics for $videoId (${lyrics.lines?.size} lines, $source)")
-                youTubeMusicLyricsSource = source
-                updateLyrics(videoId, duration, lyrics, LyricsProvider.YOUTUBE_MUSIC)
-                return
-            }
+            Logger.d(tag, "YouTube Music ${lyrics.syncType} lyrics for $videoId (${lyrics.lines?.size} lines, $source)")
             youTubeMusicLyricsSource = source
             updateLyrics(videoId, duration, lyrics, LyricsProvider.YOUTUBE_MUSIC)
             return
@@ -972,7 +969,7 @@ class SharedViewModel(
         lyricsCanvasRepository.getSimpMusicLyrics(videoId).collectLatest {
             Logger.w(tag, "Get SimpMusic Lyrics for $videoId: $it")
             val data = it.data
-            if (it is Resource.Success && data != null) {
+            if (it is Resource.Success && data != null && data.fitsTitleOf(song)) {
                 Logger.d(tag, "Get SimpMusic Lyrics Success")
                 updateLyrics(
                     videoId,
@@ -1001,7 +998,7 @@ class SharedViewModel(
             .collect { response ->
                 val data = response.data
                 when (response) {
-                    is Resource.Success if (data != null) -> {
+                    is Resource.Success if (data != null && data.fitsTitleOf(song)) -> {
                         insertLyrics(data.toLyricsEntity(videoId))
                         updateLyrics(
                             videoId,
