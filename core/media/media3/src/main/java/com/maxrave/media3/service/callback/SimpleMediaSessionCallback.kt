@@ -65,6 +65,7 @@ import com.maxrave.domain.utils.toSongEntity
 import com.maxrave.domain.utils.toTrack
 import com.maxrave.logger.Logger
 import com.maxrave.media3.R
+import com.maxrave.media3.service.CarConnection
 import com.maxrave.media3.extension.toMediaItem
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
@@ -92,6 +93,7 @@ internal class SimpleMediaSessionCallback(
     private val streamRepository: StreamRepository,
     private val albumRepository: AlbumRepository,
     dataStoreManager: DataStoreManager,
+    private val carConnection: CarConnection,
 ) : MediaLibrarySession.Callback {
     private val externalStartAllowed =
         dataStoreManager.allowExternalStartPlayback.stateIn(scope, SharingStarted.Eagerly, true)
@@ -140,6 +142,7 @@ internal class SimpleMediaSessionCallback(
         controller: MediaSession.ControllerInfo,
     ): MediaSession.ConnectionResult {
         Logger.w(TAG, "onConnect: ${controller.packageName}")
+        if (controller.isCar(session)) carConnection.refresh()
         val sessionCommands =
             MediaSession.ConnectionResult.DEFAULT_SESSION_AND_LIBRARY_COMMANDS
                 .buildUpon()
@@ -160,6 +163,16 @@ internal class SimpleMediaSessionCallback(
                     .build(),
             ).build()
     }
+
+    override fun onDisconnected(
+        session: MediaSession,
+        controller: MediaSession.ControllerInfo,
+    ) {
+        if (controller.isCar(session)) carConnection.refresh()
+    }
+
+    private fun MediaSession.ControllerInfo.isCar(session: MediaSession): Boolean =
+        packageName == ANDROID_AUTO_PACKAGE || session.isAutoCompanionController(this) || session.isAutomotiveController(this)
 
     override fun onPlayerCommandRequest(
         session: MediaSession,
@@ -1381,6 +1394,7 @@ internal class SimpleMediaSessionCallback(
         const val FAVORITE = "favorite"
         const val DOWNLOADED = "downloaded"
         const val MEDIA_SEARCH_SUPPORTED = "android.media.browse.SEARCH_SUPPORTED"
+        private const val ANDROID_AUTO_PACKAGE = "com.google.android.projection.gearhead"
     }
 }
 

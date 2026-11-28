@@ -41,6 +41,7 @@ internal class SimpleMediaService :
     MediaLibraryService(),
     KoinComponent {
     private val player: Player by inject<Player>(qualifier = named(com.maxrave.common.Config.MAIN_PLAYER))
+    private val sessionPlayer: CarLyricsPlayer by inject<CarLyricsPlayer>()
     private val coilBitmapLoader: CoilBitmapLoader by inject<CoilBitmapLoader>()
 
     private var mediaSession: MediaLibrarySession? = null
@@ -103,7 +104,7 @@ internal class SimpleMediaService :
             mediaSession =
                 provideMediaLibrarySession(
                     this,
-                    player,
+                    sessionPlayer,
                     simpleMediaSessionCallback,
                 )
         }
@@ -147,9 +148,9 @@ internal class SimpleMediaService :
                 }.distinctUntilChanged().collect { buttons ->
                     val session = mediaSession ?: return@collect
                     if (buttons == null) {
-                        if (session.player !== player) {
+                        if (session.player !== sessionPlayer) {
                             Logger.w("Service", "Media session back on this device")
-                            session.player = player
+                            session.player = sessionPlayer
                             setButtons(localButtons)
                         }
                         return@collect
@@ -175,7 +176,7 @@ internal class SimpleMediaService :
     private fun releaseServiceResources() {
         routeJob?.cancel()
         routeJob = null
-        mediaSession?.let { if (it.player !== player) it.player = player }
+        mediaSession?.let { if (it.player !== sessionPlayer) it.player = sessionPlayer }
         remotePlayer?.release()
         remotePlayer = null
         selfControllerFuture?.let { MediaController.releaseFuture(it) }

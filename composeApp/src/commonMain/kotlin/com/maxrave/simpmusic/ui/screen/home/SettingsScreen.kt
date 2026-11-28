@@ -108,6 +108,8 @@ import simpmusic.composeapp.generated.resources.ytm_n_seconds
 import simpmusic.composeapp.generated.resources.ytm_allow_external_start
 import simpmusic.composeapp.generated.resources.ytm_allow_external_start_summary
 import simpmusic.composeapp.generated.resources.ytm_sponsorblock
+import simpmusic.composeapp.generated.resources.ytm_car_lyrics
+import simpmusic.composeapp.generated.resources.ytm_car_lyrics_summary
 import simpmusic.composeapp.generated.resources.ytm_sponsorblock_summary
 import simpmusic.composeapp.generated.resources.ytm_stream_wifi_only
 import simpmusic.composeapp.generated.resources.ytm_stream_wifi_only_summary
@@ -337,6 +339,14 @@ fun SettingScreen(
                             summary = stringResource(Res.string.ytm_allow_external_start_summary),
                             checked = allowExternalStart,
                         ) { enabled -> scope.launch { dataStoreManager.setAllowExternalStartPlayback(enabled) } }
+                        val carLyrics by dataStoreManager.getString(DataStoreManager.CAR_LYRICS).collectAsStateWithLifecycle(null)
+                        SwitchRow(
+                            title = stringResource(Res.string.ytm_car_lyrics),
+                            summary = stringResource(Res.string.ytm_car_lyrics_summary),
+                            checked = carLyrics != DataStoreManager.FALSE,
+                        ) { enabled ->
+                            scope.launch { dataStoreManager.putString(DataStoreManager.CAR_LYRICS, if (enabled) DataStoreManager.TRUE else DataStoreManager.FALSE) }
+                        }
                     }
                     SwitchRow(
                         title = stringResource(Res.string.ytm_sponsorblock),

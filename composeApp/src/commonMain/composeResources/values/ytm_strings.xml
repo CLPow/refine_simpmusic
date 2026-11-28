@@ -183,6 +183,8 @@
     <string name="ytm_n_seconds">%1$d seconds</string>
     <string name="ytm_allow_external_start">Allow external devices to start playback</string>
     <string name="ytm_allow_external_start_summary">For example, car Bluetooth, wired headsets</string>
+    <string name="ytm_car_lyrics">Lyrics in Android Auto</string>
+    <string name="ytm_car_lyrics_summary">Show the current lyric line on the car screen while a song plays</string>
     <string name="ytm_sponsorblock">SponsorBlock</string>
     <string name="ytm_sponsorblock_summary">Skip non-music sections, sponsors, intros and outros in music videos</string>
     <string name="ytm_song_play_next">Song will play next</string>

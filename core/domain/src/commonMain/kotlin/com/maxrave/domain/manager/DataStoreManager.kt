@@ -173,6 +173,7 @@ interface DataStoreManager {
         const val BETTER_LYRICS = "better_lyrics"
 
         const val LYRICS_CACHE_GENERATION = 3
+        const val CAR_LYRICS = "car_lyrics"
 
         const val REPEAT_MODE_OFF = "REPEAT_MODE_OFF"
         const val REPEAT_ONE = "REPEAT_ONE"

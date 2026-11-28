@@ -39,6 +39,8 @@ import com.maxrave.media3.cache.DEFAULT_SONG_CACHE_BYTES
 import com.maxrave.media3.cache.SongCacheEvictor
 import com.maxrave.common.Config.DOWNLOAD_CACHE
 import com.maxrave.common.Config.MAIN_PLAYER
+import com.maxrave.media3.service.CarConnection
+import com.maxrave.media3.service.CarLyricsPlayer
 import com.maxrave.common.Config.PLAYER_CACHE
 import com.maxrave.common.Config.SERVICE_SCOPE
 import com.maxrave.common.MERGING_DATA_TYPE
@@ -189,7 +191,14 @@ private val mediaServiceModule =
                 get<StreamRepository>(),
                 get<AlbumRepository>(),
                 get<DataStoreManager>(),
+                get<CarConnection>(),
             )
+        }
+
+        single<CarConnection> { CarConnection(androidContext(), get(), get(named(SERVICE_SCOPE))) }
+
+        single<CarLyricsPlayer> {
+            CarLyricsPlayer(get(qualifier = named(MAIN_PLAYER)), get(named(SERVICE_SCOPE)), get(), get(), get())
         }
 
         single<CacheRepository>(createdAtStart = true) {

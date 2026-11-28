@@ -35,6 +35,7 @@
 
     <queries>
         <package android:name="com.maxrave.simpmusic" />
+        <package android:name="com.google.android.projection.gearhead" />
         <intent>
             <action android:name="androidx.media3.session.MediaSessionService" />
         </intent>
