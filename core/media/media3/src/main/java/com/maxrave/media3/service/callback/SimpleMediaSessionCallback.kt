@@ -58,6 +58,7 @@ import com.maxrave.domain.utils.Resource
 import com.maxrave.domain.utils.connectArtists
 import com.maxrave.domain.utils.toArrayListTrack
 import com.maxrave.domain.utils.toListName
+import com.maxrave.domain.data.model.searchResult.songs.Thumbnail
 import com.maxrave.domain.utils.toListTrack
 import com.maxrave.domain.utils.toPlaylistEntity
 import com.maxrave.domain.utils.toSongEntity
@@ -66,6 +67,8 @@ import com.maxrave.logger.Logger
 import com.maxrave.media3.R
 import com.maxrave.media3.extension.toMediaItem
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.last
@@ -117,7 +120,7 @@ internal class SimpleMediaSessionCallback(
     var toggleRadio: () -> Unit = {
         mediaPlayerHandler.toggleRadio()
     }
-    private val searchResults = java.util.concurrent.ConcurrentHashMap<String, List<Track>>()
+    private val searchResults = java.util.concurrent.ConcurrentHashMap<String, List<MediaItem>>()
 
     private val onlinePlaylistCache = java.util.concurrent.ConcurrentHashMap<String, List<Track>>()
 
@@ -303,17 +306,61 @@ internal class SimpleMediaSessionCallback(
         params: MediaLibraryService.LibraryParams?,
     ): ListenableFuture<LibraryResult<Void>> =
         scope.future(Dispatchers.IO) {
-            val tracks =
-                (searchRepository.getSearchDataSong(query).lastOrNull() as? Resource.Success)
-                    ?.data
-                    ?.toListTrack()
-                    ?.filter { MusicVideoType.isPlayableSong(it.videoType) }
-                    .orEmpty()
-            searchResults[query] = tracks
+            val items = searchItems(query)
+            searchResults[query] = items
             if (searchResults.size > 8) searchResults.keys.firstOrNull { it != query }?.let(searchResults::remove)
-            session.notifySearchResultChanged(browser, query, tracks.size, params)
+            session.notifySearchResultChanged(browser, query, items.size, params)
             LibraryResult.ofVoid()
         }
+
+    private suspend fun searchSongs(
+        query: String,
+        limit: Int,
+    ): List<Track> =
+        (searchRepository.getSearchDataSong(query).lastOrNull() as? Resource.Success)
+            ?.data
+            ?.toListTrack()
+            ?.filter { MusicVideoType.isPlayableSong(it.videoType) }
+            .orEmpty()
+            .take(limit)
+            .onEach { songRepository.insertSong(it.toSongEntity()).first() }
+
+    private suspend fun searchItems(query: String): List<MediaItem> =
+        coroutineScope {
+            val songs = async { searchSongs(query, SEARCH_SONGS) }
+            val artists = async { (searchRepository.getSearchDataArtist(query).lastOrNull() as? Resource.Success)?.data.orEmpty() }
+            val albums = async { (searchRepository.getSearchDataAlbum(query).lastOrNull() as? Resource.Success)?.data.orEmpty() }
+            val playlists = async { (searchRepository.getSearchDataPlaylist(query).lastOrNull() as? Resource.Success)?.data.orEmpty() }
+            val songsTitle = context.getString(R.string.car_songs)
+            val artistsTitle = context.getString(R.string.car_artists)
+            val albumsTitle = context.getString(R.string.albums)
+            val playlistsTitle = context.getString(R.string.playlists)
+            songs.await().map { it.toMediaItemWithoutPath().inSection(songsTitle, CONTENT_STYLE_LIST_ITEM) } +
+                artists.await().take(SEARCH_COLLECTIONS).map {
+                    browsableMediaItem("$ARTIST/${it.browseId}", it.artist, null, it.thumbnails.artwork(), MediaMetadata.MEDIA_TYPE_ARTIST)
+                        .inSection(artistsTitle, CONTENT_STYLE_GRID_ITEM)
+                } +
+                albums.await().take(SEARCH_COLLECTIONS).map { album ->
+                    browsableMediaItem(
+                        "$ALBUM/${album.browseId}",
+                        album.title,
+                        album.artists.joinToString(", ") { it.name }.ifBlank { null },
+                        album.thumbnails.artwork(),
+                        MediaMetadata.MEDIA_TYPE_ALBUM,
+                    ).inSection(albumsTitle, CONTENT_STYLE_GRID_ITEM)
+                } +
+                playlists.await().take(SEARCH_COLLECTIONS).map {
+                    browsableMediaItem(
+                        "$ONLINE_PLAYLIST/${it.browseId.removePrefix("VL")}",
+                        it.title,
+                        it.author.ifBlank { null },
+                        it.thumbnails.artwork(),
+                        MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                    ).inSection(playlistsTitle, CONTENT_STYLE_GRID_ITEM)
+                }
+        }
+
+    private fun List<Thumbnail>.artwork(): Uri? = lastOrNull()?.url?.asSquareArtwork()?.toUri()
 
     @UnstableApi
     override fun onGetSearchResult(
@@ -325,9 +372,9 @@ internal class SimpleMediaSessionCallback(
         params: MediaLibraryService.LibraryParams?,
     ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> =
         scope.future(Dispatchers.IO) {
-            val tracks = searchResults[query].orEmpty()
-            val window = if (pageSize in 1 until Int.MAX_VALUE) tracks.drop(page * pageSize).take(pageSize) else tracks
-            LibraryResult.ofItemList(window.map { it.toMediaItemWithoutPath() }, params)
+            val items = searchResults[query].orEmpty()
+            val window = if (pageSize in 1 until Int.MAX_VALUE) items.drop(page * pageSize).take(pageSize) else items
+            LibraryResult.ofItemList(window, params)
         }
 
     @UnstableApi
@@ -376,6 +423,7 @@ internal class SimpleMediaSessionCallback(
                                 null,
                                 drawableUri(R.drawable.baseline_playlist_add_24),
                                 MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
+                                childStyle = CONTENT_STYLE_LIST_ITEM,
                             ),
                         )
                     }
@@ -588,17 +636,21 @@ internal class SimpleMediaSessionCallback(
 
                             parentId.startsWith("$ARTIST/") -> {
                                 val channelId = parentId.substringAfter("$ARTIST/")
-                                val tracks =
-                                    artistRepository
-                                        .getArtistData(channelId)
-                                        .lastOrNull()
-                                        ?.data
-                                        ?.songs
-                                        ?.results
-                                        ?.map { it.toTrack() }
-                                        .orEmpty()
+                                val artist = artistRepository.getArtistData(channelId).lastOrNull()?.data
+                                val tracks = artist?.songs?.results?.map { it.toTrack() }.orEmpty()
                                 artistSongCache[channelId] = tracks
-                                tracks.map { it.toMediaItemWithoutPath("$ARTIST/$channelId") }
+                                val songsTitle = context.getString(R.string.car_songs)
+                                val albumsTitle = context.getString(R.string.albums)
+                                val singlesTitle = context.getString(R.string.car_singles)
+                                tracks.map { it.toMediaItemWithoutPath("$ARTIST/$channelId").inSection(songsTitle, CONTENT_STYLE_LIST_ITEM) } +
+                                    artist?.albums?.results.orEmpty().map {
+                                        browsableMediaItem("$ALBUM/${it.browseId}", it.title, it.year, it.thumbnails.artwork(), MediaMetadata.MEDIA_TYPE_ALBUM)
+                                            .inSection(albumsTitle, CONTENT_STYLE_GRID_ITEM)
+                                    } +
+                                    artist?.singles?.results.orEmpty().map {
+                                        browsableMediaItem("$ALBUM/${it.browseId}", it.title, it.year, it.thumbnails.artwork(), MediaMetadata.MEDIA_TYPE_ALBUM)
+                                            .inSection(singlesTitle, CONTENT_STYLE_GRID_ITEM)
+                                    }
                             }
 
                             parentId.startsWith("$HOME/") -> {
@@ -737,6 +789,20 @@ internal class SimpleMediaSessionCallback(
             .build()
     }
 
+    private fun MediaItem.inSection(
+        title: String,
+        style: Int,
+    ): MediaItem {
+        val extras =
+            Bundle(mediaMetadata.extras ?: Bundle()).apply {
+                putString(CONTENT_STYLE_GROUP_TITLE_HINT, title)
+                putInt(CONTENT_STYLE_SINGLE_ITEM_HINT, style)
+            }
+        return buildUpon()
+            .setMediaMetadata(mediaMetadata.buildUpon().setExtras(extras).build())
+            .build()
+    }
+
     private fun folderRow(
         id: String,
         title: String,
@@ -752,7 +818,7 @@ internal class SimpleMediaSessionCallback(
                 .setIsPlayable(false)
                 .setIsBrowsable(true)
                 .setMediaType(MediaMetadata.MEDIA_TYPE_FOLDER_MIXED)
-                .setExtras(contentStyle(browsable = CONTENT_STYLE_LIST_ITEM))
+                .setExtras(contentStyle(browsable = CONTENT_STYLE_GRID_ITEM, playable = CONTENT_STYLE_LIST_ITEM))
                 .build(),
         ).build()
 
@@ -769,6 +835,20 @@ internal class SimpleMediaSessionCallback(
                 LibraryResult.ofItem(it.toMediaItemWithoutPath(), null)
             } ?: LibraryResult.ofError(SessionError.ERROR_UNKNOWN)
         }
+
+    private suspend fun startSongRadio(track: Track) {
+        mediaPlayerHandler.setQueueData(
+            QueueData.Data(
+                listTracks = arrayListOf(track),
+                firstPlayedTrack = track,
+                playlistId = "RDAMVM${track.videoId}",
+                playlistName = "\"${track.title}\" Radio",
+                playlistType = PlaylistType.RADIO,
+                continuation = null,
+            ),
+        )
+        mediaPlayerHandler.loadMediaItem(track, Config.SONG_CLICK, 0)
+    }
 
     @UnstableApi
     private fun stagedQueue(
@@ -798,6 +878,12 @@ internal class SimpleMediaSessionCallback(
         scope.future {
             val defaultResult =
                 MediaSession.MediaItemsWithStartPosition(emptyList(), startIndex, startPositionMs)
+            val spoken = mediaItems.firstOrNull()?.requestMetadata?.searchQuery
+            if (!spoken.isNullOrBlank() && mediaItems.first().mediaId.isEmpty()) {
+                val top = searchSongs(spoken, 1).firstOrNull() ?: return@future defaultResult
+                startSongRadio(top)
+                return@future stagedQueue(mediaSession, defaultResult)
+            }
             val path =
                 mediaItems.firstOrNull()?.mediaId?.split("/")
                     ?: return@future defaultResult
@@ -805,21 +891,7 @@ internal class SimpleMediaSessionCallback(
                 SONG -> {
                     val songId = path.getOrNull(1) ?: return@future defaultResult
                     val firstQueue = songRepository.getSongById(songId).first()?.toTrack() ?: return@future defaultResult
-                    mediaPlayerHandler.setQueueData(
-                        QueueData.Data(
-                            listTracks = arrayListOf(firstQueue),
-                            firstPlayedTrack = firstQueue,
-                            playlistId = "RDAMVM$songId",
-                            playlistName = "\"${firstQueue.title}\" Radio",
-                            playlistType = PlaylistType.RADIO,
-                            continuation = null,
-                        ),
-                    )
-                    mediaPlayerHandler.loadMediaItem(
-                        firstQueue,
-                        Config.SONG_CLICK,
-                        0,
-                    )
+                    startSongRadio(firstQueue)
                     stagedQueue(mediaSession, defaultResult)
                 }
 
@@ -1176,6 +1248,7 @@ internal class SimpleMediaSessionCallback(
         subtitle: String?,
         iconUri: Uri?,
         mediaType: Int = MediaMetadata.MEDIA_TYPE_MUSIC,
+        childStyle: Int? = null,
     ) = MediaItem
         .Builder()
         .setMediaId(id)
@@ -1191,7 +1264,7 @@ internal class SimpleMediaSessionCallback(
                 .setMediaType(mediaType)
                 .setExtras(
                     contentStyle(
-                        browsable = if (iconUri != null) CONTENT_STYLE_GRID_ITEM else CONTENT_STYLE_LIST_ITEM,
+                        browsable = childStyle ?: if (iconUri != null) CONTENT_STYLE_GRID_ITEM else CONTENT_STYLE_LIST_ITEM,
                     ),
                 ).build(),
         ).build()
@@ -1273,6 +1346,7 @@ internal class SimpleMediaSessionCallback(
         const val CONTENT_STYLE_BROWSABLE_HINT = "android.media.browse.CONTENT_STYLE_BROWSABLE_HINT"
         const val CONTENT_STYLE_PLAYABLE_HINT = "android.media.browse.CONTENT_STYLE_PLAYABLE_HINT"
         const val CONTENT_STYLE_GROUP_TITLE_HINT = "android.media.browse.CONTENT_STYLE_GROUP_TITLE_HINT"
+        const val CONTENT_STYLE_SINGLE_ITEM_HINT = "android.media.browse.CONTENT_STYLE_SINGLE_ITEM_HINT"
         const val CONTENT_STYLE_LIST_ITEM = 1
         const val CONTENT_STYLE_GRID_ITEM = 2
 
@@ -1285,6 +1359,10 @@ internal class SimpleMediaSessionCallback(
         const val RECENT = "__recent"
 
         private const val RECENT_LIMIT = 50
+
+        private const val SEARCH_SONGS = 8
+
+        private const val SEARCH_COLLECTIONS = 6
 
         private const val ARTWORK_BACKFILL_PER_BROWSE = 5
 

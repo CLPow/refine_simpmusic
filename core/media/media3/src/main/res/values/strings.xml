@@ -25,4 +25,7 @@
     <string name="albums">Albums</string>
     <string name="liked_music">Liked music</string>
     <string name="your_artists">Your artists</string>
+    <string name="car_songs">Songs</string>
+    <string name="car_artists">Artists</string>
+    <string name="car_singles">Singles</string>
 </resources>
